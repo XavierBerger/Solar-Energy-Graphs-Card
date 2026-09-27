@@ -174,8 +174,8 @@ describe("Home Assistant energy history", () => {
     ]);
   });
 
-  // Requests four configured power entities with a baseline before local midnight.
-  it("builds a bounded Home Assistant history API request", () => {
+  // Requests every recorded state for four entities with a baseline before midnight.
+  it("builds an unfiltered Home Assistant history API request", () => {
     const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
     const path = buildHistoryApiPath(SENSOR_IDS, window, 2000);
     const [encodedStart, query] = path.slice("history/period/".length).split("?");
@@ -186,8 +186,8 @@ describe("Home Assistant energy history", () => {
     );
     expect(params.get("filter_entity_id")).toBe(SENSOR_IDS.join(","));
     expect(params.get("end_time")).toBe(new Date(2000 * 1000).toISOString());
-    expect(params.get("minimal_response")).toBe("1");
     expect(params.get("no_attributes")).toBe("1");
+    expect(params.get("significant_changes_only")).toBe("0");
   });
 
   // Preserves source timestamps and calculates direct power and separate grid flows.
@@ -249,6 +249,64 @@ describe("Home Assistant energy history", () => {
       start + 120,
       window.end,
     ]);
+  });
+
+  // Preserves every recorded source point even when consecutive values are equal.
+  it("keeps repeated readings at distinct timestamps", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 60 };
+    const data = normalizeEnergyHistory(
+      [
+        [state(start + 5, 500), state(start + 15, 500)],
+        [state(start + 7, 300)],
+        [],
+        [],
+      ],
+      window,
+      start + 30,
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 5,
+      start + 7,
+      start + 15,
+      start + 30,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([null, 500, 500, 500, 500, null]);
+  });
+
+  // Preserves sub-millisecond recorder timestamps as separate chart points.
+  it("keeps source timestamps that differ only below millisecond precision", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 60 };
+    const data = normalizeEnergyHistory(
+      [
+        [
+          {
+            state: "500",
+            last_updated: "1970-01-12T13:47:05.123456Z",
+          },
+          {
+            state: "500",
+            last_updated: "1970-01-12T13:47:05.123789Z",
+          },
+        ],
+        [],
+        [],
+        [],
+      ],
+      window,
+      start + 30,
+    );
+    const x = Array.from(data.mainData[0]);
+
+    expect(x).toContain(start + 5.123456);
+    expect(x).toContain(start + 5.123789);
+    expect(x.indexOf(start + 5.123456)).not.toBe(
+      x.indexOf(start + 5.123789),
+    );
   });
 
   // Carries recent readings forward and clears sensors after unavailable states.
