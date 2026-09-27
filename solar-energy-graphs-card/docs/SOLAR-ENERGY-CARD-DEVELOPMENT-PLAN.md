@@ -92,12 +92,17 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   sans chevauchement des titres ; préserver les valeurs numériques au survol
   et ne montrer que Production solaire, Consommation et Autoconsommation dans
   la légende supérieure. Validation visuelle reçue dans Home Assistant.
-- [ ] **À faire** — Définir avec l'utilisateur les capteurs Home Assistant,
-  leurs unités, leur sémantique et la définition des flux représentés.
-- [ ] **À faire** — Implémenter l'accès ciblé à l'historique quotidien,
-  l'adaptation et la normalisation des données Home Assistant.
-- [ ] **À faire** — Connecter les deux graphiques aux données réelles et valider
-  valeurs, timestamps, fuseau horaire, unités, signes et granularité.
+- [x] **Validée** — Définir quatre capteurs Home Assistant de puissance
+  instantanée en W (`power/measurement`) : production PV, consommation de la
+  charge, import réseau et export réseau. Import et export sont séparés ; sans
+  batterie, autoconsommation estimée par `min(production, consommation)`.
+- [ ] **En cours** — Lire l'historique journalier des quatre mesures par l'API
+  native Home Assistant, convertir kW en W, agréger les valeurs par intervalles
+  de cinq minutes, gérer le fuseau HA/DST et alimenter les deux graphes. Les
+  36 tests passent, le typecheck/build réussit et les quatre historiques sont
+  présents dans `ha-dev` ; validation visuelle requise.
+- [ ] **À faire** — Valider visuellement les capteurs réels, valeurs,
+  timestamps, fuseau horaire, unités, signes et granularité dans Home Assistant.
 - [ ] **À faire** — Traiter les historiques incomplets ou absents avec un état
   vide/erreur local au graphique, sans réintroduire de panneau de statut ou de
   KPIs.

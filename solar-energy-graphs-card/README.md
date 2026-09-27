@@ -1,12 +1,8 @@
 # Solar Energy Graphs Card
 
-> **Carte en cours de développement.** Le graphique supérieur présente un
-> profil solaire fictif pour démontrer la production et la répartition de la
-> consommation ; le graphique inférieur montre des échanges réseau fictifs.
-> Aucune courbe ne représente votre installation solaire : les données Home
-> Assistant et la configuration des capteurs ne sont pas encore disponibles.
-> Cette page explique comment installer et tester ce prototype dans Home
-> Assistant ; elle ne signifie pas que la carte est prête pour un usage
+> **Carte en cours de développement.** La carte lit les capteurs configurés et
+> affiche leur historique du jour en cours. Elle doit encore être validée sur
+> plusieurs installations et ne signifie pas qu'elle est prête pour un usage
 > quotidien.
 
 La carte utilise presque toute la hauteur visible de l'écran, sous l'en-tête
@@ -130,21 +126,38 @@ nouveau :
 
    ```yaml
    type: custom:solar-energy-graphs-card
+   entities:
+     production: sensor.solarnet_puissance_photovoltaique
+     consumption: sensor.solarnet_puissance_consommee_par_la_charge
+     grid_import: sensor.solarnet_puissance_importee_du_reseau
+     grid_export: sensor.solarnet_puissance_exportee_vers_le_reseau
    ```
 
 7. Enregistrez la carte, puis le tableau de bord si Home Assistant le demande.
 
-Le résultat attendu est une carte dont le graphique supérieur montre un profil
-de production solaire fictif et la consommation répartie entre solaire direct
-et réseau. Sa légende liste uniquement **Production solaire**,
-**Consommation** et **Autoconsommation**. Le graphique inférieur montre
-l'export réseau au-dessus de zéro et l'import au-dessous de zéro. Le curseur
-et le zoom horizontal sont partagés entre les deux graphiques. Les deux
-graphiques affichent la mention
-**Données artificielles de démonstration**. Ces profils servent à valider le
-rendu, pas à décrire la production ni les échanges d'énergie de votre maison.
-Il n'y a actuellement aucune option à configurer : ne renseignez pas d'entités
-ou de capteurs. Votre tableau de bord principal n'est pas modifié.
+La carte attend :
+
+- `production` : puissance instantanée produite par les panneaux ;
+- `consumption` : puissance instantanée consommée par la charge ;
+- `grid_import` : puissance importée du réseau ;
+- `grid_export` : puissance exportée vers le réseau.
+
+Les quatre capteurs doivent mesurer une puissance avec `device_class: power`,
+`state_class: measurement` et une unité `W` ou `kW`. Import et export utilisent
+des capteurs séparés ; la carte ne déduit pas l'un à partir de l'autre.
+
+La carte utilise l'historique Home Assistant du jour dans le fuseau configuré
+et calcule la moyenne des mesures par intervalles de cinq minutes.
+L'autoconsommation directe est estimée comme le minimum entre la production PV
+et la puissance consommée par la charge ; cette formule suppose l'absence de
+batterie. La légende supérieure affiche **Production solaire**,
+**Consommation** et **Autoconsommation**. Le graphe inférieur montre l'export
+au-dessus de zéro et l'import au-dessous. Le curseur et le zoom horizontal
+sont synchronisés.
+
+La carte signale dans chaque graphe si son historique est indisponible. Les
+capteurs doivent avoir un historique enregistré par Home Assistant pour le
+jour courant. Le tableau de bord principal n'est pas modifié.
 
 ## Dépannage
 
@@ -165,9 +178,14 @@ ou de capteurs. Votre tableau de bord principal n'est pas modifié.
 - **Vous voyez une ancienne version** : forcez le rechargement du navigateur
   (par exemple `Ctrl+F5` ou `Cmd+Maj+R`), puis vérifiez que la ressource a été
   enregistrée.
-- **Les courbes ne correspondent pas à mes capteurs** : c'est attendu. Les
-  deux graphiques sont encore alimentés par des données fictives et les
-  capteurs Home Assistant ne sont pas encore configurables.
+- **« Configure entities… »** : vérifiez que les quatre clés `production`,
+  `consumption`, `grid_import` et `grid_export` sont présentes dans le YAML.
+- **Aucun historique affiché** : vérifiez que les identifiants sont corrects,
+  que les capteurs ont les unités et classes d'état attendues, et que Home
+  Assistant a conservé leur historique pour aujourd'hui.
+- **Les puissances ne semblent pas cohérentes** : vérifiez les quatre entités,
+  leur unité (`W` ou `kW`) et que la consommation correspond à la charge de la
+  maison. L'autoconsommation estimée ne prend pas en compte une batterie.
 
 Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
 ressource Lovelace et, si vous le souhaitez, supprimez le fichier

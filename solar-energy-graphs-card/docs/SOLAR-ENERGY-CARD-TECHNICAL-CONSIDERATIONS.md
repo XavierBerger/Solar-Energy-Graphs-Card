@@ -102,15 +102,19 @@ nulle.
 
 ## 5. Données Home Assistant
 
-- Utiliser le contexte `hass` pour les états déjà disponibles.
-- Utiliser le mécanisme natif d'historique/statistiques le plus adapté aux
-  capteurs confirmés, avec une fenêtre limitée à la journée affichée.
+- Configurer par YAML quatre entités de puissance instantanée : production PV,
+  consommation de la charge, import réseau et export réseau ; ne pas coder en
+  dur les identifiants propres à une installation.
+- Utiliser `hass.callApi` et l'API native `history/period` pour ne récupérer que
+  les quatre entités et la journée courante dans `hass.config.time_zone`.
+- Les quatre capteurs doivent être des mesures de puissance (`power` /
+  `measurement`) en W ou kW ; les valeurs sont converties en watts puis
+  moyennées par intervalles de cinq minutes. Les historiques absents ou trop
+  anciens restent des trous, pas des puissances nulles inventées.
+- Import et export réseau sont des flux distincts, chacun lu depuis son capteur.
+  En l'absence de batterie, l'autoconsommation directe est estimée par
+  `min(production PV, consommation de la charge)`.
 - Ne pas réutiliser `/simulation/day` ni dépendre du format du simulateur.
-- Confirmer les entités, unités, horodatages, fuseaux horaires, convention de
-  signe et historique disponible avec l'utilisateur.
-- Définir explicitement comment dériver l'autoconsommation si aucun capteur
-  dédié n'existe ; ne pas appliquer automatiquement les hypothèses du
-  simulateur.
 - Présenter les erreurs et données indisponibles sans planter la carte, dans la
   zone concernée par le graphique.
 
