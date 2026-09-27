@@ -3,16 +3,16 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-IMAGE=localhost/solar-energy-graphs-card-dev:22.16.0
+IMAGE=localhost/solar-energy-graphs-card-dev:24.15.0
 DEPENDENCIES_VOLUME=solar-energy-graphs-card-node-modules
 NPM_CACHE_VOLUME=solar-energy-graphs-card-npm-cache
 ACTION=${1:-build}
 
 case "$ACTION" in
-  build|install|typecheck|deploy)
+  build|install|test|typecheck|deploy)
     ;;
   *)
-    printf 'Usage: %s [build|install|typecheck|deploy]\n' "$0" >&2
+    printf 'Usage: %s [build|install|test|typecheck|deploy]\n' "$0" >&2
     exit 2
     ;;
 esac
