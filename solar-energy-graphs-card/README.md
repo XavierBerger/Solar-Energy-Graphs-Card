@@ -7,6 +7,11 @@
 > explique comment installer et tester ce prototype dans Home Assistant ; elle
 > ne signifie pas que la carte est prête pour un usage quotidien.
 
+La carte utilise presque toute la hauteur visible de l'écran, sous l'en-tête
+Home Assistant. Les deux zones de graphique se partagent cet espace selon un
+ratio de 70 % en haut et 30 % en bas. Les axes, graduations et grilles suivent
+les couleurs du thème Home Assistant actif, y compris en thème sombre.
+
 ## Ce qu'il vous faut
 
 - Un Home Assistant où vous pouvez modifier un tableau de bord.

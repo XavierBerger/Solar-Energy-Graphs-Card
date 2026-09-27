@@ -122,6 +122,13 @@ Assistant pertinent.
 
 - Créer et détruire proprement les deux instances uPlot.
 - Observer le redimensionnement des conteneurs et ajuster la taille des graphes.
+- Pour la présentation de la carte, utiliser une hauteur quasi plein écran sous
+  l'en-tête Home Assistant, avec une grille verticale de 70 % pour le graphe
+  supérieur et 30 % pour le graphe inférieur.
+- Définir explicitement les couleurs des axes, graduations et grilles uPlot à
+  partir des variables du thème Home Assistant : le canvas uPlot ne récupère
+  pas automatiquement les couleurs CSS du thème. Rafraîchir les couleurs quand
+  le thème change, sans redessiner si elles sont identiques.
 - Synchroniser le curseur et les échelles temporelles sans provoquer de mises à
   jour circulaires ou de reconstructions inutiles.
 - Éviter de recalculer l'historique lors d'un changement d'état sans rapport.
@@ -136,6 +143,8 @@ Tests automatisés à ajouter selon la structure finale du projet :
 
 - Tester les deux conteneurs de graphes, leurs titres, le cycle de vie de leur
   renderer, le redimensionnement, les instances multiples et leur destruction.
+- Tester le ratio 70/30, les couleurs du thème appliquées aux axes/grilles et
+  leur rafraîchissement quand Home Assistant change de thème.
 - normalisation et alignement temporel des points ;
 - calcul des séries dérivées et conventions de signe ;
 - gestion de trous et données indisponibles ;

@@ -74,10 +74,12 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   configuration, sa taille et son rendu. Exécution : `./dev.sh test`.
 - [ ] **En cours** — Créer les deux zones uPlot responsives avec titres et
   données neutres provisoires, leur cycle de vie et leur redimensionnement.
-  Tests unitaires réussis ; validation visuelle desktop/mobile dans `ha-dev`
-  encore attendue.
+  Le défaut visuel est corrigé techniquement : hauteur quasi plein écran,
+  partage 70/30 et couleurs uPlot issues des variables du thème. Tests/build
+  réussis ; confirmation visuelle dans `ha-dev` encore attendue.
 - [ ] **À faire** — Valider la disposition des deux graphiques dans Home
-  Assistant sur desktop et mobile avant de commencer leur reproduction métier.
+  Assistant sur desktop et mobile, ratio 70/30, hauteur utilisée et thèmes
+  clair/sombre avant de commencer leur reproduction métier.
 - [ ] **À faire** — Afficher des données fictives dans le graphique principal :
   production PV, autoconsommation directe et consommation couverte par le
   réseau, avec les aplats et courbes du viewer.
@@ -134,8 +136,9 @@ N'ajouter ni KPIs, ni statistiques, ni statut, ni contrôles de période/zoom
 extérieurs aux graphiques.
 
 **Validation :** tests unitaires de présence des deux conteneurs, cycle de vie,
-instances multiples, destruction et redimensionnement réussis ; l'utilisateur
-confirme la disposition dans la vue Lovelace sur desktop et mobile avant de
+instances multiples, destruction, redimensionnement, ratio 70/30 et couleurs de
+thème réussis ; l'utilisateur confirme la hauteur utilisée et la lisibilité
+dans la vue Lovelace en thèmes clair et sombre, sur desktop et mobile, avant de
 poursuivre.
 
 ### Étape 3 — Reproduire le graphique principal avec des données fictives
