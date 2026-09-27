@@ -141,16 +141,19 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.series[3].label).toBe("Autoconsommation");
     expect(firstOptions.series[6].label).toBe("Production solaire");
     expect(firstOptions.series[7].label).toBe("Consommation");
+    expect(firstOptions.series[0].class).toBeUndefined();
     expect(
       firstOptions.series
+        .slice(1)
         .filter((series: { class?: string }) => !series.class)
         .map((series: { label?: string }) => series.label),
     ).toEqual(["Autoconsommation", "Production solaire", "Consommation"]);
     expect(
       firstOptions.series
+        .slice(1)
         .filter((series: { class?: string }) => series.class)
         .map((series: { class?: string }) => series.class),
-    ).toEqual(Array(5).fill("hide-helper-legend"));
+    ).toEqual(Array(4).fill("hide-helper-legend"));
     expect(firstOptions.bands).toEqual([
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
