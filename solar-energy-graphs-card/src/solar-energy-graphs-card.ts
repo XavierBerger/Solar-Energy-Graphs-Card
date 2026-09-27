@@ -9,11 +9,19 @@ interface SolarEnergyGraphsCardConfig {
   type: string;
 }
 
+interface HomeAssistantThemeContext {
+  themes?: {
+    darkMode?: boolean;
+  };
+}
+
 export class SolarEnergyGraphsCard extends LitElement {
   private chartRenderer?: EnergyChartsRenderer;
+  private darkMode = false;
 
-  set hass(_hass: unknown) {
-    this.chartRenderer?.refreshTheme();
+  set hass(hass: HomeAssistantThemeContext) {
+    this.darkMode = hass.themes?.darkMode === true;
+    this.chartRenderer?.refreshTheme(this.darkMode);
   }
 
   static styles = css`
@@ -132,7 +140,10 @@ export class SolarEnergyGraphsCard extends LitElement {
     );
 
     if (first && second) {
-      this.chartRenderer = new EnergyChartsRenderer([first, second]);
+      this.chartRenderer = new EnergyChartsRenderer(
+        [first, second],
+        this.darkMode,
+      );
     }
   }
 }

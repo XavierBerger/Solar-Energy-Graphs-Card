@@ -34,6 +34,7 @@ const DEFAULT_HEIGHT = 100;
 interface ChartTheme {
   text: string;
   grid: string;
+  gridWidth: number;
 }
 
 type ChartTarget = {
@@ -47,8 +48,11 @@ export class EnergyChartsRenderer {
   private destroyed = false;
   private theme: ChartTheme;
 
-  constructor(containers: readonly [HTMLElement, HTMLElement]) {
-    this.theme = this.readTheme(containers[0]);
+  constructor(
+    containers: readonly [HTMLElement, HTMLElement],
+    darkMode = false,
+  ) {
+    this.theme = this.readTheme(containers[0], darkMode);
     this.resizeObserver = new ResizeObserver((entries) => {
       this.handleResize(entries);
     });
@@ -74,28 +78,25 @@ export class EnergyChartsRenderer {
     this.charts.forEach(({ chart }) => chart.destroy());
   }
 
-  refreshTheme(): void {
+  refreshTheme(darkMode: boolean): void {
     if (this.destroyed) {
       return;
     }
 
-    const theme = this.readTheme(this.charts[0].element);
-    if (theme.text === this.theme.text && theme.grid === this.theme.grid) {
+    const theme = this.readTheme(this.charts[0].element, darkMode);
+    if (
+      theme.text === this.theme.text &&
+      theme.grid === this.theme.grid &&
+      theme.gridWidth === this.theme.gridWidth
+    ) {
       return;
     }
 
     this.theme = theme;
     this.charts.forEach(({ chart }) => {
       chart.axes.forEach((axis) => {
-        axis.stroke = theme.text;
         if (axis.grid) {
-          axis.grid.stroke = theme.grid;
-        }
-        if (axis.ticks) {
-          axis.ticks.stroke = theme.text;
-        }
-        if (axis.border) {
-          axis.border.stroke = theme.grid;
+          axis.grid.width = theme.gridWidth;
         }
       });
       chart.redraw(true, true);
@@ -103,7 +104,6 @@ export class EnergyChartsRenderer {
   }
 
   private createOptions(element: HTMLElement): UPlotOptions {
-    const theme = this.readTheme(element);
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
       height: element.clientHeight || DEFAULT_HEIGHT,
@@ -114,27 +114,36 @@ export class EnergyChartsRenderer {
       series: [{}, ...SAMPLE_SERIES],
       axes: [
         {
-          stroke: theme.text,
-          grid: { stroke: theme.grid, width: 1 },
-          ticks: { stroke: theme.text, width: 1 },
-          border: { stroke: theme.grid, width: 1 },
+          stroke: () => this.theme.text,
+          grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
+          ticks: { stroke: () => this.theme.text, width: 1 },
+          border: { stroke: () => this.theme.grid, width: 1 },
         },
         {
-          stroke: theme.text,
-          grid: { stroke: theme.grid, width: 1 },
-          ticks: { stroke: theme.text, width: 1 },
-          border: { stroke: theme.grid, width: 1 },
+          stroke: () => this.theme.text,
+          grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
+          ticks: { stroke: () => this.theme.text, width: 1 },
+          border: { stroke: () => this.theme.grid, width: 1 },
         },
       ],
     };
   }
 
-  private readTheme(element: HTMLElement): ChartTheme {
+  private readTheme(element: HTMLElement, darkMode: boolean): ChartTheme {
+    if (darkMode) {
+      return {
+        text: "#ffffff",
+        grid: "#9e9e9e",
+        gridWidth: 0.5,
+      };
+    }
+
     const styles = getComputedStyle(element);
     return {
       text:
         styles.getPropertyValue("--primary-text-color").trim() || "#212121",
       grid: styles.getPropertyValue("--divider-color").trim() || "#bdbdbd",
+      gridWidth: 1,
     };
   }
 
