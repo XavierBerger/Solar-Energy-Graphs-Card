@@ -7,7 +7,13 @@ import {
   vi,
 } from "vitest";
 import { SolarEnergyGraphsCard } from "./solar-energy-graphs-card";
-import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
+import {
+  getLocalDateString,
+  getLocalDayWindowForDate,
+  shiftLocalDate,
+  type EnergyHistoryResponse,
+  type HomeAssistantHistoryState,
+} from "./home-assistant-energy-history";
 
 const { rendererInstances } = vi.hoisted(() => ({
   rendererInstances: [] as Array<{
@@ -50,8 +56,16 @@ const CARD_CONFIG = {
   },
 };
 
-function createHassContext() {
-  const callApi = vi.fn(async (_method: string, _path: string) => [[], [], [], []]);
+type HistoryApi = (
+  method: string,
+  path: string,
+) => Promise<readonly (readonly HomeAssistantHistoryState[])[]>;
+
+function createHassContext(
+  callApi: ReturnType<typeof vi.fn<HistoryApi>> = vi.fn<HistoryApi>(
+    async () => [[], [], [], []],
+  ),
+) {
 
   return {
     config: { time_zone: "Europe/Paris" },
@@ -94,7 +108,7 @@ function createHassContext() {
         },
       },
     },
-    callApi: async (method: string, path: string) => callApi(method, path),
+    callApi,
     apiCalls: callApi,
   };
 }
@@ -164,6 +178,108 @@ describe("SolarEnergyGraphsCard", () => {
     );
     expect(card.shadowRoot?.textContent).toContain("Grid Exchange");
     expect(card.shadowRoot?.querySelectorAll(".chart-status")).toHaveLength(2);
+    expect(card.shadowRoot?.querySelector(".day-navigation")).not.toBeNull();
+    expect(
+      card.shadowRoot?.querySelectorAll<HTMLButtonElement>(
+        ".day-navigation button",
+      ),
+    ).toHaveLength(2);
+  });
+
+  // Navigates between adjacent local days and prevents navigation into the future.
+  it("loads adjacent days from the top-right day navigation", async () => {
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const today = getLocalDateString(new Date(), "Europe/Paris");
+    const previousDay = shiftLocalDate(today, -1);
+    const navigation = card.shadowRoot?.querySelector(".day-navigation");
+    const buttons = navigation?.querySelectorAll<HTMLButtonElement>("button");
+    const date = navigation?.querySelector("time");
+
+    expect(date?.dateTime).toBe(today);
+    expect(buttons?.[1].disabled).toBe(true);
+
+    buttons?.[0].click();
+    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(2));
+    await card.updateComplete;
+
+    expect(date?.dateTime).toBe(previousDay);
+    expect(buttons?.[1].disabled).toBe(false);
+    const [, historyPath] = hass.apiCalls.mock.calls[1];
+    const previousWindow = getLocalDayWindowForDate(
+      previousDay,
+      "Europe/Paris",
+    );
+    expect(decodeURIComponent(historyPath.split("?")[0].split("/").pop()!)).toBe(
+      new Date((previousWindow.start - 10 * 60) * 1000).toISOString(),
+    );
+
+    buttons?.[1].click();
+    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(3));
+    await card.updateComplete;
+
+    expect(date?.dateTime).toBe(today);
+    expect(buttons?.[1].disabled).toBe(true);
+  });
+
+  // Keeps a user-selected day when Home Assistant sends unrelated state updates.
+  it("does not reset the selected day on ordinary Home Assistant updates", async () => {
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const button = card.shadowRoot?.querySelector<HTMLButtonElement>(
+      ".day-navigation button",
+    );
+    button?.click();
+    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(2));
+    const selectedDay = card.shadowRoot?.querySelector("time")?.dateTime;
+
+    card.hass = { ...hass, states: { ...hass.states } };
+    await card.updateComplete;
+
+    expect(card.shadowRoot?.querySelector("time")?.dateTime).toBe(selectedDay);
+    expect(hass.apiCalls).toHaveBeenCalledTimes(2);
+  });
+
+  // Ignores an earlier day's response when a later navigation request finishes first.
+  it("does not replace selected-day data with a stale history response", async () => {
+    const pendingResponses: Array<
+      (history: readonly (readonly HomeAssistantHistoryState[])[]) => void
+    > = [];
+    const callApi = vi.fn(
+      (_method: string, _path: string) =>
+        new Promise<readonly (readonly HomeAssistantHistoryState[])[]>(
+          (resolve) => pendingResponses.push(resolve),
+        ),
+    );
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext(callApi);
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(1));
+
+    card.shadowRoot
+      ?.querySelector<HTMLButtonElement>(".day-navigation button")
+      ?.click();
+    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(2));
+
+    pendingResponses[0]([[], [], [], []]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rendererInstances).toHaveLength(0);
+
+    pendingResponses[1]([[], [], [], []]);
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
   });
 
   // Keeps both chart regions at the requested 70/30 viewport-height split.

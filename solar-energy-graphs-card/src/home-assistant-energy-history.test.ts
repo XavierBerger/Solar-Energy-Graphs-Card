@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildHistoryApiPath,
   getEnergyUnitScales,
+  getLocalDateString,
   getLocalDayWindow,
+  getLocalDayWindowForDate,
   normalizeEnergyHistory,
+  shiftLocalDate,
   type HomeAssistantHistoryState,
 } from "./home-assistant-energy-history";
 
@@ -94,6 +97,36 @@ describe("Home Assistant energy history", () => {
     expect(window.end).toBe(Date.parse("2026-09-27T22:00:00Z") / 1000);
   });
 
+  // Keeps selected days as calendar dates in the configured Home Assistant time zone.
+  it("formats and shifts local dates without UTC day drift", () => {
+    expect(
+      getLocalDateString(
+        new Date("2026-09-27T22:30:00Z"),
+        "Europe/Paris",
+      ),
+    ).toBe("2026-09-28");
+    expect(shiftLocalDate("2026-01-01", -1)).toBe("2025-12-31");
+    expect(shiftLocalDate("2025-12-31", 1)).toBe("2026-01-01");
+    expect(() => shiftLocalDate("2026-02-30", 1)).toThrow(
+      'Invalid local date "2026-02-30".',
+    );
+  });
+
+  // Calculates day boundaries from a selected civil date in the HA time zone.
+  it("creates selected local-day windows across daylight-saving changes", () => {
+    const spring = getLocalDayWindowForDate(
+      "2026-03-29",
+      "Europe/Paris",
+    );
+    const autumn = getLocalDayWindowForDate(
+      "2026-10-25",
+      "Europe/Paris",
+    );
+
+    expect(spring.end - spring.start).toBe(23 * 60 * 60);
+    expect(autumn.end - autumn.start).toBe(25 * 60 * 60);
+  });
+
   // Keeps the queried day correct across spring and autumn daylight-saving changes.
   it("creates 23-hour and 25-hour days at daylight-saving transitions", () => {
     const spring = getLocalDayWindow(
@@ -109,8 +142,8 @@ describe("Home Assistant energy history", () => {
     expect(autumn.end - autumn.start).toBe(25 * 60 * 60);
   });
 
-  // Creates one plotted point per minute while preserving 23-hour and 25-hour days.
-  it("generates minute-resolution points across daylight-saving days", () => {
+  // Avoids inventing minute samples when a day has no recorded history points.
+  it("keeps only the day boundaries when history is empty", () => {
     const spring = getLocalDayWindow(
       new Date("2026-03-29T12:00:00Z"),
       "Europe/Paris",
@@ -131,8 +164,14 @@ describe("Home Assistant energy history", () => {
       autumn.end,
     );
 
-    expect(springData.mainData[0].length).toBe(23 * 60 + 2);
-    expect(autumnData.mainData[0].length).toBe(25 * 60 + 2);
+    expect(Array.from(springData.mainData[0])).toEqual([
+      spring.start,
+      spring.end,
+    ]);
+    expect(Array.from(autumnData.mainData[0])).toEqual([
+      autumn.start,
+      autumn.end,
+    ]);
   });
 
   // Requests four configured power entities with a baseline before local midnight.
@@ -151,8 +190,8 @@ describe("Home Assistant energy history", () => {
     expect(params.get("no_attributes")).toBe("1");
   });
 
-  // Averages power readings per interval and keeps measured import/export separate.
-  it("normalizes direct power, autoconsumption and separate grid flows", () => {
+  // Preserves source timestamps and calculates direct power and separate grid flows.
+  it("aligns direct power, autoconsumption and separate grid flows", () => {
     const start = 1_000_020;
     const window = { start, end: start + 180 };
     const data = normalizeEnergyHistory(
@@ -192,24 +231,27 @@ describe("Home Assistant energy history", () => {
     const exported = data.gridData[1]!;
     const imported = data.gridData[2]!;
 
-    expect(production).toEqual([null, 1100, 1900, null]);
-    expect(directSolar).toEqual([null, 600, 900, null]);
-    expect(gridSupplied).toEqual([null, 0, 0, null]);
-    expect(exported).toEqual([null, 0, 250, null]);
-    expect(imported).toEqual([null, -450, -700, null]);
+    expect(production).toEqual([null, 1000, 1200, 2000, 1800, 1800, null]);
+    expect(directSolar).toEqual([null, 500, 700, 800, 1000, 1000, null]);
+    expect(gridSupplied).toEqual([null, 0, 0, 0, 0, 0, null]);
+    expect(exported).toEqual([null, 0, 0, 200, 300, 300, null]);
+    expect(imported).toEqual([null, -400, -500, -600, -800, -800, null]);
     expect(data.hasProduction).toBe(true);
     expect(data.hasConsumption).toBe(true);
     expect(data.hasGridImport).toBe(true);
     expect(data.hasGridExport).toBe(true);
     expect(Array.from(data.mainData[0])).toEqual([
       start,
-      start + 30,
-      start + 90,
+      start + 5,
+      start + 35,
+      start + 65,
+      start + 95,
+      start + 120,
       window.end,
     ]);
   });
 
-  // Reuses known readings for up to ten minutes and preserves unavailable gaps.
+  // Carries recent readings forward and clears sensors after unavailable states.
   it("marks unavailable readings as missing and carries recent values forward", () => {
     const start = 1_000_000;
     const data = normalizeEnergyHistory(
@@ -223,32 +265,36 @@ describe("Home Assistant energy history", () => {
       start + 600,
     );
 
-    expect(data.mainData[1]!).toEqual([
-      null, 500, 500, 500, 500, 500, 10, 10, 10, 10, 10, null,
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 300,
+      start + 600,
     ]);
-    expect(data.mainData[7]!).toEqual([
-      null, null, null, null, null, null, 50, 50, 50, 50, 50, null,
-    ]);
-    expect(data.gridData[1]!).toEqual(Array(12).fill(null));
-    expect(data.gridData[2]!).toEqual(Array(12).fill(null));
+    expect(data.mainData[1]!).toEqual([500, 10, null]);
+    expect(data.mainData[7]!).toEqual([null, 50, null]);
+    expect(data.gridData[1]!).toEqual(Array(3).fill(null));
+    expect(data.gridData[2]!).toEqual(Array(3).fill(null));
     expect(data.hasProduction).toBe(true);
     expect(data.hasConsumption).toBe(true);
     expect(data.hasGridImport).toBe(false);
     expect(data.hasGridExport).toBe(false);
   });
 
-  // Stops carrying a sensor value after the ten-minute freshness limit.
+  // Stops carrying a sensor value once a source point exceeds ten-minute freshness.
   it("leaves a gap when the last power reading exceeds ten minutes", () => {
     const start = 1_000_020;
     const data = normalizeEnergyHistory(
-      [[state(start, 500)], [], [], []],
+      [[state(start, 500)], [state(start + 11 * 60, 100)], [], []],
       { start, end: start + 12 * 60 },
       start + 12 * 60,
     );
     const production = data.mainData[1]!;
 
-    expect(production.slice(1, 12)).toEqual(Array(11).fill(500));
-    expect(production[12]).toBeNull();
-    expect(production[13]).toBeNull();
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 11 * 60,
+      start + 12 * 60,
+    ]);
+    expect(production).toEqual([500, null, null]);
   });
 });
