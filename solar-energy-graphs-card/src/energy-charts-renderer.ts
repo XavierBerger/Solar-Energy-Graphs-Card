@@ -29,7 +29,12 @@ const SAMPLE_DATA: UPlotData = [
 ];
 
 const DEFAULT_WIDTH = 600;
-const DEFAULT_HEIGHT = 180;
+const DEFAULT_HEIGHT = 100;
+
+interface ChartTheme {
+  text: string;
+  grid: string;
+}
 
 type ChartTarget = {
   element: HTMLElement;
@@ -40,8 +45,10 @@ export class EnergyChartsRenderer {
   private readonly charts: ChartTarget[];
   private readonly resizeObserver: ResizeObserver;
   private destroyed = false;
+  private theme: ChartTheme;
 
   constructor(containers: readonly [HTMLElement, HTMLElement]) {
+    this.theme = this.readTheme(containers[0]);
     this.resizeObserver = new ResizeObserver((entries) => {
       this.handleResize(entries);
     });
@@ -67,7 +74,36 @@ export class EnergyChartsRenderer {
     this.charts.forEach(({ chart }) => chart.destroy());
   }
 
+  refreshTheme(): void {
+    if (this.destroyed) {
+      return;
+    }
+
+    const theme = this.readTheme(this.charts[0].element);
+    if (theme.text === this.theme.text && theme.grid === this.theme.grid) {
+      return;
+    }
+
+    this.theme = theme;
+    this.charts.forEach(({ chart }) => {
+      chart.axes.forEach((axis) => {
+        axis.stroke = theme.text;
+        if (axis.grid) {
+          axis.grid.stroke = theme.grid;
+        }
+        if (axis.ticks) {
+          axis.ticks.stroke = theme.text;
+        }
+        if (axis.border) {
+          axis.border.stroke = theme.grid;
+        }
+      });
+      chart.redraw(true, true);
+    });
+  }
+
   private createOptions(element: HTMLElement): UPlotOptions {
+    const theme = this.readTheme(element);
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
       height: element.clientHeight || DEFAULT_HEIGHT,
@@ -76,7 +112,29 @@ export class EnergyChartsRenderer {
         y: { auto: true },
       },
       series: [{}, ...SAMPLE_SERIES],
-      axes: [{}, {}],
+      axes: [
+        {
+          stroke: theme.text,
+          grid: { stroke: theme.grid, width: 1 },
+          ticks: { stroke: theme.text, width: 1 },
+          border: { stroke: theme.grid, width: 1 },
+        },
+        {
+          stroke: theme.text,
+          grid: { stroke: theme.grid, width: 1 },
+          ticks: { stroke: theme.text, width: 1 },
+          border: { stroke: theme.grid, width: 1 },
+        },
+      ],
+    };
+  }
+
+  private readTheme(element: HTMLElement): ChartTheme {
+    const styles = getComputedStyle(element);
+    return {
+      text:
+        styles.getPropertyValue("--primary-text-color").trim() || "#212121",
+      grid: styles.getPropertyValue("--divider-color").trim() || "#bdbdbd",
     };
   }
 

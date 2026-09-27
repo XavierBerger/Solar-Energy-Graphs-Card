@@ -12,43 +12,59 @@ interface SolarEnergyGraphsCardConfig {
 export class SolarEnergyGraphsCard extends LitElement {
   private chartRenderer?: EnergyChartsRenderer;
 
+  set hass(_hass: unknown) {
+    this.chartRenderer?.refreshTheme();
+  }
+
   static styles = css`
     ${unsafeCSS(uPlotStyles)}
 
     :host {
       display: block;
+      height: calc(100dvh - var(--header-height, 64px) - 2rem);
     }
 
     ha-card {
+      box-sizing: border-box;
+      display: block;
+      height: 100%;
       padding: 1rem;
     }
 
     .graphs {
       display: grid;
+      height: 100%;
       grid-template-columns: minmax(0, 1fr);
-      gap: 1.5rem;
+      grid-template-rows: minmax(0, 7fr) minmax(0, 3fr);
+      gap: 0.75rem;
     }
 
     .graph {
+      display: flex;
+      flex-direction: column;
       min-width: 0;
+      min-height: 0;
     }
 
     .graph h2 {
-      margin: 0 0 0.5rem;
+      flex: 0 0 auto;
+      margin: 0 0 0.25rem;
       color: var(--primary-text-color);
       font-size: var(--ha-font-size-l, 1.25rem);
       font-weight: var(--ha-font-weight-medium, 500);
     }
 
     .graph-note {
-      margin: 0 0 0.5rem;
+      flex: 0 0 auto;
+      margin: 0 0 0.25rem;
       color: var(--secondary-text-color);
       font-size: var(--ha-font-size-s, 0.875rem);
     }
 
     .chart {
-      width: 100%;
-      height: 180px;
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
     }
   `;
 
@@ -59,7 +75,7 @@ export class SolarEnergyGraphsCard extends LitElement {
   }
 
   getCardSize(): number {
-    return 9;
+    return 12;
   }
 
   connectedCallback(): void {
