@@ -15,11 +15,13 @@ La carte reprend ses deux graphiques :
    zéro.
 
 La carte n'intègre que ces graphiques et les éléments nécessaires à leur
-lecture (titres de graphiques, axes, unités, légende et curseur). Elle ne reprend
-pas l'interface générale du viewer : KPIs/statistiques, statut, métadonnées,
-bandeau d'erreur, barre d'outils ni bouton de réinitialisation du zoom.
-Le zoom horizontal et le curseur synchronisé des deux graphiques font partie du
-rendu graphique à reproduire.
+lecture (titres de graphiques, axes, unités, légende et curseur), ainsi qu'un
+sélecteur de journée inspiré des visualisations Home Assistant : calendrier et
+navigation par jour précédent/suivant. Elle ne reprend pas l'interface
+générale du viewer :
+KPIs/statistiques, statut, métadonnées, bandeau d'erreur ni bouton de
+réinitialisation du zoom. Le zoom horizontal et le curseur synchronisé des deux
+graphiques font partie du rendu graphique à reproduire.
 
 La source de données de la carte est Home Assistant. Les endpoints et données
 propres au simulateur ne sont pas une dépendance de la carte.
@@ -120,6 +122,14 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   adaptés au comportement du code.
 - [ ] **À faire** — Finaliser documentation, build de distribution et
   installation HACS/manuelle de test ; obtenir la validation avant release.
+- [ ] **À planifier** — Ajouter un sélecteur de journée avec un calendrier pour
+  choisir une date et des flèches pour aller au jour précédent/suivant. Ne
+  proposer ni périodes semaine/mois/année, ni plage horaire personnalisée.
+  Initialiser au jour courant du fuseau Home Assistant et empêcher la
+  navigation vers le futur. Vérifier si un composant calendrier HA est
+  réellement utilisable depuis la carte ; sinon créer un contrôle local simple.
+  Afficher tous les points historiques du jour sélectionné, sans downsampling
+  ni plafond.
 
 La connexion aux capteurs, la résolution d'une minute et la présentation de la
 légende sont implémentées, testées, déployées et validées visuellement dans
@@ -150,8 +160,8 @@ l'utilisateur avant de passer à l'étape suivante.
 ### Étape 2 — Poser la structure des deux graphiques
 
 Créer les deux conteneurs nécessaires au rendu, avec leurs titres et dimensions.
-N'ajouter ni KPIs, ni statistiques, ni statut, ni contrôles de période/zoom
-extérieurs aux graphiques.
+N'ajouter ni KPIs, ni statistiques, ni statut, ni contrôles de zoom extérieurs
+aux graphiques. Le sélecteur temporel ajouté au périmètre est traité à l'étape 8.
 
 **Validation :** tests unitaires de présence des deux conteneurs, cycle de vie,
 instances multiples, destruction, redimensionnement, ratio 70/30 et couleurs de
@@ -208,8 +218,9 @@ import/export et données manquantes.
   l'erreur de configuration précédente venait du cache.
 - Traiter données absentes, entités indisponibles et trous d'historique sans
   faire échouer le rendu Lovelace ; rester dans le périmètre graphique.
-- Mesurer les coûts de requête, de transformation et de rendu avant d'ajouter
-  cache ou réduction des données.
+- Les longues plages peuvent augmenter la durée des requêtes et du rendu ; tous
+  les points retournés par Home Assistant restent affichés selon le choix de
+  l'utilisateur, sans réduction silencieuse.
 
 Les cas de robustesse et les optimisations éventuelles restent des tâches de
 qualité complémentaires ; ils ne bloquent pas la validation du branchement
@@ -224,11 +235,57 @@ thèmes, les tailles d'écran et le changement de journée. Documenter
 l'installation, la configuration des capteurs, les limites et le dépannage,
 puis vérifier une installation propre avant la release.
 
+### Étape 8 — Intégrer la navigation journalière
+
+Ajouter au-dessus des deux graphes un sélecteur limité à une journée, composé
+d'un calendrier pour choisir la date et de flèches pour aller au jour précédent
+ou suivant. Ne proposer ni vues semaine/mois/année, ni plage personnalisée. La
+sélection initiale reste le jour courant dans le fuseau HA ; aucun jour futur
+ne peut être sélectionné.
+
+- **Choisir le contrôle.** `<ha-date-range-nav>`, utilisé par History et
+  Logbook, inclut aussi des heures et est une API interne non documentée pour
+  les custom cards. Dans `ha-dev` (HA 2026.9.3), les bundles initiaux ne
+  contiennent pas son nom et la vérification d'exécution reste bloquée faute de
+  session authentifiée. Ne pas en dépendre sans preuve d'accessibilité dans
+  Lovelace. Avant l'implémentation, vérifier si HA expose un composant calendrier
+  plus simple ; sinon utiliser un contrôle local léger et stylé selon le thème
+  HA.
+- **Modéliser la sélection.** Garder une date civile dans
+  `hass.config.time_zone`, initialisée à aujourd'hui. Chaque flèche déplace d'un
+  jour civil, en gérant les passages de mois et d'année ; désactiver/refuser la
+  navigation au-delà d'aujourd'hui.
+- **Charger l'historique du jour.** Réutiliser le calcul de bornes et la requête
+  journalière `history/period` existants autant que possible. Envoyer les bornes
+  de la journée sélectionnée dans le fuseau HA, avec début inclus et fin exclue,
+  converties en UTC, et traiter les journées de 23/25 heures. Conserver le
+  baseline de dix minutes et la fraîcheur maximale actuels. Recharger après
+  chaque changement de date et ignorer les réponses obsolètes si la sélection
+  change ou si la carte est déconnectée.
+- **Garder la totalité des mesures et la cohérence des graphes.** Afficher tous
+  les états historiques disponibles du jour, sans downsampling ni plafond.
+  Préserver les règles d'alignement des capteurs, de maintien maximal de dix
+  minutes et de trous pour les mesures indisponibles/périmées. Remplacer
+  ensemble les deux jeux uPlot, avec axe temporel, curseur et zoom synchronisés.
+  Rendre visibles l'absence d'historique et les erreurs de requête.
+- **Tester et livrer.** Ajouter des tests Vitest pour le jour initial, les
+  flèches, les changements de mois/année, le blocage du futur, fuseau/DST,
+  bornes de requête, conservation des points, trous de données et réponses
+  obsolètes. Mettre à jour le README, exécuter tests/build dans Podman, déployer
+  dans `ha-dev` et demander la validation visuelle avant des commits séparés
+  code/tests/documentation.
+
+**Validation :** confirmer dans Lovelace le calendrier, les flèches, la date
+active, l'interdiction du futur et les courbes des jours sélectionnés. Les deux
+graphes doivent rester alignés. Tests et build ne remplacent pas la validation
+visuelle dans `ha-dev`.
+
 ## 6. Règles permanentes
 
 - Ne pas inventer les capteurs, les unités ni la sémantique des flux.
-- Ne pas ajouter KPIs, statistiques, statut, toolbar, bouton de zoom ou
-  sélection de période : ils sont hors périmètre convenu.
+- Ne pas ajouter KPIs, statistiques, statut, toolbar générale ni bouton de
+  réinitialisation du zoom. Le sélecteur journalier décrit à l'étape 8 est
+  désormais inclus dans le périmètre.
 - Conserver une version compilable et les comportements validés à chaque étape.
 - Couvrir les comportements et logiques du code par des tests unitaires ciblés ;
   un changement de code ne peut pas être considéré comme techniquement validé
