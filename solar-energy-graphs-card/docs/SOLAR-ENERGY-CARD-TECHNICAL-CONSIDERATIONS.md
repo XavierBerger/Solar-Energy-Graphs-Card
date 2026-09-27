@@ -29,7 +29,7 @@ local au graphique.
 | Graphiques temporels | uPlot |
 | Accès aux données | Contexte Home Assistant et API historique/WebSocket ciblée |
 | Build | Vite |
-| Tests unitaires | Vitest, ou runner déjà établi dans le projet |
+| Tests unitaires | Vitest avec happy-dom pour les tests du composant Lit |
 | Distribution | Bundle JavaScript compact, chargeable comme ressource Lovelace |
 
 Le dépôt de la carte ne contient actuellement que ses documents de planification.
@@ -134,12 +134,24 @@ Assistant pertinent.
 
 Tests automatisés à ajouter selon la structure finale du projet :
 
+- Tester dès maintenant l'acceptation/refus de la configuration, la taille et
+  le rendu du composant Lovelace minimal.
 - normalisation et alignement temporel des points ;
 - calcul des séries dérivées et conventions de signe ;
 - gestion de trous et données indisponibles ;
 - formes des données fournies aux deux graphiques ;
 - synchro temporelle, redimensionnement et destruction autant que le runner le
   permet.
+
+Tout comportement ou logique ajouté ou modifié doit être couvert par des tests
+unitaires ciblés. Les tests sont exécutés avec Vitest dans l'environnement
+Podman du projet ; happy-dom sert aux tests du composant Lit, tandis que les
+fonctions pures restent testées sans DOM lorsqu'il est possible. Simuler les
+frontières Home Assistant et uPlot afin de tester le comportement de la carte,
+pas l'implémentation interne de ses dépendances. Chaque test possède juste
+avant lui un commentaire de but en anglais de deux lignes maximum. Tous les
+commentaires de code sont en anglais ; la documentation et les plans restent
+en français pendant la phase de développement.
 
 Les tests manuels dans Home Assistant vérifient la parité visuelle avec le
 viewer, la lisibilité des unités, les interactions tactiles, le responsive, les

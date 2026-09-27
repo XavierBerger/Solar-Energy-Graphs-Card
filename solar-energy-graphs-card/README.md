@@ -50,6 +50,12 @@ Cela construit la carte et copie le fichier dans
 l'instance `ha-dev` de ce dépôt. Pour une autre installation Home Assistant,
 copiez le fichier `dist/solar-energy-graphs-card.js` vous-même.
 
+Pour exécuter les tests unitaires du projet dans le même environnement Podman :
+
+```sh
+./dev.sh test
+```
+
 ## 2. Copier le fichier dans Home Assistant
 
 Dans le dossier de configuration de Home Assistant, créez le dossier `www` s'il

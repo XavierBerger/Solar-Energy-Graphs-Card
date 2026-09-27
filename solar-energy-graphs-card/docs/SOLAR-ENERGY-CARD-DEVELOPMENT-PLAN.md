@@ -48,6 +48,13 @@ Les tests automatisés et la compilation vérifient le comportement technique ;
 ils ne remplacent pas la validation visuelle dans Home Assistant. Une étape
 bloquée reste indiquée comme telle dans la TODO list.
 
+Chaque comportement ou logique ajouté ou modifié doit être couvert par des
+tests unitaires ciblés, exécutés avec Vitest et happy-dom dans l'environnement
+Podman. Chaque test (`it`/`test`) est précédé d'un commentaire en anglais
+d'une ou deux lignes maximum décrivant son objectif. Tous les commentaires de
+code restent en anglais ; les README, plans et documents du projet sont rédigés
+en français pendant la phase de développement.
+
 ## 4. TODO list de développement
 
 Mettre cette liste à jour au fil du développement : passer une tâche à
@@ -62,6 +69,9 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   dans Lovelace a été confirmé par l'utilisateur. Dans le formulaire de
   ressource Lovelace, saisir `local/solar-energy-graphs-card.js` sans barre
   oblique initiale ; l'URL HTTP de test conserve `/local/`.
+- [x] **Validée** — Ajouter Vitest/happy-dom à l'environnement Podman et
+  vérifier le composant Lovelace minimal avec des tests unitaires sur sa
+  configuration, sa taille et son rendu. Exécution : `./dev.sh test`.
 - [ ] **À faire** — Créer une carte Lovelace minimale avec deux zones de
   graphique uPlot, sans interface hors graphique.
 - [ ] **À faire** — Afficher des données fictives dans le graphique principal :
@@ -83,7 +93,8 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   vide/erreur local au graphique, sans réintroduire de panneau de statut ou de
   KPIs.
 - [ ] **À faire** — Tester responsive, thèmes Home Assistant, plusieurs cartes,
-  changement de jour et robustesse ; ajouter les tests automatisés adaptés.
+  changement de jour et robustesse ; maintenir les tests unitaires Vitest
+  adaptés au comportement du code.
 - [ ] **À faire** — Finaliser documentation, build de distribution et
   installation HACS/manuelle de test ; obtenir la validation avant release.
 
@@ -179,7 +190,8 @@ tout ajout de fonctionnalités.
 ### Étape 7 — Qualité, documentation et distribution
 
 Tester le build, les transformations et le cycle de vie des graphiques
-(redimensionnement, mises à jour, destruction). Vérifier plusieurs cartes, les
+(redimensionnement, mises à jour, destruction) avec des tests unitaires
+Vitest/happy-dom, en plus des validations manuelles Home Assistant. Vérifier plusieurs cartes, les
 thèmes, les tailles d'écran et le changement de journée. Documenter
 l'installation, la configuration des capteurs, les limites et le dépannage,
 puis vérifier une installation propre avant la release.
@@ -190,6 +202,14 @@ puis vérifier une installation propre avant la release.
 - Ne pas ajouter KPIs, statistiques, statut, toolbar, bouton de zoom ou
   sélection de période : ils sont hors périmètre convenu.
 - Conserver une version compilable et les comportements validés à chaque étape.
+- Couvrir les comportements et logiques du code par des tests unitaires ciblés ;
+  un changement de code ne peut pas être considéré comme techniquement validé
+  sans exécuter les tests pertinents.
+- Décrire en anglais le but de chaque test par un commentaire immédiatement
+  précédent de deux lignes maximum. Tous les commentaires de code sont en
+  anglais.
+- Rédiger README, plans et documentation en français pendant la phase de
+  développement.
 - Ne pas considérer un test automatisé comme une validation utilisateur.
 - Mettre à jour cette TODO list au fur et à mesure, sans marquer comme validé un
   élément dont la confirmation requise n'a pas été reçue.
