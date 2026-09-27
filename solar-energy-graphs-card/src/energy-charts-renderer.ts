@@ -170,7 +170,7 @@ export class EnergyChartsRenderer {
 
     const series: UPlotOptions["series"] = mainChart
       ? [
-          { class: "hide-helper-legend" },
+          {},
           {
             label: "",
             class: "hide-helper-legend",
