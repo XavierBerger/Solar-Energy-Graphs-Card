@@ -1,11 +1,13 @@
 # Solar Energy Graphs Card
 
-> **Carte en cours de développement.** Pour le moment, la carte affiche
-> deux graphiques de démonstration avec des séries artificielles neutres. Ces
-> valeurs ne représentent pas votre installation solaire ; les séries métier
-> et la configuration des capteurs ne sont pas encore disponibles. Cette page
-> explique comment installer et tester ce prototype dans Home Assistant ; elle
-> ne signifie pas que la carte est prête pour un usage quotidien.
+> **Carte en cours de développement.** Le graphique supérieur présente un
+> profil solaire fictif pour démontrer la production et la répartition de la
+> consommation ; le graphique inférieur affiche encore des séries neutres.
+> Aucune courbe ne représente votre installation solaire : les données Home
+> Assistant et la configuration des capteurs ne sont pas encore disponibles.
+> Cette page explique comment installer et tester ce prototype dans Home
+> Assistant ; elle ne signifie pas que la carte est prête pour un usage
+> quotidien.
 
 La carte utilise presque toute la hauteur visible de l'écran, sous l'en-tête
 Home Assistant. Les deux zones de graphique se partagent cet espace selon un
@@ -132,13 +134,14 @@ nouveau :
 
 7. Enregistrez la carte, puis le tableau de bord si Home Assistant le demande.
 
-Le résultat attendu pour ce prototype est une carte contenant deux graphiques
-intitulés **Graphique de démonstration 1** et **Graphique de démonstration 2**,
-avec la mention **Données artificielles de démonstration**. Ces courbes
-temporaires servent uniquement à vérifier la disposition et le redimensionnement ;
-elles ne décrivent pas la production ni les échanges d'énergie de votre maison.
-Il n'y a actuellement aucune autre option à configurer : ne renseignez pas
-d'entités ou de capteurs. Votre tableau de bord
+Le résultat attendu est une carte dont le graphique supérieur montre un profil
+de production solaire fictif et la consommation répartie entre solaire direct
+et réseau. Le graphique inférieur conserve deux séries neutres de
+démonstration ; il ne représente pas encore les échanges réseau. Les deux
+graphiques affichent la mention **Données artificielles de démonstration**.
+Ces profils servent à valider le rendu, pas à décrire la production ni les
+échanges d'énergie de votre maison. Il n'y a actuellement aucune option à
+configurer : ne renseignez pas d'entités ou de capteurs. Votre tableau de bord
 principal n'est pas modifié.
 
 ## Dépannage
@@ -161,8 +164,9 @@ principal n'est pas modifié.
   (par exemple `Ctrl+F5` ou `Cmd+Maj+R`), puis vérifiez que la ressource a été
   enregistrée.
 - **Les courbes ne correspondent pas à mes capteurs** : c'est attendu. Les
-  valeurs affichées sont artificielles et seront remplacées après les étapes de
-  validation du rendu et de définition des capteurs Home Assistant.
+  deux graphiques sont encore alimentés par des données fictives ; le graphique
+  inférieur reste un exemple neutre et les capteurs Home Assistant ne sont pas
+  encore configurables.
 
 Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
 ressource Lovelace et, si vous le souhaitez, supprimez le fichier

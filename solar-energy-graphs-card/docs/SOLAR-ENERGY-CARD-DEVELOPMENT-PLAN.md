@@ -72,17 +72,18 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
 - [x] **Validée** — Ajouter Vitest/happy-dom à l'environnement Podman et
   vérifier le composant Lovelace minimal avec des tests unitaires sur sa
   configuration, sa taille et son rendu. Exécution : `./dev.sh test`.
-- [ ] **En cours** — Créer les deux zones uPlot responsives avec titres et
-  données neutres provisoires, leur cycle de vie et leur redimensionnement.
-  Le défaut visuel est corrigé techniquement : hauteur quasi plein écran,
-  partage 70/30 et couleurs uPlot issues des variables du thème. Tests/build
-  réussis ; confirmation visuelle dans `ha-dev` encore attendue.
-- [ ] **À faire** — Valider la disposition des deux graphiques dans Home
-  Assistant sur desktop et mobile, ratio 70/30, hauteur utilisée et thèmes
-  clair/sombre avant de commencer leur reproduction métier.
-- [ ] **À faire** — Afficher des données fictives dans le graphique principal :
+- [x] **Validée** — Créer les deux zones uPlot responsives, leur cycle de vie,
+  leur redimensionnement, la hauteur quasi plein écran et le ratio 70/30.
+  La correction de redraw garde les callbacks uPlot stables ; le thème clair
+  conserve sa palette et le thème sombre affiche des axes blancs et une grille
+  grise fine. Tests/build réussis et rendu visuel validé dans Home Assistant.
+- [x] **Validée** — Valider la disposition des deux graphiques, le ratio 70/30,
+  la hauteur utilisée et les thèmes clair/sombre dans Home Assistant.
+- [ ] **En cours** — Afficher des données fictives dans le graphique principal :
   production PV, autoconsommation directe et consommation couverte par le
-  réseau, avec les aplats et courbes du viewer.
+  réseau, avec les aplats et courbes du viewer. Profil déterministe sur une
+  journée, tests unitaires, build et déploiement dans `ha-dev` effectués ; la
+  validation visuelle de cette nouvelle composition est encore attendue.
 - [ ] **À faire** — Valider le graphique principal dans Home Assistant avant de
   poursuivre.
 - [ ] **À faire** — Ajouter le graphique import/export réseau, la ligne zéro,
