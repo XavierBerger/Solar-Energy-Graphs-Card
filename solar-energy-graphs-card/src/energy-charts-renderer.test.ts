@@ -83,16 +83,35 @@ describe("EnergyChartsRenderer", () => {
     document.body.replaceChildren();
   });
 
-  // Creates exactly two uPlot instances using clearly neutral demonstration series.
-  it("creates two charts with temporary neutral demo data", () => {
+  // Builds the solar composition above the unchanged lower demo chart.
+  it("creates the main solar chart and keeps the second chart provisional", () => {
     new EnergyChartsRenderer(containers);
 
     expect(createChartMock).toHaveBeenCalledTimes(2);
     const firstOptions = createChartMock.mock.calls[0][0];
     const secondOptions = createChartMock.mock.calls[1][0];
-    expect(firstOptions.series[1].label).toBe("Demonstration series A");
-    expect(firstOptions.series[2].label).toBe("Demonstration series B");
+    const firstData = createChartMock.mock.calls[0][1];
+    const secondData = createChartMock.mock.calls[1][1];
+    expect(firstOptions.series[1].label).toBe("Production solaire (W)");
+    expect(firstOptions.series[5].label).toBe(
+      "Consommation couverte par le réseau (W)",
+    );
+    expect(firstOptions.series[7].label).toBe("Consommation totale (W)");
+    expect(firstOptions.bands).toEqual([
+      { series: [3, 2], fill: "#a2d49b" },
+      { series: [5, 4], fill: "#e96e7d" },
+    ]);
+    expect(firstOptions.axes[1].label).toBe("Watts (W)");
+    expect(firstOptions.scales.y.autoMin).toBe(0);
+    expect(secondOptions.scales.y.autoMin).toBeUndefined();
+    expect(firstData).toHaveLength(8);
+    expect(firstData[0]).toHaveLength(49);
+    expect(firstData.every((series: ArrayLike<number>) => series.length === 49))
+      .toBe(true);
     expect(secondOptions.series[1].label).toBe("Demonstration series A");
+    expect(secondOptions.series[2].label).toBe("Demonstration series B");
+    expect(secondOptions.bands).toBeUndefined();
+    expect(secondData[0]).toHaveLength(7);
     expect(firstOptions.width).toBe(600);
     expect(firstOptions.height).toBe(100);
   });
