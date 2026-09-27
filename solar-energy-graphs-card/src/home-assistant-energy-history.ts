@@ -102,8 +102,8 @@ export function buildHistoryApiPath(
   const query = new URLSearchParams({
     filter_entity_id: entityIds.join(","),
     end_time: end,
-    minimal_response: "1",
     no_attributes: "1",
+    significant_changes_only: "0",
   });
   return `history/period/${encodeURIComponent(start)}?${query.toString()}`;
 }
@@ -337,13 +337,14 @@ function parsePowerSamples(
   lastSample: number,
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
-    const timestamp = Date.parse(state.last_updated ?? state.last_changed ?? "");
+    const timestamp = parseTimestampSeconds(
+      state.last_updated ?? state.last_changed ?? "",
+    );
     const value = state.state.trim() ? Number(state.state) : Number.NaN;
-    const timestampSeconds = timestamp / 1000;
-    return Number.isFinite(timestamp) && timestampSeconds <= lastSample
+    return Number.isFinite(timestamp) && timestamp <= lastSample
       ? [
           {
-            timestamp: timestampSeconds,
+            timestamp,
             value: Number.isFinite(value) ? value * unitScale : null,
           },
         ]
@@ -355,6 +356,19 @@ function parsePowerSamples(
     (sample, index) =>
       index === 0 || sample.timestamp !== samples[index - 1].timestamp,
   );
+}
+
+function parseTimestampSeconds(value: string): number {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return Number.NaN;
+  }
+
+  const fractionalSeconds = /\.(\d+)(?=Z|[+-]\d{2}:?\d{2}$)/i.exec(value)?.[1];
+  const subMillisecondSeconds = fractionalSeconds
+    ? Number(`0.${fractionalSeconds.slice(3)}`) / 1000
+    : 0;
+  return timestamp / 1000 + subMillisecondSeconds;
 }
 
 function alignPowerSamples(
