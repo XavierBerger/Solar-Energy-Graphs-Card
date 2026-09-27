@@ -12,6 +12,8 @@ export interface DemoEnergyData {
   consumption: Float32Array;
   solarDirect: Float32Array;
   gridSupplied: Float32Array;
+  gridImport: Float32Array;
+  gridExport: Float32Array;
 }
 
 export function createDemoEnergyData(): DemoEnergyData {
@@ -21,6 +23,8 @@ export function createDemoEnergyData(): DemoEnergyData {
   const consumption = new Float32Array(sampleCount);
   const solarDirect = new Float32Array(sampleCount);
   const gridSupplied = new Float32Array(sampleCount);
+  const gridImport = new Float32Array(sampleCount);
+  const gridExport = new Float32Array(sampleCount);
 
   for (let index = 0; index < sampleCount; index += 1) {
     const hour = index / SAMPLES_PER_HOUR;
@@ -37,12 +41,15 @@ export function createDemoEnergyData(): DemoEnergyData {
       750 + 180 * Math.sin(((hour - 5) * Math.PI) / 12);
     const loadPower = baseLoad + morningPeak + eveningPeak;
     const directSolarPower = Math.min(solarPower, loadPower);
+    const gridPower = loadPower - solarPower;
 
     timestamps[index] = DAY_START_SECONDS + index * SAMPLE_INTERVAL_SECONDS;
     production[index] = solarPower;
     consumption[index] = loadPower;
     solarDirect[index] = directSolarPower;
     gridSupplied[index] = loadPower - directSolarPower;
+    gridImport[index] = Math.max(gridPower, 0);
+    gridExport[index] = Math.max(-gridPower, 0);
   }
 
   return {
@@ -51,5 +58,7 @@ export function createDemoEnergyData(): DemoEnergyData {
     consumption,
     solarDirect,
     gridSupplied,
+    gridImport,
+    gridExport,
   };
 }

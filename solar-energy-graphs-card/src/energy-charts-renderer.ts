@@ -7,36 +7,57 @@ import {
 } from "./uplot-adapter";
 import { createDemoEnergyData } from "./demo-energy-data";
 
-const SAMPLE_TIMESTAMPS = [0, 1, 2, 3, 4, 5, 6].map(
-  (hour) => Date.UTC(2025, 0, 1, hour) / 1000,
-);
-
-const SAMPLE_SERIES = [
-  {
-    label: "Demonstration series A",
-    stroke: "#3b82f6",
-    width: 2,
-  },
-  {
-    label: "Demonstration series B",
-    stroke: "#8b5cf6",
-    width: 2,
-  },
-];
-
-const SAMPLE_DATA: UPlotData = [
-  SAMPLE_TIMESTAMPS,
-  [12, 20, 16, 28, 24, 35, 30],
-  [30, 24, 34, 22, 38, 29, 42],
-];
-
 const DEMO_ENERGY_DATA = createDemoEnergyData();
 
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
+let nextSyncGroupId = 0;
 
 const toUtcDate = (timestamp: number): Date =>
   uPlot.tzDate(new Date(timestamp * 1000), "Etc/UTC");
+
+interface ZeroLineChart {
+  scales: Record<string, { min?: number; max?: number }>;
+  valToPos(value: number, scale: string, canvasPosition?: boolean): number;
+  ctx: Pick<
+    CanvasRenderingContext2D,
+    | "save"
+    | "restore"
+    | "beginPath"
+    | "moveTo"
+    | "lineTo"
+    | "stroke"
+    | "strokeStyle"
+    | "lineWidth"
+  >;
+  bbox: Pick<DOMRect, "left" | "width">;
+}
+
+export function drawZeroLine(chart: ZeroLineChart, color: string): void {
+  const yScale = chart.scales.y;
+  if (
+    !yScale ||
+    yScale.min === undefined ||
+    yScale.max === undefined ||
+    yScale.min > 0 ||
+    yScale.max < 0
+  ) {
+    return;
+  }
+
+  const y = chart.valToPos(0, "y", true);
+  const { ctx, bbox } = chart;
+  const alignedY = Math.round(y) + 0.5;
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(bbox.left, alignedY);
+  ctx.lineTo(bbox.left + bbox.width, alignedY);
+  ctx.stroke();
+  ctx.restore();
+}
 
 interface ChartTheme {
   text: string;
@@ -46,33 +67,40 @@ interface ChartTheme {
 
 type ChartTarget = {
   element: HTMLElement;
+  legendElement: HTMLElement;
   chart: UPlotInstance;
 };
 
 export class EnergyChartsRenderer {
   private readonly charts: ChartTarget[];
   private readonly resizeObserver: ResizeObserver;
+  private readonly syncGroup: ReturnType<typeof uPlot.sync>;
   private destroyed = false;
   private theme: ChartTheme;
 
   constructor(
     containers: readonly [HTMLElement, HTMLElement],
+    legendContainers: readonly [HTMLElement, HTMLElement],
     darkMode = false,
   ) {
     this.theme = this.readTheme(containers[0], darkMode);
+    this.syncGroup = uPlot.sync(
+      `solar-energy-graphs-card-${++nextSyncGroupId}`,
+    );
     this.resizeObserver = new ResizeObserver((entries) => {
       this.handleResize(entries);
     });
 
     this.charts = containers.map((element, index) => {
+      const legendElement = legendContainers[index];
       const mainChart = index === 0;
       const chart = createChart(
-        this.createOptions(element, mainChart),
-        mainChart ? this.createMainChartData() : SAMPLE_DATA,
+        this.createOptions(element, legendElement, mainChart),
+        mainChart ? this.createMainChartData() : this.createGridChartData(),
         element,
       );
       this.resizeObserver.observe(element);
-      return { element, chart };
+      return { element, legendElement, chart };
     });
   }
 
@@ -83,7 +111,10 @@ export class EnergyChartsRenderer {
 
     this.destroyed = true;
     this.resizeObserver.disconnect();
-    this.charts.forEach(({ chart }) => chart.destroy());
+    this.charts.forEach(({ chart, legendElement }) => {
+      chart.destroy();
+      legendElement.replaceChildren();
+    });
   }
 
   refreshTheme(darkMode: boolean): void {
@@ -111,7 +142,11 @@ export class EnergyChartsRenderer {
     });
   }
 
-  private createOptions(element: HTMLElement, mainChart: boolean): UPlotOptions {
+  private createOptions(
+    element: HTMLElement,
+    legendContainer: HTMLElement,
+    mainChart: boolean,
+  ): UPlotOptions {
     const axes: UPlotOptions["axes"] = [
       {
         stroke: () => this.theme.text,
@@ -124,49 +159,68 @@ export class EnergyChartsRenderer {
         grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
         ticks: { stroke: () => this.theme.text, width: 1 },
         border: { stroke: () => this.theme.grid, width: 1 },
-        ...(mainChart ? { label: "Watts (W)" } : {}),
+        label: "Watts (W)",
       },
     ];
 
     const series: UPlotOptions["series"] = mainChart
       ? [
-          {},
+          { class: "hide-helper-legend" },
           {
-            label: "Production solaire (W)",
+            label: "",
+            class: "hide-helper-legend",
             stroke: "rgba(0, 0, 0, 0)",
             width: 0,
             fill: "rgba(245, 158, 11, 0.12)",
           },
           {
             label: "",
+            class: "hide-helper-legend",
             stroke: "rgba(0, 0, 0, 0)",
             width: 0,
           },
           {
-            label: "Solaire direct (W)",
+            label: "Autoconsommation",
             width: 0,
+            fill: "#a2d49b",
           },
           {
             label: "",
+            class: "hide-helper-legend",
             stroke: "rgba(0, 0, 0, 0)",
             width: 0,
           },
           {
-            label: "Consommation couverte par le réseau (W)",
+            label: "",
+            class: "hide-helper-legend",
             width: 0,
           },
           {
-            label: "",
+            label: "Production solaire",
             stroke: "#d4ac1f",
             width: 1.5,
           },
           {
-            label: "Consommation totale (W)",
+            label: "Consommation",
             stroke: "#3b82f6",
             width: 1.5,
           },
         ]
-      : [{}, ...SAMPLE_SERIES];
+      : [
+          {},
+          {
+            label: "Export réseau (+W)",
+            stroke: "#f59e0b",
+            width: 1.5,
+            fill: "rgba(245, 158, 11, 0.35)",
+          },
+          {
+            label: "Import réseau (-W)",
+            stroke: "#ef4444",
+            width: 1.5,
+            fill: "rgba(239, 68, 68, 0.35)",
+          },
+        ];
     const bands: NonNullable<UPlotOptions["bands"]> = [
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
@@ -175,14 +229,25 @@ export class EnergyChartsRenderer {
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
       height: element.clientHeight || DEFAULT_HEIGHT,
-      ...(mainChart ? { tzDate: toUtcDate } : {}),
+      tzDate: toUtcDate,
+      cursor: {
+        sync: { key: this.syncGroup.key, scales: ["x", null] },
+        drag: { x: true, y: false },
+      },
+      legend: {
+        mount: (_chart, legend) => {
+          legendContainer.replaceChildren(legend);
+        },
+      },
       scales: {
         x: { time: true },
         y: { auto: true, ...(mainChart ? { autoMin: 0 } : {}) },
       },
       series,
       axes,
-      ...(mainChart ? { bands } : {}),
+      ...(mainChart
+        ? { bands }
+        : { hooks: { draw: [(chart) => drawZeroLine(chart, this.theme.grid)] } }),
     };
   }
 
@@ -198,6 +263,19 @@ export class EnergyChartsRenderer {
       DEMO_ENERGY_DATA.consumption,
       DEMO_ENERGY_DATA.production.slice(),
       DEMO_ENERGY_DATA.consumption.slice(),
+    ];
+  }
+
+  private createGridChartData(): UPlotData {
+    const negativeImport = new Float32Array(DEMO_ENERGY_DATA.gridImport.length);
+    for (let index = 0; index < negativeImport.length; index += 1) {
+      negativeImport[index] = -DEMO_ENERGY_DATA.gridImport[index];
+    }
+
+    return [
+      DEMO_ENERGY_DATA.timestamps,
+      DEMO_ENERGY_DATA.gridExport,
+      negativeImport,
     ];
   }
 
