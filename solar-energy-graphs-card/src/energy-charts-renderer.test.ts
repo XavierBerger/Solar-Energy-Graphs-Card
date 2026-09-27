@@ -45,13 +45,31 @@ describe("EnergyChartsRenderer", () => {
   let charts: Array<{
     setSize: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
+    redraw: ReturnType<typeof vi.fn>;
+    axes: Array<{
+      stroke?: string;
+      grid?: { stroke?: string };
+      ticks?: { stroke?: string };
+      border?: { stroke?: string };
+    }>;
   }>;
 
   beforeEach(() => {
     containers = [document.createElement("div"), document.createElement("div")];
+    document.body.append(...containers);
     charts = [
-      { setSize: vi.fn(), destroy: vi.fn() },
-      { setSize: vi.fn(), destroy: vi.fn() },
+      {
+        setSize: vi.fn(),
+        destroy: vi.fn(),
+        redraw: vi.fn(),
+        axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
+      },
+      {
+        setSize: vi.fn(),
+        destroy: vi.fn(),
+        redraw: vi.fn(),
+        axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
+      },
     ];
     MockResizeObserver.instances = [];
     createChartMock.mockReset();
@@ -63,6 +81,7 @@ describe("EnergyChartsRenderer", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    document.body.replaceChildren();
   });
 
   // Creates exactly two uPlot instances using clearly neutral demonstration series.
@@ -76,7 +95,50 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.series[2].label).toBe("Demonstration series B");
     expect(secondOptions.series[1].label).toBe("Demonstration series A");
     expect(firstOptions.width).toBe(600);
-    expect(firstOptions.height).toBe(180);
+    expect(firstOptions.height).toBe(100);
+  });
+
+  // Applies Home Assistant theme tokens to uPlot axis text, ticks and gridlines.
+  it("uses the active Home Assistant theme colors", () => {
+    containers[0].style.setProperty("--primary-text-color", "#f4f4f4");
+    containers[0].style.setProperty("--divider-color", "#555555");
+    containers[1].style.setProperty("--primary-text-color", "#f4f4f4");
+    containers[1].style.setProperty("--divider-color", "#555555");
+
+    new EnergyChartsRenderer(containers);
+
+    const axes = createChartMock.mock.calls[0][0].axes;
+    expect(axes[0].stroke).toBe("#f4f4f4");
+    expect(axes[0].grid.stroke).toBe("#555555");
+    expect(axes[0].ticks.stroke).toBe("#f4f4f4");
+    expect(axes[1].stroke).toBe("#f4f4f4");
+  });
+
+  // Redraws both canvas charts when Home Assistant theme colors change.
+  it("refreshes chart colors when the theme changes", () => {
+    containers[0].style.setProperty("--primary-text-color", "#f4f4f4");
+    containers[0].style.setProperty("--divider-color", "#555555");
+    const renderer = new EnergyChartsRenderer(containers);
+    containers[0].style.setProperty("--primary-text-color", "#222222");
+    containers[0].style.setProperty("--divider-color", "#cccccc");
+
+    renderer.refreshTheme();
+
+    expect(charts[0].axes[0].stroke).toBe("#222222");
+    expect(charts[0].axes[0].grid?.stroke).toBe("#cccccc");
+    expect(charts[1].axes[1].ticks?.stroke).toBe("#222222");
+    expect(charts[0].redraw).toHaveBeenCalledWith(true, true);
+    expect(charts[1].redraw).toHaveBeenCalledWith(true, true);
+  });
+
+  // Avoids redrawing canvas charts when theme values did not change.
+  it("does not redraw when theme colors are unchanged", () => {
+    const renderer = new EnergyChartsRenderer(containers);
+
+    renderer.refreshTheme();
+
+    expect(charts[0].redraw).not.toHaveBeenCalled();
+    expect(charts[1].redraw).not.toHaveBeenCalled();
   });
 
   // Watches both graph containers so responsive layout changes reach uPlot.

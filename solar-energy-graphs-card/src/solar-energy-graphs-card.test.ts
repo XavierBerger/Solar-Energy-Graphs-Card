@@ -12,6 +12,7 @@ const { rendererInstances } = vi.hoisted(() => ({
   rendererInstances: [] as Array<{
     containers: HTMLElement[];
     destroy: ReturnType<typeof vi.fn>;
+    refreshTheme: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -19,6 +20,7 @@ vi.mock("./energy-charts-renderer", () => ({
   EnergyChartsRenderer: class {
     readonly containers: HTMLElement[];
     readonly destroy = vi.fn();
+    readonly refreshTheme = vi.fn();
 
     constructor(containers: HTMLElement[]) {
       this.containers = containers;
@@ -57,11 +59,11 @@ describe("SolarEnergyGraphsCard", () => {
     );
   });
 
-  // Keeps Home Assistant's layout estimate aligned with the two chart areas.
-  it("reports a card size of nine rows", () => {
+  // Keeps Home Assistant's layout estimate aligned with the viewport-height card.
+  it("reports a card size of twelve rows", () => {
     card = new SolarEnergyGraphsCard();
 
-    expect(card.getCardSize()).toBe(9);
+    expect(card.getCardSize()).toBe(12);
   });
 
   // Ensures both titled chart containers identify their data as temporary demonstrations.
@@ -83,6 +85,16 @@ describe("SolarEnergyGraphsCard", () => {
     );
   });
 
+  // Keeps both chart regions at the requested 70/30 viewport-height split.
+  it("allocates seven parts to the upper graph and three to the lower graph", () => {
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain(
+      "grid-template-rows: minmax(0, 7fr) minmax(0, 3fr)",
+    );
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain(
+      "height: calc(100dvh - var(--header-height, 64px) - 2rem)",
+    );
+  });
+
   // Provides both rendered elements to the uPlot renderer after the card updates.
   it("creates a renderer for both chart containers", async () => {
     card = new SolarEnergyGraphsCard();
@@ -95,6 +107,17 @@ describe("SolarEnergyGraphsCard", () => {
       card.shadowRoot?.querySelector('[data-chart="one"]'),
       card.shadowRoot?.querySelector('[data-chart="two"]'),
     ]);
+  });
+
+  // Updates canvas colors when Home Assistant supplies a new theme context.
+  it("refreshes chart theme colors when hass changes", async () => {
+    card = new SolarEnergyGraphsCard();
+    document.body.append(card);
+    await card.updateComplete;
+
+    card.hass = {};
+
+    expect(rendererInstances[0].refreshTheme).toHaveBeenCalledOnce();
   });
 
   // Releases chart resources when Home Assistant removes the card.
