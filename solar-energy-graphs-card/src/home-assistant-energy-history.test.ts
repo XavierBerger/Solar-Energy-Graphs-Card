@@ -109,6 +109,32 @@ describe("Home Assistant energy history", () => {
     expect(autumn.end - autumn.start).toBe(25 * 60 * 60);
   });
 
+  // Creates one plotted point per minute while preserving 23-hour and 25-hour days.
+  it("generates minute-resolution points across daylight-saving days", () => {
+    const spring = getLocalDayWindow(
+      new Date("2026-03-29T12:00:00Z"),
+      "Europe/Paris",
+    );
+    const autumn = getLocalDayWindow(
+      new Date("2026-10-25T12:00:00Z"),
+      "Europe/Paris",
+    );
+    const emptyHistory = [[], [], [], []] as const;
+    const springData = normalizeEnergyHistory(
+      emptyHistory,
+      spring,
+      spring.end,
+    );
+    const autumnData = normalizeEnergyHistory(
+      emptyHistory,
+      autumn,
+      autumn.end,
+    );
+
+    expect(springData.mainData[0].length).toBe(23 * 60 + 2);
+    expect(autumnData.mainData[0].length).toBe(25 * 60 + 2);
+  });
+
   // Requests four configured power entities with a baseline before local midnight.
   it("builds a bounded Home Assistant history API request", () => {
     const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
@@ -127,37 +153,37 @@ describe("Home Assistant energy history", () => {
 
   // Averages power readings per interval and keeps measured import/export separate.
   it("normalizes direct power, autoconsumption and separate grid flows", () => {
-    const start = 1_000_000;
-    const window = { start, end: start + 900 };
+    const start = 1_000_020;
+    const window = { start, end: start + 180 };
     const data = normalizeEnergyHistory(
       [
         [
-          state(start + 60, 1000),
-          state(start + 240, 1200),
-          state(start + 360, 2000),
-          state(start + 540, 1800),
+          state(start + 5, 1000),
+          state(start + 35, 1200),
+          state(start + 65, 2000),
+          state(start + 95, 1800),
         ],
         [
-          state(start + 60, 500),
-          state(start + 240, 700),
-          state(start + 360, 800),
-          state(start + 540, 1000),
+          state(start + 5, 500),
+          state(start + 35, 700),
+          state(start + 65, 800),
+          state(start + 95, 1000),
         ],
         [
-          state(start + 60, 400),
-          state(start + 240, 500),
-          state(start + 360, 600),
-          state(start + 540, 800),
+          state(start + 5, 400),
+          state(start + 35, 500),
+          state(start + 65, 600),
+          state(start + 95, 800),
         ],
         [
-          state(start + 60, 0),
-          state(start + 240, 0),
-          state(start + 360, 200),
-          state(start + 540, 300),
+          state(start + 5, 0),
+          state(start + 35, 0),
+          state(start + 65, 200),
+          state(start + 95, 300),
         ],
       ],
       window,
-      start + 600,
+      start + 120,
     );
 
     const production = data.mainData[1]!;
@@ -175,10 +201,16 @@ describe("Home Assistant energy history", () => {
     expect(data.hasConsumption).toBe(true);
     expect(data.hasGridImport).toBe(true);
     expect(data.hasGridExport).toBe(true);
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 30,
+      start + 90,
+      window.end,
+    ]);
   });
 
-  // Leaves unavailable readings as gaps instead of carrying stale power forward.
-  it("marks unavailable and stale power readings as missing", () => {
+  // Reuses known readings for up to ten minutes and preserves unavailable gaps.
+  it("marks unavailable readings as missing and carries recent values forward", () => {
     const start = 1_000_000;
     const data = normalizeEnergyHistory(
       [
@@ -187,17 +219,36 @@ describe("Home Assistant energy history", () => {
         [],
         [],
       ],
-      { start, end: start + 900 },
+      { start, end: start + 600 },
       start + 600,
     );
 
-    expect(data.mainData[1]!).toEqual([null, 500, 10, null]);
-    expect(data.mainData[7]!).toEqual([null, null, 50, null]);
-    expect(data.gridData[1]!).toEqual([null, null, null, null]);
-    expect(data.gridData[2]!).toEqual([null, null, null, null]);
+    expect(data.mainData[1]!).toEqual([
+      null, 500, 500, 500, 500, 500, 10, 10, 10, 10, 10, null,
+    ]);
+    expect(data.mainData[7]!).toEqual([
+      null, null, null, null, null, null, 50, 50, 50, 50, 50, null,
+    ]);
+    expect(data.gridData[1]!).toEqual(Array(12).fill(null));
+    expect(data.gridData[2]!).toEqual(Array(12).fill(null));
     expect(data.hasProduction).toBe(true);
     expect(data.hasConsumption).toBe(true);
     expect(data.hasGridImport).toBe(false);
     expect(data.hasGridExport).toBe(false);
+  });
+
+  // Stops carrying a sensor value after the ten-minute freshness limit.
+  it("leaves a gap when the last power reading exceeds ten minutes", () => {
+    const start = 1_000_020;
+    const data = normalizeEnergyHistory(
+      [[state(start, 500)], [], [], []],
+      { start, end: start + 12 * 60 },
+      start + 12 * 60,
+    );
+    const production = data.mainData[1]!;
+
+    expect(production.slice(1, 12)).toEqual(Array(11).fill(500));
+    expect(production[12]).toBeNull();
+    expect(production[13]).toBeNull();
   });
 });
