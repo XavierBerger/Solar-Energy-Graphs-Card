@@ -156,6 +156,11 @@ fuseau configuré. Elle conserve tous les horodatages enregistrés par les
 capteurs sans les agréger par minute ni les sous-échantillonner. Entre deux
 mesures, la dernière valeur connue est maintenue pendant dix minutes au maximum ;
 les valeurs indisponibles ou plus anciennes apparaissent comme des trous.
+La requête History désactive explicitement le filtre Home Assistant des
+changements « significatifs », afin d'inclure tous les états conservés par le
+Recorder. Elle n'utilise pas non plus `minimal_response`, qui peut fusionner
+des entrées identiques ; `no_attributes` évite seulement de transférer les
+attributs inutiles aux graphiques.
 L'autoconsommation directe est estimée comme le minimum entre la production PV
 et la puissance consommée par la charge ; cette formule suppose l'absence de
 batterie. La légende supérieure affiche **Production solaire**,

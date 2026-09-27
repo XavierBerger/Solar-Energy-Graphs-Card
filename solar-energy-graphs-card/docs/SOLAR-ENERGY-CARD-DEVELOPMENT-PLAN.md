@@ -260,7 +260,12 @@ il est impossible de naviguer dans le futur.
   comme axe x partagé. À chaque timestamp, aligner les quatre capteurs sur leur
   dernière mesure connue, appliquer le plafond de fraîcheur de dix minutes,
   traiter les états invalides comme des trous et recalculer les séries dérivées.
-  Aucun downsampling ni plafond de points.
+  Passer explicitement `significant_changes_only=0` à l'API History, dont le
+  défaut exclut certains changements d'état. Omettre aussi
+  `minimal_response`, qui peut dédupliquer des entrées identiques ; garder
+  `no_attributes` pour retirer uniquement les attributs inutiles. Préserver les
+  fractions de timestamp au-delà des millisecondes afin de ne pas fusionner des
+  points source rapprochés. Aucun downsampling ni plafond de points.
 - **Synchroniser et signaler.** Mettre à jour les deux graphes ensemble tout en
   conservant l'axe partagé, le curseur et le zoom synchronisés. Garder les
   statuts d'erreur/historique absent visibles dans leurs zones de graphique.
