@@ -1,0 +1,153 @@
+# Solar Energy Graphs Card
+
+> **Carte en cours de développement.** Pour le moment, la carte affiche
+> uniquement un cadre de test avec le texte « Solar Energy Graphs Card ». Les
+> graphiques solaires et la configuration des capteurs ne sont pas encore
+> disponibles. Cette page explique comment installer et tester ce prototype
+> dans Home Assistant ; elle ne signifie pas que la carte est prête pour un
+> usage quotidien.
+
+## Ce qu'il vous faut
+
+- Un Home Assistant où vous pouvez modifier un tableau de bord.
+- Un moyen d'ajouter un fichier dans le dossier `www` de la configuration
+  Home Assistant (par exemple File editor, Samba ou SSH).
+- Si vous construisez vous-même le fichier depuis le code source : **Podman**.
+  Node.js et npm ne doivent pas être installés sur votre ordinateur.
+
+Il n'y a pas encore de paquet HACS ni de fichier de release à télécharger. Le
+fichier JavaScript doit donc être construit depuis le dépôt.
+
+## 1. Construire le fichier de la carte
+
+Récupérez le dépôt du projet sur une machine où Podman est disponible, puis
+ouvrez un terminal dans le dossier `solar-energy-graphs-card/` :
+
+```sh
+./dev.sh build
+```
+
+Cette commande télécharge/utilise l'image de développement et construit la
+carte dans un conteneur Podman. Les dépendances sont gardées dans un volume
+Podman persistant : elles ne sont pas installées sur l'hôte et ne sont pas
+retéléchargées à chaque compilation, sauf si le fichier de dépendances change.
+
+Le fichier à installer est créé ici :
+
+```text
+solar-energy-graphs-card/dist/solar-energy-graphs-card.js
+```
+
+Si vous utilisez l'environnement de développement fourni avec ce dépôt et son
+Home Assistant `ha-dev`, vous pouvez plutôt exécuter :
+
+```sh
+./dev.sh deploy
+```
+
+Cela construit la carte et copie le fichier dans
+`docker/ha-config/www/solar-energy-graphs-card.js`. Ce raccourci est destiné à
+l'instance `ha-dev` de ce dépôt. Pour une autre installation Home Assistant,
+copiez le fichier `dist/solar-energy-graphs-card.js` vous-même.
+
+## 2. Copier le fichier dans Home Assistant
+
+Dans le dossier de configuration de Home Assistant, créez le dossier `www` s'il
+n'existe pas. Copiez-y le fichier JavaScript en conservant son nom :
+
+```text
+<configuration Home Assistant>/www/solar-energy-graphs-card.js
+```
+
+Par exemple, si votre dossier de configuration est `/config`, le chemin est :
+
+```text
+/config/www/solar-energy-graphs-card.js
+```
+
+Home Assistant expose les fichiers de ce dossier sous `/local/`. Vous pouvez
+vérifier dans un navigateur que cette adresse ouvre ou télécharge le JavaScript :
+
+```text
+http://<adresse-de-votre-home-assistant>:8123/local/solar-energy-graphs-card.js
+```
+
+Remplacez `<adresse-de-votre-home-assistant>` par le nom ou l'adresse IP de
+votre Home Assistant. Si vous obtenez une erreur 404, vérifiez le nom et
+l'emplacement du fichier.
+
+## 3. Déclarer la ressource Lovelace
+
+Dans Home Assistant :
+
+1. Ouvrez **Paramètres → Tableaux de bord**.
+2. Ouvrez le menu de gestion des ressources (selon la version, il se trouve
+   dans le menu `⋮` ou dans la page des tableaux de bord).
+3. Choisissez **Ajouter une ressource**.
+4. Dans le champ URL, saisissez ce chemin **sans `/` au début** :
+
+   ```text
+   local/solar-energy-graphs-card.js
+   ```
+
+5. Choisissez le type **JavaScript module**, puis enregistrez.
+
+   Home Assistant demande ici un chemin de ressource relatif. Dans la barre
+   d'adresse du navigateur, le même fichier reste accessible avec une barre
+   oblique initiale : `http://<adresse-de-votre-home-assistant>:8123/local/solar-energy-graphs-card.js`.
+
+## 4. Créer un tableau de bord dédié et y ajouter la carte
+
+Pour garder cette carte séparée de votre tableau de bord principal, créez-en un
+nouveau :
+
+1. Ouvrez **Paramètres → Tableaux de bord**.
+2. Choisissez **Ajouter un tableau de bord**.
+3. Parmi les choix proposés, sélectionnez **Nouveau tableau de bord vide**.
+   C'est le bon choix pour créer un tableau de bord que vous pourrez configurer
+   dans l'interface. Ne choisissez pas **Aperçu (ancienne version)**, **Carte**
+   ou **Page web** : ces options ne créent pas un tableau de bord Lovelace vide
+   destiné à recevoir vos cartes.
+4. Donnez au tableau de bord un titre, par exemple **Énergie solaire**, puis
+   choisissez une URL (chemin) dédiée, par exemple `energie-solaire`, si ces
+   champs sont proposés.
+5. Terminez la création et ouvrez le nouveau tableau de bord. Choisissez
+   **Modifier le tableau de bord**.
+6. Ajoutez une carte **Manuelle** et remplacez son contenu par :
+
+   ```yaml
+   type: custom:solar-energy-graphs-card
+   ```
+
+7. Enregistrez la carte, puis le tableau de bord si Home Assistant le demande.
+
+Le résultat attendu pour ce prototype est une carte contenant le texte
+« Solar Energy Graphs Card ». Il n'y a actuellement aucune autre option à
+configurer : ne renseignez pas d'entités ou de capteurs. Votre tableau de bord
+principal n'est pas modifié.
+
+## Dépannage
+
+- **« Custom element doesn't exist »** : vérifiez que la ressource est ajoutée
+  avec le type **JavaScript module**, que le champ URL contient
+  `local/solar-energy-graphs-card.js` sans barre oblique initiale, puis
+  actualisez la page.
+- **« Erreur de configuration »** : vérifiez dans
+  **Paramètres → Tableaux de bord → Ressources** qu'une ressource utilisant
+  exactement `local/solar-energy-graphs-card.js` (sans `/` au début) est
+  enregistrée avec le type **JavaScript module**. Une autre carte ou un ancien
+  nom de fichier ne charge pas cet élément personnalisé. Supprimez l'ancienne
+  ressource si nécessaire, ajoutez le bon chemin, puis rechargez le tableau de
+  bord en forçant l'actualisation du navigateur.
+- **Erreur 404 sur l'URL `/local/...`** : vérifiez que le fichier se trouve dans
+  le dossier `www` de la configuration Home Assistant et que son nom est
+  exactement `solar-energy-graphs-card.js`.
+- **Vous voyez une ancienne version** : forcez le rechargement du navigateur
+  (par exemple `Ctrl+F5` ou `Cmd+Maj+R`), puis vérifiez que la ressource a été
+  enregistrée.
+- **La carte affiche seulement son titre de test** : c'est le comportement
+  actuel du prototype. Les graphiques ne sont pas encore implémentés.
+
+Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
+ressource Lovelace et, si vous le souhaitez, supprimez le fichier
+`www/solar-energy-graphs-card.js`.

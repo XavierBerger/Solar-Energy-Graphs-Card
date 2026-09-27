@@ -55,8 +55,13 @@ Mettre cette liste à jour au fil du développement : passer une tâche à
 confirmation utilisateur requise, ou à **Bloquée** en indiquant la raison.
 Ajouter les tâches découvertes sans effacer l'historique utile.
 
-- [ ] **À faire** — Confirmer la structure du projet, le build, le chargement
-  Lovelace et la méthode de distribution.
+- [x] **Validée** — Confirmer la structure du projet, le build, le chargement
+  Lovelace et la méthode de distribution. Le socle TypeScript/Lit/Vite/uPlot
+  et l'environnement Podman isolé sont initialisés ; build et service du
+  bundle par `/local/` dans `ha-dev` sont vérifiés. Le chargement de la carte
+  dans Lovelace a été confirmé par l'utilisateur. Dans le formulaire de
+  ressource Lovelace, saisir `local/solar-energy-graphs-card.js` sans barre
+  oblique initiale ; l'URL HTTP de test conserve `/local/`.
 - [ ] **À faire** — Créer une carte Lovelace minimale avec deux zones de
   graphique uPlot, sans interface hors graphique.
 - [ ] **À faire** — Afficher des données fictives dans le graphique principal :
@@ -90,11 +95,22 @@ n'est encore implémentée ou validée.
 ### Étape 1 — Vérifier et initialiser le projet
 
 - Examiner la structure existante avant de choisir ou compléter l'outillage.
-- Établir comment le bundle sera chargé comme ressource Lovelace.
+- Établir comment le bundle sera chargé comme ressource Lovelace : le script
+  `solar-energy-graphs-card/dev.sh deploy` construit dans Podman puis copie le
+  bundle dans `docker/ha-config/www/`, servi par `ha-dev` sous `/local/`.
+- Utiliser `solar-energy-graphs-card/dev.sh install` pour générer le lockfile
+  dans le conteneur ; le volume Podman conserve les dépendances entre
+  exécutions, sans créer de `node_modules` sur l'hôte. Utiliser `build`,
+  `typecheck` ou `deploy` pour les commandes correspondantes.
 - Créer le composant de carte minimal et intégrer uPlot dans le build.
 - Éviter d'introduire les données métier ou les éléments de dashboard du viewer.
 
-**Validation :** build réussi et carte chargeable dans Home Assistant.
+**Validation :** build réussi, bundle servi par `/local/` et carte chargeable
+dans l'instance `ha-dev` après ajout manuel de la ressource
+`local/solar-energy-graphs-card.js` (sans barre oblique initiale dans le champ
+de ressource) et d'une carte
+`type: custom:solar-energy-graphs-card`. Attendre la confirmation explicite de
+l'utilisateur avant de passer à l'étape suivante.
 
 ### Étape 2 — Poser la structure des deux graphiques
 
