@@ -109,8 +109,9 @@ nulle.
   les quatre entités et la journée courante dans `hass.config.time_zone`.
 - Les quatre capteurs doivent être des mesures de puissance (`power` /
   `measurement`) en W ou kW ; les valeurs sont converties en watts puis
-  moyennées par intervalles de cinq minutes. Les historiques absents ou trop
-  anciens restent des trous, pas des puissances nulles inventées.
+  moyennées par intervalles d'une minute. Entre deux changements, la dernière
+  valeur est maintenue au plus dix minutes ; ensuite les historiques absents ou
+  trop anciens restent des trous, pas des puissances nulles inventées.
 - Import et export réseau sont des flux distincts, chacun lu depuis son capteur.
   En l'absence de batterie, l'autoconsommation directe est estimée par
   `min(production PV, consommation de la charge)`.

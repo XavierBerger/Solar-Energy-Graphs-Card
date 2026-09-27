@@ -26,12 +26,9 @@ propres au simulateur ne sont pas une dépendance de la carte.
 
 ## 2. État initial
 
-Le répertoire `solar-energy-graphs-card/` contient actuellement les documents de
-planification, mais pas encore le code de la carte. Le plan technique
-recommande TypeScript, Lit, Vite, Vitest et uPlot ; le choix du moteur est ici
-tranché en faveur de **uPlot**, déjà utilisé par le viewer de référence. La
-structure effective du projet et son outillage seront confirmés avant de les
-initialiser.
+Le socle TypeScript/Lit/Vite/uPlot est en place dans
+`solar-energy-graphs-card/`. Les tests Vitest/happy-dom s'exécutent dans
+l'environnement Podman du projet.
 
 ## 3. Règle de progression et validation
 
@@ -41,8 +38,8 @@ Le développement est incrémental. À chaque étape significative :
 2. donner les étapes précises de test dans Home Assistant ;
 3. demander à l'utilisateur de vérifier le résultat ;
 4. corriger les problèmes constatés ;
-5. ne marquer l'étape comme validée et ne poursuivre qu'après confirmation
-   explicite de l'utilisateur.
+5. ne marquer l'étape comme validée qu'après confirmation explicite de
+   l'utilisateur.
 
 Les tests automatisés et la compilation vérifient le comportement technique ;
 ils ne remplacent pas la validation visuelle dans Home Assistant. Une étape
@@ -91,18 +88,30 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
 - [x] **Validée** — Garder les légendes des deux graphes dans leurs cadres,
   sans chevauchement des titres ; préserver les valeurs numériques au survol
   et ne montrer que Production solaire, Consommation et Autoconsommation dans
-  la légende supérieure. Validation visuelle reçue dans Home Assistant.
+  la légende supérieure, avec l'indicateur `Time` visible comme sur le graphe
+  inférieur. Validation visuelle reçue dans Home Assistant.
 - [x] **Validée** — Définir quatre capteurs Home Assistant de puissance
   instantanée en W (`power/measurement`) : production PV, consommation de la
   charge, import réseau et export réseau. Import et export sont séparés ; sans
   batterie, autoconsommation estimée par `min(production, consommation)`.
-- [ ] **En cours** — Lire l'historique journalier des quatre mesures par l'API
-  native Home Assistant, convertir kW en W, agréger les valeurs par intervalles
-  de cinq minutes, gérer le fuseau HA/DST et alimenter les deux graphes. Les
-  36 tests passent, le typecheck/build réussit et les quatre historiques sont
-  présents dans `ha-dev` ; validation visuelle requise.
-- [ ] **À faire** — Valider visuellement les capteurs réels, valeurs,
-  timestamps, fuseau horaire, unités, signes et granularité dans Home Assistant.
+- [x] **Validée** — Lire l'historique journalier des quatre mesures par
+  l'API native Home Assistant, convertir kW en W, agréger les valeurs en
+  intervalles de cinq minutes, gérer le fuseau HA/DST et alimenter les deux
+  graphes. Les 36 tests passent, le typecheck/build réussit et les quatre
+  historiques sont disponibles dans `ha-dev`. L'implémentation, ses tests et sa
+  documentation sont commitées séparément ; cette première résolution a été
+  validée visuellement.
+- [x] **Validée** — Augmenter la résolution à une minute sur demande utilisateur.
+  La normalisation moyenne les mesures par minute, conserve les valeurs au plus
+  dix minutes, puis marque les données périmées comme manquantes. Tests DST,
+  agrégation et fraîcheur inclus ; 38 tests et build/typecheck réussis, puis
+  validation visuelle reçue dans Home Assistant.
+- [x] **Chargée dans Home Assistant** — Configurer les quatre entités Solarnet
+  dans le tableau de bord `Énergie Solaire`. Après actualisation du navigateur,
+  l'utilisateur a confirmé que l'erreur de configuration avait disparu.
+- [x] **Validée visuellement** — Vérifier les courbes des capteurs réels dans
+  Home Assistant. Validation utilisateur reçue après actualisation du
+  tableau de bord.
 - [ ] **À faire** — Traiter les historiques incomplets ou absents avec un état
   vide/erreur local au graphique, sans réintroduire de panneau de statut ou de
   KPIs.
@@ -112,8 +121,9 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
 - [ ] **À faire** — Finaliser documentation, build de distribution et
   installation HACS/manuelle de test ; obtenir la validation avant release.
 
-Les cases ne sont pas cochées à l'avance : aucune fonctionnalité de la carte
-n'est encore implémentée ou validée.
+La connexion aux capteurs, la résolution d'une minute et la présentation de la
+légende sont implémentées, testées, déployées et validées visuellement dans
+Home Assistant.
 
 ## 5. Étapes d'implémentation
 
@@ -176,33 +186,34 @@ principal. Le bouton du viewer qui réinitialise le zoom reste exclu.
 **Validation :** confirmer l'orientation des signes, l'alignement temporel,
 l'interaction synchronisée et le rendu responsive.
 
-### Étape 5 — Définir et normaliser les données Home Assistant
+### Étape 5 — Définir et normaliser les données Home Assistant — Implémentée
 
-Demander les entités pertinentes plutôt que d'en supposer les noms ou le sens :
-production, consommation et, selon la configuration, puissance réseau ou
-autoconsommation. Confirmer unités, signe import/export, disponibilité
-d'historique et définition de l'autoconsommation avant d'implémenter les
-transformations.
+Les entrées convenues sont des mesures instantanées en W de production PV,
+consommation de charge, import réseau et export réseau. La carte valide les
+métadonnées, prend en charge W/kW, lit `history/period` dans le fuseau de HA,
+agrège par intervalles d'une minute et garde les valeurs manquantes pour les
+historiques absents ou périmés. L'autoconsommation est estimée par
+`min(production PV, consommation de la charge)`, sans prise en compte d'une
+batterie. Les imports et exports proviennent de capteurs distincts.
 
-Séparer l'accès Home Assistant, la normalisation des points et l'adaptateur
-uPlot. Documenter les hypothèses et préserver les timestamps et valeurs
-manquantes nécessaires à la représentation.
+Code, tests et documentation sont livrés en commits séparés. Les tests de
+normalisation couvrent fuseau/DST, unités, agrégation, autoconsommation,
+import/export et données manquantes.
 
-**Validation :** vérifier les transformations sur des données connues et faire
-confirmer les définitions métier avant le branchement des courbes.
+### Étape 6 — Relier les données réelles et fiabiliser — Validée
 
-### Étape 6 — Relier les données réelles et fiabiliser
-
-- Récupérer seulement l'historique nécessaire pour la journée affichée.
-- Comparer les deux graphiques aux valeurs de référence dans Home Assistant.
-- Vérifier les unités, fuseaux horaires, changements de jour et signes.
+- [x] Récupérer l'historique nécessaire pour la journée affichée.
+- [x] Comparer visuellement les graphiques aux données dans Home Assistant.
+  L'utilisateur a confirmé la validation après actualisation du navigateur ;
+  l'erreur de configuration précédente venait du cache.
 - Traiter données absentes, entités indisponibles et trous d'historique sans
   faire échouer le rendu Lovelace ; rester dans le périmètre graphique.
 - Mesurer les coûts de requête, de transformation et de rendu avant d'ajouter
   cache ou réduction des données.
 
-**Validation :** l'utilisateur confirme les résultats pour ses entités avant
-tout ajout de fonctionnalités.
+Les cas de robustesse et les optimisations éventuelles restent des tâches de
+qualité complémentaires ; ils ne bloquent pas la validation du branchement
+actuel.
 
 ### Étape 7 — Qualité, documentation et distribution
 

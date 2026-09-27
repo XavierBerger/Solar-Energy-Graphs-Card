@@ -147,7 +147,9 @@ Les quatre capteurs doivent mesurer une puissance avec `device_class: power`,
 des capteurs séparés ; la carte ne déduit pas l'un à partir de l'autre.
 
 La carte utilise l'historique Home Assistant du jour dans le fuseau configuré
-et calcule la moyenne des mesures par intervalles de cinq minutes.
+et calcule la moyenne des mesures par intervalles d'une minute. Chaque point
+résume les événements enregistrés dans cette minute ; la densité réelle dépend
+de la cadence propre à chaque capteur.
 L'autoconsommation directe est estimée comme le minimum entre la production PV
 et la puissance consommée par la charge ; cette formule suppose l'absence de
 batterie. La légende supérieure affiche **Production solaire**,
