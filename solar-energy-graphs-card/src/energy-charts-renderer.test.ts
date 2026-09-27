@@ -17,7 +17,45 @@ vi.mock("./uplot-adapter", () => ({
   uPlot: { sync: syncMock },
 }));
 
-import { drawZeroLine, EnergyChartsRenderer } from "./energy-charts-renderer";
+import {
+  drawZeroLine,
+  EnergyChartsRenderer as Renderer,
+} from "./energy-charts-renderer";
+import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
+
+const TEST_HISTORY_DATA: EnergyHistoryResponse = {
+  mainData: [
+    Float64Array.from([0, 300]),
+    [null, 1800],
+    [null, 0],
+    [null, 1200],
+    [null, 1200],
+    [null, 600],
+    [null, 1800],
+    [null, 1800],
+  ],
+  gridData: [Float64Array.from([0, 300]), [null, 200], [null, -400]],
+  hasProduction: true,
+  hasConsumption: true,
+  hasGridImport: true,
+  hasGridExport: true,
+};
+
+class EnergyChartsRenderer extends Renderer {
+  constructor(
+    containers: readonly [HTMLElement, HTMLElement],
+    legendContainers: readonly [HTMLElement, HTMLElement],
+    darkMode = false,
+  ) {
+    super(
+      containers,
+      legendContainers,
+      TEST_HISTORY_DATA,
+      "Europe/Paris",
+      darkMode,
+    );
+  }
+}
 
 class MockResizeObserver implements ResizeObserver {
   static instances: MockResizeObserver[] = [];
@@ -46,6 +84,7 @@ describe("EnergyChartsRenderer", () => {
   let legendContainers: [HTMLElement, HTMLElement];
   let charts: Array<{
     setSize: ReturnType<typeof vi.fn>;
+    setData: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     redraw: ReturnType<typeof vi.fn>;
     axes: Array<{
@@ -62,12 +101,14 @@ describe("EnergyChartsRenderer", () => {
     charts = [
       {
         setSize: vi.fn(),
+        setData: vi.fn(),
         destroy: vi.fn(),
         redraw: vi.fn(),
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
       {
         setSize: vi.fn(),
+        setData: vi.fn(),
         destroy: vi.fn(),
         redraw: vi.fn(),
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
@@ -120,18 +161,17 @@ describe("EnergyChartsRenderer", () => {
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
     expect(secondOptions.legend.mount).toBeTypeOf("function");
     expect(firstData).toHaveLength(8);
-    expect(firstData[0]).toHaveLength(49);
-    expect(firstData.every((series: ArrayLike<number>) => series.length === 49))
-      .toBe(true);
+    expect(firstData[0]).toHaveLength(2);
+    expect(firstData[1]).toEqual([null, 1800]);
     expect(secondOptions.series[1].label).toBe("Export réseau (+W)");
     expect(secondOptions.series[2].label).toBe("Import réseau (-W)");
     expect(secondOptions.axes[1].label).toBe("Watts (W)");
     expect(secondOptions.bands).toBeUndefined();
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
     expect(secondData).toHaveLength(3);
-    expect(secondData[0]).toHaveLength(49);
-    expect(secondData[1].some((value: number) => value > 0)).toBe(true);
-    expect(secondData[2].some((value: number) => value < 0)).toBe(true);
+    expect(secondData[0]).toHaveLength(2);
+    expect(secondData[1]).toEqual([null, 200]);
+    expect(secondData[2]).toEqual([null, -400]);
     expect(firstOptions.cursor.sync.key).toBe(secondOptions.cursor.sync.key);
     expect(firstOptions.cursor.sync.scales).toEqual(["x", null]);
     expect(secondOptions.cursor.sync.scales).toEqual(["x", null]);
@@ -144,6 +184,21 @@ describe("EnergyChartsRenderer", () => {
     expect(syncMock).toHaveBeenCalledOnce();
     expect(firstOptions.width).toBe(600);
     expect(firstOptions.height).toBe(100);
+  });
+
+  // Replaces both plot datasets after Home Assistant history is refreshed.
+  it("updates both charts with normalized history data", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const updatedData: EnergyHistoryResponse = {
+      ...TEST_HISTORY_DATA,
+      mainData: [Float64Array.from([0, 600]), [null, 2400]],
+      gridData: [Float64Array.from([0, 600]), [null, 300]],
+    };
+
+    renderer.updateData(updatedData);
+
+    expect(charts[0].setData).toHaveBeenCalledWith(updatedData.mainData);
+    expect(charts[1].setData).toHaveBeenCalledWith(updatedData.gridData);
   });
 
   // Mounts both legend tables into their own layout rows outside the plot.
