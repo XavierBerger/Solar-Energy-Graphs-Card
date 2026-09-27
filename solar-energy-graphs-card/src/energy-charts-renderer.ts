@@ -1,20 +1,14 @@
 import {
   createChart,
   uPlot,
-  type UPlotData,
   type UPlotInstance,
   type UPlotOptions,
 } from "./uplot-adapter";
-import { createDemoEnergyData } from "./demo-energy-data";
-
-const DEMO_ENERGY_DATA = createDemoEnergyData();
+import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
 
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
 let nextSyncGroupId = 0;
-
-const toUtcDate = (timestamp: number): Date =>
-  uPlot.tzDate(new Date(timestamp * 1000), "Etc/UTC");
 
 interface ZeroLineChart {
   scales: Record<string, { min?: number; max?: number }>;
@@ -81,6 +75,8 @@ export class EnergyChartsRenderer {
   constructor(
     containers: readonly [HTMLElement, HTMLElement],
     legendContainers: readonly [HTMLElement, HTMLElement],
+    data: EnergyHistoryResponse,
+    timeZone: string,
     darkMode = false,
   ) {
     this.theme = this.readTheme(containers[0], darkMode);
@@ -95,8 +91,8 @@ export class EnergyChartsRenderer {
       const legendElement = legendContainers[index];
       const mainChart = index === 0;
       const chart = createChart(
-        this.createOptions(element, legendElement, mainChart),
-        mainChart ? this.createMainChartData() : this.createGridChartData(),
+        this.createOptions(element, legendElement, mainChart, timeZone),
+        mainChart ? data.mainData : data.gridData,
         element,
       );
       this.resizeObserver.observe(element);
@@ -115,6 +111,14 @@ export class EnergyChartsRenderer {
       chart.destroy();
       legendElement.replaceChildren();
     });
+  }
+
+  updateData(data: EnergyHistoryResponse): void {
+    if (this.destroyed) {
+      return;
+    }
+    this.charts[0].chart.setData(data.mainData);
+    this.charts[1].chart.setData(data.gridData);
   }
 
   refreshTheme(darkMode: boolean): void {
@@ -146,6 +150,7 @@ export class EnergyChartsRenderer {
     element: HTMLElement,
     legendContainer: HTMLElement,
     mainChart: boolean,
+    timeZone: string,
   ): UPlotOptions {
     const axes: UPlotOptions["axes"] = [
       {
@@ -229,7 +234,8 @@ export class EnergyChartsRenderer {
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
       height: element.clientHeight || DEFAULT_HEIGHT,
-      tzDate: toUtcDate,
+      tzDate: (timestamp) =>
+        uPlot.tzDate(new Date(timestamp * 1000), timeZone),
       cursor: {
         sync: { key: this.syncGroup.key, scales: ["x", null] },
         drag: { x: true, y: false },
@@ -249,34 +255,6 @@ export class EnergyChartsRenderer {
         ? { bands }
         : { hooks: { draw: [(chart) => drawZeroLine(chart, this.theme.grid)] } }),
     };
-  }
-
-  private createMainChartData(): UPlotData {
-    const zero = new Float32Array(DEMO_ENERGY_DATA.timestamps.length);
-
-    return [
-      DEMO_ENERGY_DATA.timestamps,
-      DEMO_ENERGY_DATA.production,
-      zero,
-      DEMO_ENERGY_DATA.solarDirect,
-      DEMO_ENERGY_DATA.solarDirect.slice(),
-      DEMO_ENERGY_DATA.consumption,
-      DEMO_ENERGY_DATA.production.slice(),
-      DEMO_ENERGY_DATA.consumption.slice(),
-    ];
-  }
-
-  private createGridChartData(): UPlotData {
-    const negativeImport = new Float32Array(DEMO_ENERGY_DATA.gridImport.length);
-    for (let index = 0; index < negativeImport.length; index += 1) {
-      negativeImport[index] = -DEMO_ENERGY_DATA.gridImport[index];
-    }
-
-    return [
-      DEMO_ENERGY_DATA.timestamps,
-      DEMO_ENERGY_DATA.gridExport,
-      negativeImport,
-    ];
   }
 
   private readTheme(element: HTMLElement, darkMode: boolean): ChartTheme {
