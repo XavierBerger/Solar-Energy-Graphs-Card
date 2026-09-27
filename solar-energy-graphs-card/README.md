@@ -1,11 +1,11 @@
 # Solar Energy Graphs Card
 
 > **Carte en cours de développement.** Pour le moment, la carte affiche
-> uniquement un cadre de test avec le texte « Solar Energy Graphs Card ». Les
-> graphiques solaires et la configuration des capteurs ne sont pas encore
-> disponibles. Cette page explique comment installer et tester ce prototype
-> dans Home Assistant ; elle ne signifie pas que la carte est prête pour un
-> usage quotidien.
+> deux graphiques de démonstration avec des séries artificielles neutres. Ces
+> valeurs ne représentent pas votre installation solaire ; les séries métier
+> et la configuration des capteurs ne sont pas encore disponibles. Cette page
+> explique comment installer et tester ce prototype dans Home Assistant ; elle
+> ne signifie pas que la carte est prête pour un usage quotidien.
 
 ## Ce qu'il vous faut
 
@@ -127,9 +127,13 @@ nouveau :
 
 7. Enregistrez la carte, puis le tableau de bord si Home Assistant le demande.
 
-Le résultat attendu pour ce prototype est une carte contenant le texte
-« Solar Energy Graphs Card ». Il n'y a actuellement aucune autre option à
-configurer : ne renseignez pas d'entités ou de capteurs. Votre tableau de bord
+Le résultat attendu pour ce prototype est une carte contenant deux graphiques
+intitulés **Graphique de démonstration 1** et **Graphique de démonstration 2**,
+avec la mention **Données artificielles de démonstration**. Ces courbes
+temporaires servent uniquement à vérifier la disposition et le redimensionnement ;
+elles ne décrivent pas la production ni les échanges d'énergie de votre maison.
+Il n'y a actuellement aucune autre option à configurer : ne renseignez pas
+d'entités ou de capteurs. Votre tableau de bord
 principal n'est pas modifié.
 
 ## Dépannage
@@ -151,8 +155,9 @@ principal n'est pas modifié.
 - **Vous voyez une ancienne version** : forcez le rechargement du navigateur
   (par exemple `Ctrl+F5` ou `Cmd+Maj+R`), puis vérifiez que la ressource a été
   enregistrée.
-- **La carte affiche seulement son titre de test** : c'est le comportement
-  actuel du prototype. Les graphiques ne sont pas encore implémentés.
+- **Les courbes ne correspondent pas à mes capteurs** : c'est attendu. Les
+  valeurs affichées sont artificielles et seront remplacées après les étapes de
+  validation du rendu et de définition des capteurs Home Assistant.
 
 Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
 ressource Lovelace et, si vous le souhaitez, supprimez le fichier

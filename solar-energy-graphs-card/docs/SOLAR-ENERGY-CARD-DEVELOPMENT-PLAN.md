@@ -72,8 +72,12 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
 - [x] **Validée** — Ajouter Vitest/happy-dom à l'environnement Podman et
   vérifier le composant Lovelace minimal avec des tests unitaires sur sa
   configuration, sa taille et son rendu. Exécution : `./dev.sh test`.
-- [ ] **À faire** — Créer une carte Lovelace minimale avec deux zones de
-  graphique uPlot, sans interface hors graphique.
+- [ ] **En cours** — Créer les deux zones uPlot responsives avec titres et
+  données neutres provisoires, leur cycle de vie et leur redimensionnement.
+  Tests unitaires réussis ; validation visuelle desktop/mobile dans `ha-dev`
+  encore attendue.
+- [ ] **À faire** — Valider la disposition des deux graphiques dans Home
+  Assistant sur desktop et mobile avant de commencer leur reproduction métier.
 - [ ] **À faire** — Afficher des données fictives dans le graphique principal :
   production PV, autoconsommation directe et consommation couverte par le
   réseau, avec les aplats et courbes du viewer.
@@ -129,8 +133,10 @@ Créer les deux conteneurs nécessaires au rendu, avec leurs titres et dimension
 N'ajouter ni KPIs, ni statistiques, ni statut, ni contrôles de période/zoom
 extérieurs aux graphiques.
 
-**Validation :** disposition correcte dans une vue Lovelace, notamment sur
-mobile et desktop.
+**Validation :** tests unitaires de présence des deux conteneurs, cycle de vie,
+instances multiples, destruction et redimensionnement réussis ; l'utilisateur
+confirme la disposition dans la vue Lovelace sur desktop et mobile avant de
+poursuivre.
 
 ### Étape 3 — Reproduire le graphique principal avec des données fictives
 

@@ -134,8 +134,8 @@ Assistant pertinent.
 
 Tests automatisés à ajouter selon la structure finale du projet :
 
-- Tester dès maintenant l'acceptation/refus de la configuration, la taille et
-  le rendu du composant Lovelace minimal.
+- Tester les deux conteneurs de graphes, leurs titres, le cycle de vie de leur
+  renderer, le redimensionnement, les instances multiples et leur destruction.
 - normalisation et alignement temporel des points ;
 - calcul des séries dérivées et conventions de signe ;
 - gestion de trous et données indisponibles ;
