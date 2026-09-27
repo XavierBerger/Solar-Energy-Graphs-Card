@@ -11,6 +11,7 @@ import { SolarEnergyGraphsCard } from "./solar-energy-graphs-card";
 const { rendererInstances } = vi.hoisted(() => ({
   rendererInstances: [] as Array<{
     containers: HTMLElement[];
+    legendContainers: HTMLElement[];
     darkMode: boolean;
     destroy: ReturnType<typeof vi.fn>;
     refreshTheme: ReturnType<typeof vi.fn>;
@@ -20,12 +21,18 @@ const { rendererInstances } = vi.hoisted(() => ({
 vi.mock("./energy-charts-renderer", () => ({
   EnergyChartsRenderer: class {
     readonly containers: HTMLElement[];
+    readonly legendContainers: HTMLElement[];
     readonly darkMode: boolean;
     readonly destroy = vi.fn();
     readonly refreshTheme = vi.fn();
 
-    constructor(containers: HTMLElement[], darkMode: boolean) {
+    constructor(
+      containers: HTMLElement[],
+      legendContainers: HTMLElement[],
+      darkMode: boolean,
+    ) {
       this.containers = containers;
+      this.legendContainers = legendContainers;
       this.darkMode = darkMode;
       rendererInstances.push(this);
     }
@@ -75,7 +82,8 @@ describe("SolarEnergyGraphsCard", () => {
     document.body.append(card);
     await card.updateComplete;
 
-    expect(card.shadowRoot?.querySelectorAll(".chart")).toHaveLength(2);
+    expect(card.shadowRoot?.querySelectorAll(".chart-plot")).toHaveLength(2);
+    expect(card.shadowRoot?.querySelectorAll(".chart-legend")).toHaveLength(2);
     expect(card.shadowRoot?.textContent).toContain(
       "Graphique de démonstration 1",
     );
@@ -98,6 +106,21 @@ describe("SolarEnergyGraphsCard", () => {
     );
   });
 
+  // Keeps plot and legend in separate flex rows to prevent section overflow.
+  it("reserves an in-flow row for each chart legend", () => {
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain(
+      ".chart-legend",
+    );
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain(
+      "flex-direction: column",
+    );
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain("overflow-x: auto");
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain(
+      ".chart .u-legend .u-series.hide-helper-legend",
+    );
+    expect(SolarEnergyGraphsCard.styles.cssText).toContain("display: none");
+  });
+
   // Provides both rendered elements to the uPlot renderer after the card updates.
   it("creates a renderer for both chart containers", async () => {
     card = new SolarEnergyGraphsCard();
@@ -109,6 +132,10 @@ describe("SolarEnergyGraphsCard", () => {
     expect(rendererInstances[0].containers).toEqual([
       card.shadowRoot?.querySelector('[data-chart="one"]'),
       card.shadowRoot?.querySelector('[data-chart="two"]'),
+    ]);
+    expect(rendererInstances[0].legendContainers).toEqual([
+      card.shadowRoot?.querySelector('[data-legend="one"]'),
+      card.shadowRoot?.querySelector('[data-legend="two"]'),
     ]);
   });
 

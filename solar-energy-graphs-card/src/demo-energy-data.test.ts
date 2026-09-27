@@ -13,6 +13,8 @@ describe("createDemoEnergyData", () => {
     expect(data.consumption).toHaveLength(data.timestamps.length);
     expect(data.solarDirect).toHaveLength(data.timestamps.length);
     expect(data.gridSupplied).toHaveLength(data.timestamps.length);
+    expect(data.gridImport).toHaveLength(data.timestamps.length);
+    expect(data.gridExport).toHaveLength(data.timestamps.length);
   });
 
   // Keeps the synthetic energy split non-negative and balanced at every sample.
@@ -27,6 +29,8 @@ describe("createDemoEnergyData", () => {
         data.production[index],
       );
       expect(data.gridSupplied[index]).toBeGreaterThanOrEqual(0);
+      expect(data.gridImport[index] * data.gridExport[index]).toBe(0);
+      expect(data.gridImport[index]).toBeCloseTo(data.gridSupplied[index], 3);
       expect(data.solarDirect[index] + data.gridSupplied[index]).toBeCloseTo(
         data.consumption[index],
         3,
@@ -45,5 +49,7 @@ describe("createDemoEnergyData", () => {
     expect(first.production[48]).toBe(0);
     expect(first.solarDirect[0]).toBe(0);
     expect(first.gridSupplied[0]).toBeCloseTo(first.consumption[0], 3);
+    expect(first.gridImport[0]).toBeGreaterThan(0);
+    expect(first.gridExport[24]).toBeGreaterThan(0);
   });
 });
