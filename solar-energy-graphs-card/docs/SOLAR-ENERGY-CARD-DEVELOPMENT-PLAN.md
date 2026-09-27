@@ -79,13 +79,14 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   grise fine. Tests/build réussis et rendu visuel validé dans Home Assistant.
 - [x] **Validée** — Valider la disposition des deux graphiques, le ratio 70/30,
   la hauteur utilisée et les thèmes clair/sombre dans Home Assistant.
-- [ ] **En cours** — Afficher des données fictives dans le graphique principal :
+- [x] **Validée** — Afficher des données fictives dans le graphique principal :
   production PV, autoconsommation directe et consommation couverte par le
   réseau, avec les aplats et courbes du viewer. Profil déterministe sur une
-  journée, tests unitaires, build et déploiement dans `ha-dev` effectués ; la
-  validation visuelle de cette nouvelle composition est encore attendue.
-- [ ] **À faire** — Valider le graphique principal dans Home Assistant avant de
-  poursuivre.
+  journée ; tests unitaires, build, déploiement et validation visuelle dans
+  Home Assistant effectués.
+- [ ] **En cours** — Ajouter le graphique import/export réseau, la ligne zéro,
+  le curseur partagé et le zoom horizontal synchronisé, avant validation dans
+  Home Assistant.
 - [ ] **À faire** — Ajouter le graphique import/export réseau, la ligne zéro,
   puis le curseur partagé et le zoom horizontal synchronisé.
 - [ ] **À faire** — Valider le second graphique et les interactions dans Home
