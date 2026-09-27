@@ -138,16 +138,16 @@ describe("EnergyChartsRenderer", () => {
     const secondOptions = createChartMock.mock.calls[1][0];
     const firstData = createChartMock.mock.calls[0][1];
     const secondData = createChartMock.mock.calls[1][1];
-    expect(firstOptions.series[3].label).toBe("Autoconsommation");
-    expect(firstOptions.series[6].label).toBe("Production solaire");
-    expect(firstOptions.series[7].label).toBe("Consommation");
+    expect(firstOptions.series[3].label).toBe("Self-consumption");
+    expect(firstOptions.series[6].label).toBe("Solar production");
+    expect(firstOptions.series[7].label).toBe("Consumption");
     expect(firstOptions.series[0].class).toBeUndefined();
     expect(
       firstOptions.series
         .slice(1)
         .filter((series: { class?: string }) => !series.class)
         .map((series: { label?: string }) => series.label),
-    ).toEqual(["Autoconsommation", "Production solaire", "Consommation"]);
+    ).toEqual(["Self-consumption", "Solar production", "Consumption"]);
     expect(
       firstOptions.series
         .slice(1)
@@ -158,7 +158,7 @@ describe("EnergyChartsRenderer", () => {
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
     ]);
-    expect(firstOptions.axes[1].label).toBe("Watts (W)");
+    expect(firstOptions.axes[1].label).toBe("Power (W)");
     expect(firstOptions.scales.y.autoMin).toBe(0);
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
@@ -166,9 +166,9 @@ describe("EnergyChartsRenderer", () => {
     expect(firstData).toHaveLength(8);
     expect(firstData[0]).toHaveLength(2);
     expect(firstData[1]).toEqual([null, 1800]);
-    expect(secondOptions.series[1].label).toBe("Export réseau (+W)");
-    expect(secondOptions.series[2].label).toBe("Import réseau (-W)");
-    expect(secondOptions.axes[1].label).toBe("Watts (W)");
+    expect(secondOptions.series[1].label).toBe("Grid export (+W)");
+    expect(secondOptions.series[2].label).toBe("Grid import (-W)");
+    expect(secondOptions.axes[1].label).toBe("Power (W)");
     expect(secondOptions.bands).toBeUndefined();
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
     expect(secondData).toHaveLength(3);

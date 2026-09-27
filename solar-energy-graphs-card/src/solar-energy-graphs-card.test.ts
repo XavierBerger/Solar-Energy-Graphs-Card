@@ -159,8 +159,10 @@ describe("SolarEnergyGraphsCard", () => {
 
     expect(card.shadowRoot?.querySelectorAll(".chart-plot")).toHaveLength(2);
     expect(card.shadowRoot?.querySelectorAll(".chart-legend")).toHaveLength(2);
-    expect(card.shadowRoot?.textContent).toContain("Production et consommation");
-    expect(card.shadowRoot?.textContent).toContain("Échanges avec le réseau");
+    expect(card.shadowRoot?.textContent).toContain(
+      "Solar Production and Consumption",
+    );
+    expect(card.shadowRoot?.textContent).toContain("Grid Exchange");
     expect(card.shadowRoot?.querySelectorAll(".chart-status")).toHaveLength(2);
   });
 
