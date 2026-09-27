@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   build: {
@@ -8,5 +8,10 @@ export default defineConfig({
       fileName: () => "solar-energy-graphs-card.js",
     },
     target: "es2022",
+  },
+  test: {
+    environment: "happy-dom",
+    include: ["src/**/*.test.ts"],
+    clearMocks: true,
   },
 });
