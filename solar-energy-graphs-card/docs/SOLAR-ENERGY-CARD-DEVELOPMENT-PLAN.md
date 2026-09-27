@@ -84,13 +84,14 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   réseau, avec les aplats et courbes du viewer. Profil déterministe sur une
   journée ; tests unitaires, build, déploiement et validation visuelle dans
   Home Assistant effectués.
-- [ ] **En cours** — Ajouter le graphique import/export réseau, la ligne zéro,
-  le curseur partagé et le zoom horizontal synchronisé, avant validation dans
-  Home Assistant.
-- [ ] **À faire** — Ajouter le graphique import/export réseau, la ligne zéro,
-  puis le curseur partagé et le zoom horizontal synchronisé.
-- [ ] **À faire** — Valider le second graphique et les interactions dans Home
-  Assistant.
+- [x] **Validée** — Ajouter le graphique import/export réseau avec export
+  positif, import négatif, ligne zéro et données fictives cohérentes. Synchroniser
+  le curseur et le zoom horizontal avec le graphe principal ; tests/build et
+  rendu fonctionnel validés dans Home Assistant.
+- [x] **Validée** — Garder les légendes des deux graphes dans leurs cadres,
+  sans chevauchement des titres ; préserver les valeurs numériques au survol
+  et ne montrer que Production solaire, Consommation et Autoconsommation dans
+  la légende supérieure. Validation visuelle reçue dans Home Assistant.
 - [ ] **À faire** — Définir avec l'utilisateur les capteurs Home Assistant,
   leurs unités, leur sémantique et la définition des flux représentés.
 - [ ] **À faire** — Implémenter l'accès ciblé à l'historique quotidien,

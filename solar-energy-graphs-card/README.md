@@ -2,7 +2,7 @@
 
 > **Carte en cours de développement.** Le graphique supérieur présente un
 > profil solaire fictif pour démontrer la production et la répartition de la
-> consommation ; le graphique inférieur affiche encore des séries neutres.
+> consommation ; le graphique inférieur montre des échanges réseau fictifs.
 > Aucune courbe ne représente votre installation solaire : les données Home
 > Assistant et la configuration des capteurs ne sont pas encore disponibles.
 > Cette page explique comment installer et tester ce prototype dans Home
@@ -136,13 +136,15 @@ nouveau :
 
 Le résultat attendu est une carte dont le graphique supérieur montre un profil
 de production solaire fictif et la consommation répartie entre solaire direct
-et réseau. Le graphique inférieur conserve deux séries neutres de
-démonstration ; il ne représente pas encore les échanges réseau. Les deux
-graphiques affichent la mention **Données artificielles de démonstration**.
-Ces profils servent à valider le rendu, pas à décrire la production ni les
-échanges d'énergie de votre maison. Il n'y a actuellement aucune option à
-configurer : ne renseignez pas d'entités ou de capteurs. Votre tableau de bord
-principal n'est pas modifié.
+et réseau. Sa légende liste uniquement **Production solaire**,
+**Consommation** et **Autoconsommation**. Le graphique inférieur montre
+l'export réseau au-dessus de zéro et l'import au-dessous de zéro. Le curseur
+et le zoom horizontal sont partagés entre les deux graphiques. Les deux
+graphiques affichent la mention
+**Données artificielles de démonstration**. Ces profils servent à valider le
+rendu, pas à décrire la production ni les échanges d'énergie de votre maison.
+Il n'y a actuellement aucune option à configurer : ne renseignez pas d'entités
+ou de capteurs. Votre tableau de bord principal n'est pas modifié.
 
 ## Dépannage
 
@@ -164,9 +166,8 @@ principal n'est pas modifié.
   (par exemple `Ctrl+F5` ou `Cmd+Maj+R`), puis vérifiez que la ressource a été
   enregistrée.
 - **Les courbes ne correspondent pas à mes capteurs** : c'est attendu. Les
-  deux graphiques sont encore alimentés par des données fictives ; le graphique
-  inférieur reste un exemple neutre et les capteurs Home Assistant ne sont pas
-  encore configurables.
+  deux graphiques sont encore alimentés par des données fictives et les
+  capteurs Home Assistant ne sont pas encore configurables.
 
 Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
 ressource Lovelace et, si vous le souhaitez, supprimez le fichier
