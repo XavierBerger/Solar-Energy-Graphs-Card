@@ -96,8 +96,8 @@ export function getEnergyUnitScales(
   return {
     productionToW: powerUnitScale(production, "production"),
     consumptionToW: powerUnitScale(consumption, "consumption"),
-    gridImportToW: powerUnitScale(gridImport, "import réseau"),
-    gridExportToW: powerUnitScale(gridExport, "export réseau"),
+    gridImportToW: powerUnitScale(gridImport, "grid import"),
+    gridExportToW: powerUnitScale(gridExport, "grid export"),
   };
 }
 
@@ -300,11 +300,11 @@ function powerUnitScale(
     metadata.state_class !== "measurement"
   ) {
     throw new Error(
-      `Le capteur ${entityName} doit avoir device_class=power et state_class=measurement.`,
+      `The ${entityName} sensor must have device_class=power and state_class=measurement.`,
     );
   }
   if (metadata.unit_of_measurement !== "W" && metadata.unit_of_measurement !== "kW") {
-    throw new Error(`Le capteur ${entityName} doit être en W ou en kW.`);
+    throw new Error(`The ${entityName} sensor must use W or kW.`);
   }
   return metadata.unit_of_measurement === "kW" ? 1000 : 1;
 }

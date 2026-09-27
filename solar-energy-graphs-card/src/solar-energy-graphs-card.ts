@@ -55,8 +55,8 @@ export class SolarEnergyGraphsCard extends LitElement {
   private historyData?: EnergyHistoryResponse;
   private historySignature = "";
   private historyRequestId = 0;
-  private mainStatus = "En attente des données Home Assistant.";
-  private gridStatus = "En attente des données Home Assistant.";
+  private mainStatus = "Waiting for Home Assistant data.";
+  private gridStatus = "Waiting for Home Assistant data.";
 
   set hass(hass: HomeAssistantThemeContext) {
     this.hassContext = hass;
@@ -224,10 +224,10 @@ export class SolarEnergyGraphsCard extends LitElement {
       <ha-card>
         <div class="graphs">
           <section class="graph" aria-labelledby="graph-one-title">
-            <h2 id="graph-one-title">Production et consommation</h2>
+            <h2 id="graph-one-title">Solar Production and Consumption</h2>
             <p
               class="chart-status"
-              role=${this.mainStatus.startsWith("Erreur") ? "alert" : "status"}
+              role=${this.mainStatus.startsWith("Error") ? "alert" : "status"}
               aria-live="polite"
             >
               ${this.mainStatus}
@@ -238,10 +238,10 @@ export class SolarEnergyGraphsCard extends LitElement {
             </div>
           </section>
           <section class="graph" aria-labelledby="graph-two-title">
-            <h2 id="graph-two-title">Échanges avec le réseau</h2>
+            <h2 id="graph-two-title">Grid Exchange</h2>
             <p
               class="chart-status"
-              role=${this.gridStatus.startsWith("Erreur") ? "alert" : "status"}
+              role=${this.gridStatus.startsWith("Error") ? "alert" : "status"}
               aria-live="polite"
             >
               ${this.gridStatus}
@@ -320,7 +320,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
     this.historySignature = signature;
     const requestId = ++this.historyRequestId;
-    this.mainStatus = "Chargement de l’historique Home Assistant…";
+    this.mainStatus = "Loading Home Assistant history…";
     this.gridStatus = this.mainStatus;
     queueMicrotask(() => {
       if (this.isConnected && requestId === this.historyRequestId) {
@@ -337,7 +337,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       ]);
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);
-      this.mainStatus = `Erreur de configuration des capteurs : ${details}`;
+      this.mainStatus = `Sensor configuration error: ${details}`;
       this.gridStatus = this.mainStatus;
       queueMicrotask(() => {
         if (this.isConnected && requestId === this.historyRequestId) {
@@ -385,12 +385,12 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.historyData = data;
       this.mainStatus =
         data.hasProduction && data.hasConsumption
-          ? "Puissance moyenne par intervalle d’une minute."
-          : "Erreur : historique de production ou de consommation indisponible pour aujourd’hui.";
+          ? "Average power per one-minute interval."
+          : "Error: today's production or consumption history is unavailable.";
       this.gridStatus =
         data.hasGridImport && data.hasGridExport
-          ? "Import et export mesurés séparément."
-          : "Erreur : historique d’import ou d’export indisponible pour aujourd’hui.";
+          ? "Grid import and export are measured separately."
+          : "Error: today's grid import or export history is unavailable.";
       if (this.chartRenderer) {
         this.chartRenderer.updateData(data);
       } else {
@@ -402,7 +402,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         return;
       }
       const details = error instanceof Error ? error.message : String(error);
-      this.mainStatus = `Erreur de chargement de l’historique : ${details}`;
+      this.mainStatus = `History loading error: ${details}`;
       this.gridStatus = this.mainStatus;
       this.requestUpdate();
     }

@@ -164,7 +164,7 @@ export class EnergyChartsRenderer {
         grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
         ticks: { stroke: () => this.theme.text, width: 1 },
         border: { stroke: () => this.theme.grid, width: 1 },
-        label: "Watts (W)",
+        label: "Power (W)",
       },
     ];
 
@@ -185,7 +185,7 @@ export class EnergyChartsRenderer {
             width: 0,
           },
           {
-            label: "Autoconsommation",
+            label: "Self-consumption",
             width: 0,
             fill: "#a2d49b",
           },
@@ -201,12 +201,12 @@ export class EnergyChartsRenderer {
             width: 0,
           },
           {
-            label: "Production solaire",
+            label: "Solar production",
             stroke: "#d4ac1f",
             width: 1.5,
           },
           {
-            label: "Consommation",
+            label: "Consumption",
             stroke: "#3b82f6",
             width: 1.5,
           },
@@ -214,13 +214,13 @@ export class EnergyChartsRenderer {
       : [
           {},
           {
-            label: "Export réseau (+W)",
+            label: "Grid export (+W)",
             stroke: "#f59e0b",
             width: 1.5,
             fill: "rgba(245, 158, 11, 0.35)",
           },
           {
-            label: "Import réseau (-W)",
+            label: "Grid import (-W)",
             stroke: "#ef4444",
             width: 1.5,
             fill: "rgba(239, 68, 68, 0.35)",
