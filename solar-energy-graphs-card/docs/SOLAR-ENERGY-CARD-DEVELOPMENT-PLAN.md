@@ -16,8 +16,9 @@ La carte reprend ses deux graphiques :
 
 La carte n'intègre que ces graphiques et les éléments nécessaires à leur
 lecture (titres de graphiques, axes, unités, légende et curseur), ainsi qu'un
-sélecteur de journée inspiré des visualisations Home Assistant : calendrier et
-navigation par jour précédent/suivant. Elle ne reprend pas l'interface
+sélecteur journalier fait sur mesure, placé en haut à droite, avec la date
+affichée et des flèches pour naviguer d'un jour à la fois. Cette étape n'ajoute
+ni calendrier ni sélection directe de date. Elle ne reprend pas l'interface
 générale du viewer :
 KPIs/statistiques, statut, métadonnées, bandeau d'erreur ni bouton de
 réinitialisation du zoom. Le zoom horizontal et le curseur synchronisé des deux
@@ -122,18 +123,18 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   adaptés au comportement du code.
 - [ ] **À faire** — Finaliser documentation, build de distribution et
   installation HACS/manuelle de test ; obtenir la validation avant release.
-- [ ] **À planifier** — Ajouter un sélecteur de journée avec un calendrier pour
-  choisir une date et des flèches pour aller au jour précédent/suivant. Ne
-  proposer ni périodes semaine/mois/année, ni plage horaire personnalisée.
-  Initialiser au jour courant du fuseau Home Assistant et empêcher la
-  navigation vers le futur. Vérifier si un composant calendrier HA est
-  réellement utilisable depuis la carte ; sinon créer un contrôle local simple.
-  Afficher tous les points historiques du jour sélectionné, sans downsampling
-  ni plafond.
+- [x] **Validée** — Développer from scratch un contrôle de navigation
+  journalière en haut à droite : date visible et flèches jour précédent/suivant,
+  sans calendrier ni sélection de date directe. Initialiser au jour courant HA,
+  empêcher la navigation dans le futur et recharger le jour sélectionné. Les
+  deux graphes sont synchronisés. La normalisation conserve tous les timestamps
+  source sans agrégation ni downsampling ; les 43 tests, le typecheck/build
+  Podman et la validation visuelle utilisateur sont réussis.
 
-La connexion aux capteurs, la résolution d'une minute et la présentation de la
+La connexion aux capteurs, la navigation journalière et la présentation de la
 légende sont implémentées, testées, déployées et validées visuellement dans
-Home Assistant.
+Home Assistant. Les historiques sont affichés sur tous les timestamps source
+disponibles, sans agrégation à la minute.
 
 ## 5. Étapes d'implémentation
 
@@ -237,55 +238,50 @@ puis vérifier une installation propre avant la release.
 
 ### Étape 8 — Intégrer la navigation journalière
 
-Ajouter au-dessus des deux graphes un sélecteur limité à une journée, composé
-d'un calendrier pour choisir la date et de flèches pour aller au jour précédent
-ou suivant. Ne proposer ni vues semaine/mois/année, ni plage personnalisée. La
-sélection initiale reste le jour courant dans le fuseau HA ; aucun jour futur
-ne peut être sélectionné.
+Créer from scratch un contrôle compact placé dans le coin supérieur droit,
+affichant la date active et deux flèches pour naviguer vers le jour précédent ou
+suivant. Cette première version ne contient ni calendrier, ni date-picker, ni
+sélection directe d'une date. Le jour courant du fuseau HA est l'état initial ;
+il est impossible de naviguer dans le futur.
 
-- **Choisir le contrôle.** `<ha-date-range-nav>`, utilisé par History et
-  Logbook, inclut aussi des heures et est une API interne non documentée pour
-  les custom cards. Dans `ha-dev` (HA 2026.9.3), les bundles initiaux ne
-  contiennent pas son nom et la vérification d'exécution reste bloquée faute de
-  session authentifiée. Ne pas en dépendre sans preuve d'accessibilité dans
-  Lovelace. Avant l'implémentation, vérifier si HA expose un composant calendrier
-  plus simple ; sinon utiliser un contrôle local léger et stylé selon le thème
-  HA.
-- **Modéliser la sélection.** Garder une date civile dans
-  `hass.config.time_zone`, initialisée à aujourd'hui. Chaque flèche déplace d'un
-  jour civil, en gérant les passages de mois et d'année ; désactiver/refuser la
-  navigation au-delà d'aujourd'hui.
-- **Charger l'historique du jour.** Réutiliser le calcul de bornes et la requête
-  journalière `history/period` existants autant que possible. Envoyer les bornes
-  de la journée sélectionnée dans le fuseau HA, avec début inclus et fin exclue,
-  converties en UTC, et traiter les journées de 23/25 heures. Conserver le
-  baseline de dix minutes et la fraîcheur maximale actuels. Recharger après
-  chaque changement de date et ignorer les réponses obsolètes si la sélection
-  change ou si la carte est déconnectée.
-- **Garder la totalité des mesures et la cohérence des graphes.** Afficher tous
-  les états historiques disponibles du jour, sans downsampling ni plafond.
-  Préserver les règles d'alignement des capteurs, de maintien maximal de dix
-  minutes et de trous pour les mesures indisponibles/périmées. Remplacer
-  ensemble les deux jeux uPlot, avec axe temporel, curseur et zoom synchronisés.
-  Rendre visibles l'absence d'historique et les erreurs de requête.
-- **Tester et livrer.** Ajouter des tests Vitest pour le jour initial, les
-  flèches, les changements de mois/année, le blocage du futur, fuseau/DST,
-  bornes de requête, conservation des points, trous de données et réponses
+- **Représenter la date civile.** Stocker le jour actif sous forme
+  `YYYY-MM-DD`, calculé et interprété dans `hass.config.time_zone`. Les flèches
+  changent d'un jour civil, y compris aux changements de mois/année et de DST.
+  Afficher une date lisible en anglais. Désactiver la flèche suivante lorsque
+  le jour affiché est aujourd'hui.
+- **Recharger l'historique.** Calculer début du jour et début du jour suivant
+  dans le fuseau HA, convertir en UTC pour `history/period`, préserver la
+  baseline de dix minutes et la fraîcheur maximale déjà approuvée. Une
+  navigation déclenche une nouvelle requête ; des changements HA ordinaires ne
+  réinitialisent pas la sélection. Ignorer les réponses obsolètes après une
+  navigation ou la déconnexion de la carte.
+- **Conserver tous les points.** Retirer l'agrégation/moyenne artificielle par
+  minute et utiliser les timestamps source distincts disponibles sur la journée
+  comme axe x partagé. À chaque timestamp, aligner les quatre capteurs sur leur
+  dernière mesure connue, appliquer le plafond de fraîcheur de dix minutes,
+  traiter les états invalides comme des trous et recalculer les séries dérivées.
+  Aucun downsampling ni plafond de points.
+- **Synchroniser et signaler.** Mettre à jour les deux graphes ensemble tout en
+  conservant l'axe partagé, le curseur et le zoom synchronisés. Garder les
+  statuts d'erreur/historique absent visibles dans leurs zones de graphique.
+- **Tester et livrer.** Tester le jour initial, date affichée, navigation,
+  désactivation au jour courant, changements de mois/année, fuseau/DST,
+  requêtes journalières, timestamps source complets, trous/fraîcheur et réponses
   obsolètes. Mettre à jour le README, exécuter tests/build dans Podman, déployer
-  dans `ha-dev` et demander la validation visuelle avant des commits séparés
+  dans `ha-dev`, puis demander la validation visuelle avant les commits séparés
   code/tests/documentation.
 
-**Validation :** confirmer dans Lovelace le calendrier, les flèches, la date
-active, l'interdiction du futur et les courbes des jours sélectionnés. Les deux
-graphes doivent rester alignés. Tests et build ne remplacent pas la validation
-visuelle dans `ha-dev`.
+**Validation :** confirmer dans Lovelace la position en haut à droite, la date,
+les deux flèches, l'impossibilité d'aller dans le futur, le changement
+d'historique et la cohérence des graphes. Aucun calendrier ou choix direct
+d'une date n'est attendu dans cette version.
 
 ## 6. Règles permanentes
 
 - Ne pas inventer les capteurs, les unités ni la sémantique des flux.
 - Ne pas ajouter KPIs, statistiques, statut, toolbar générale ni bouton de
-  réinitialisation du zoom. Le sélecteur journalier décrit à l'étape 8 est
-  désormais inclus dans le périmètre.
+  réinitialisation du zoom. La navigation journalière fléchée décrite à
+  l'étape 8 est désormais incluse dans le périmètre.
 - Conserver une version compilable et les comportements validés à chaque étape.
 - Couvrir les comportements et logiques du code par des tests unitaires ciblés ;
   un changement de code ne peut pas être considéré comme techniquement validé

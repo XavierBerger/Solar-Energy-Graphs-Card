@@ -1,9 +1,14 @@
 # Solar Energy Graphs Card
 
 > **Carte en cours de développement.** La carte lit les capteurs configurés et
-> affiche leur historique du jour en cours. Elle doit encore être validée sur
-> plusieurs installations et ne signifie pas qu'elle est prête pour un usage
-> quotidien.
+> affiche leur historique pour le jour sélectionné (aujourd'hui par défaut).
+> Elle doit encore être validée sur plusieurs installations et ne signifie pas
+> qu'elle est prête pour un usage quotidien.
+
+La date affichée se trouve en haut à droite. Les flèches permettent de passer
+au jour précédent ou suivant ; il n'y a pas de calendrier ni de sélection
+directe d'une date dans cette version. La flèche vers le futur est désactivée
+pour la journée actuelle.
 
 La carte utilise presque toute la hauteur visible de l'écran, sous l'en-tête
 Home Assistant. Les deux zones de graphique se partagent cet espace selon un
@@ -146,10 +151,11 @@ Les quatre capteurs doivent mesurer une puissance avec `device_class: power`,
 `state_class: measurement` et une unité `W` ou `kW`. Import et export utilisent
 des capteurs séparés ; la carte ne déduit pas l'un à partir de l'autre.
 
-La carte utilise l'historique Home Assistant du jour dans le fuseau configuré
-et calcule la moyenne des mesures par intervalles d'une minute. Chaque point
-résume les événements enregistrés dans cette minute ; la densité réelle dépend
-de la cadence propre à chaque capteur.
+La carte utilise l'historique Home Assistant de la journée affichée, dans le
+fuseau configuré. Elle conserve tous les horodatages enregistrés par les
+capteurs sans les agréger par minute ni les sous-échantillonner. Entre deux
+mesures, la dernière valeur connue est maintenue pendant dix minutes au maximum ;
+les valeurs indisponibles ou plus anciennes apparaissent comme des trous.
 L'autoconsommation directe est estimée comme le minimum entre la production PV
 et la puissance consommée par la charge ; cette formule suppose l'absence de
 batterie. La légende supérieure affiche **Production solaire**,
@@ -158,8 +164,8 @@ au-dessus de zéro et l'import au-dessous. Le curseur et le zoom horizontal
 sont synchronisés.
 
 La carte signale dans chaque graphe si son historique est indisponible. Les
-capteurs doivent avoir un historique enregistré par Home Assistant pour le
-jour courant. Le tableau de bord principal n'est pas modifié.
+capteurs doivent avoir un historique enregistré par Home Assistant pour le jour
+affiché. Le tableau de bord principal n'est pas modifié.
 
 ## Dépannage
 
@@ -184,7 +190,7 @@ jour courant. Le tableau de bord principal n'est pas modifié.
   `consumption`, `grid_import` et `grid_export` sont présentes dans le YAML.
 - **Aucun historique affiché** : vérifiez que les identifiants sont corrects,
   que les capteurs ont les unités et classes d'état attendues, et que Home
-  Assistant a conservé leur historique pour aujourd'hui.
+  Assistant a conservé leur historique pour le jour sélectionné.
 - **Les puissances ne semblent pas cohérentes** : vérifiez les quatre entités,
   leur unité (`W` ou `kW`) et que la consommation correspond à la charge de la
   maison. L'autoconsommation estimée ne prend pas en compte une batterie.
