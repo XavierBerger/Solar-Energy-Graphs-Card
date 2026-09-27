@@ -11,6 +11,7 @@ import { SolarEnergyGraphsCard } from "./solar-energy-graphs-card";
 const { rendererInstances } = vi.hoisted(() => ({
   rendererInstances: [] as Array<{
     containers: HTMLElement[];
+    darkMode: boolean;
     destroy: ReturnType<typeof vi.fn>;
     refreshTheme: ReturnType<typeof vi.fn>;
   }>,
@@ -19,11 +20,13 @@ const { rendererInstances } = vi.hoisted(() => ({
 vi.mock("./energy-charts-renderer", () => ({
   EnergyChartsRenderer: class {
     readonly containers: HTMLElement[];
+    readonly darkMode: boolean;
     readonly destroy = vi.fn();
     readonly refreshTheme = vi.fn();
 
-    constructor(containers: HTMLElement[]) {
+    constructor(containers: HTMLElement[], darkMode: boolean) {
       this.containers = containers;
+      this.darkMode = darkMode;
       rendererInstances.push(this);
     }
   },
@@ -109,15 +112,25 @@ describe("SolarEnergyGraphsCard", () => {
     ]);
   });
 
-  // Updates canvas colors when Home Assistant supplies a new theme context.
-  it("refreshes chart theme colors when hass changes", async () => {
+  // Passes Home Assistant's explicit dark-mode state to the renderer.
+  it("updates chart theme mode when hass changes", async () => {
     card = new SolarEnergyGraphsCard();
     document.body.append(card);
     await card.updateComplete;
 
-    card.hass = {};
+    card.hass = { themes: { darkMode: true } };
 
-    expect(rendererInstances[0].refreshTheme).toHaveBeenCalledOnce();
+    expect(rendererInstances[0].refreshTheme).toHaveBeenCalledWith(true);
+  });
+
+  // Initializes charts with the theme Home Assistant supplied before rendering.
+  it("initializes the renderer in the current Home Assistant theme", async () => {
+    card = new SolarEnergyGraphsCard();
+    card.hass = { themes: { darkMode: true } };
+    document.body.append(card);
+    await card.updateComplete;
+
+    expect(rendererInstances[0].darkMode).toBe(true);
   });
 
   // Releases chart resources when Home Assistant removes the card.

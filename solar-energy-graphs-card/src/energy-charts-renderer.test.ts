@@ -47,10 +47,9 @@ describe("EnergyChartsRenderer", () => {
     destroy: ReturnType<typeof vi.fn>;
     redraw: ReturnType<typeof vi.fn>;
     axes: Array<{
-      stroke?: string;
-      grid?: { stroke?: string };
-      ticks?: { stroke?: string };
-      border?: { stroke?: string };
+      grid?: { width?: number };
+      ticks?: Record<string, never>;
+      border?: Record<string, never>;
     }>;
   }>;
 
@@ -98,44 +97,62 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.height).toBe(100);
   });
 
-  // Applies Home Assistant theme tokens to uPlot axis text, ticks and gridlines.
-  it("uses the active Home Assistant theme colors", () => {
+  // Preserves the existing light-theme colors and grid width.
+  it("keeps the current light theme palette unchanged", () => {
     containers[0].style.setProperty("--primary-text-color", "#f4f4f4");
     containers[0].style.setProperty("--divider-color", "#555555");
-    containers[1].style.setProperty("--primary-text-color", "#f4f4f4");
-    containers[1].style.setProperty("--divider-color", "#555555");
 
     new EnergyChartsRenderer(containers);
 
     const axes = createChartMock.mock.calls[0][0].axes;
-    expect(axes[0].stroke).toBe("#f4f4f4");
-    expect(axes[0].grid.stroke).toBe("#555555");
-    expect(axes[0].ticks.stroke).toBe("#f4f4f4");
-    expect(axes[1].stroke).toBe("#f4f4f4");
+    expect(axes[0].stroke()).toBe("#f4f4f4");
+    expect(axes[0].grid.stroke()).toBe("#555555");
+    expect(axes[0].grid.width).toBe(1);
+    expect(axes[0].ticks.stroke()).toBe("#f4f4f4");
+    expect(axes[1].stroke()).toBe("#f4f4f4");
   });
 
-  // Redraws both canvas charts when Home Assistant theme colors change.
-  it("refreshes chart colors when the theme changes", () => {
-    containers[0].style.setProperty("--primary-text-color", "#f4f4f4");
-    containers[0].style.setProperty("--divider-color", "#555555");
+  // Uses readable text and a thinner gray grid for Home Assistant dark mode.
+  it("uses a white axis and a thin gray grid in dark mode", () => {
     const renderer = new EnergyChartsRenderer(containers);
-    containers[0].style.setProperty("--primary-text-color", "#222222");
-    containers[0].style.setProperty("--divider-color", "#cccccc");
+    renderer.refreshTheme(true);
+    const axes = createChartMock.mock.calls[0][0].axes;
 
-    renderer.refreshTheme();
-
-    expect(charts[0].axes[0].stroke).toBe("#222222");
-    expect(charts[0].axes[0].grid?.stroke).toBe("#cccccc");
-    expect(charts[1].axes[1].ticks?.stroke).toBe("#222222");
+    expect(axes[0].stroke()).toBe("#ffffff");
+    expect(axes[0].ticks.stroke()).toBe("#ffffff");
+    expect(axes[0].grid.stroke()).toBe("#9e9e9e");
+    expect(charts[0].axes[0].grid?.width).toBe(0.5);
     expect(charts[0].redraw).toHaveBeenCalledWith(true, true);
     expect(charts[1].redraw).toHaveBeenCalledWith(true, true);
   });
 
-  // Avoids redrawing canvas charts when theme values did not change.
-  it("does not redraw when theme colors are unchanged", () => {
+  // Keeps color callbacks callable through repeated theme changes and redraws.
+  it("retains stable color callbacks across repeated theme changes", () => {
+    const renderer = new EnergyChartsRenderer(containers);
+    const axes = createChartMock.mock.calls[0][0].axes;
+    const stroke = axes[0].stroke;
+    const gridStroke = axes[0].grid.stroke;
+
+    renderer.refreshTheme(true);
+    expect(axes[0].stroke()).toBe("#ffffff");
+    renderer.refreshTheme(false);
+    expect(axes[0].stroke()).toBe("#212121");
+    expect(axes[0].grid.stroke()).toBe("#bdbdbd");
+    renderer.refreshTheme(true);
+
+    expect(axes[0].stroke).toBe(stroke);
+    expect(axes[0].grid.stroke).toBe(gridStroke);
+    expect(axes[0].stroke()).toBe("#ffffff");
+    expect(axes[0].grid.stroke()).toBe("#9e9e9e");
+    expect(charts[0].redraw).toHaveBeenCalledTimes(3);
+    expect(charts[1].redraw).toHaveBeenCalledTimes(3);
+  });
+
+  // Avoids redrawing canvas charts when the selected theme did not change.
+  it("does not redraw when the theme is unchanged", () => {
     const renderer = new EnergyChartsRenderer(containers);
 
-    renderer.refreshTheme();
+    renderer.refreshTheme(false);
 
     expect(charts[0].redraw).not.toHaveBeenCalled();
     expect(charts[1].redraw).not.toHaveBeenCalled();
