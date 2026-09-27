@@ -1,9 +1,11 @@
 import {
   createChart,
+  uPlot,
   type UPlotData,
   type UPlotInstance,
   type UPlotOptions,
 } from "./uplot-adapter";
+import { createDemoEnergyData } from "./demo-energy-data";
 
 const SAMPLE_TIMESTAMPS = [0, 1, 2, 3, 4, 5, 6].map(
   (hour) => Date.UTC(2025, 0, 1, hour) / 1000,
@@ -28,8 +30,13 @@ const SAMPLE_DATA: UPlotData = [
   [30, 24, 34, 22, 38, 29, 42],
 ];
 
+const DEMO_ENERGY_DATA = createDemoEnergyData();
+
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
+
+const toUtcDate = (timestamp: number): Date =>
+  uPlot.tzDate(new Date(timestamp * 1000), "Etc/UTC");
 
 interface ChartTheme {
   text: string;
@@ -57,10 +64,11 @@ export class EnergyChartsRenderer {
       this.handleResize(entries);
     });
 
-    this.charts = containers.map((element) => {
+    this.charts = containers.map((element, index) => {
+      const mainChart = index === 0;
       const chart = createChart(
-        this.createOptions(element),
-        SAMPLE_DATA,
+        this.createOptions(element, mainChart),
+        mainChart ? this.createMainChartData() : SAMPLE_DATA,
         element,
       );
       this.resizeObserver.observe(element);
@@ -103,30 +111,94 @@ export class EnergyChartsRenderer {
     });
   }
 
-  private createOptions(element: HTMLElement): UPlotOptions {
+  private createOptions(element: HTMLElement, mainChart: boolean): UPlotOptions {
+    const axes: UPlotOptions["axes"] = [
+      {
+        stroke: () => this.theme.text,
+        grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
+        ticks: { stroke: () => this.theme.text, width: 1 },
+        border: { stroke: () => this.theme.grid, width: 1 },
+      },
+      {
+        stroke: () => this.theme.text,
+        grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
+        ticks: { stroke: () => this.theme.text, width: 1 },
+        border: { stroke: () => this.theme.grid, width: 1 },
+        ...(mainChart ? { label: "Watts (W)" } : {}),
+      },
+    ];
+
+    const series: UPlotOptions["series"] = mainChart
+      ? [
+          {},
+          {
+            label: "Production solaire (W)",
+            stroke: "rgba(0, 0, 0, 0)",
+            width: 0,
+            fill: "rgba(245, 158, 11, 0.12)",
+          },
+          {
+            label: "",
+            stroke: "rgba(0, 0, 0, 0)",
+            width: 0,
+          },
+          {
+            label: "Solaire direct (W)",
+            width: 0,
+          },
+          {
+            label: "",
+            stroke: "rgba(0, 0, 0, 0)",
+            width: 0,
+          },
+          {
+            label: "Consommation couverte par le réseau (W)",
+            width: 0,
+          },
+          {
+            label: "",
+            stroke: "#d4ac1f",
+            width: 1.5,
+          },
+          {
+            label: "Consommation totale (W)",
+            stroke: "#3b82f6",
+            width: 1.5,
+          },
+        ]
+      : [{}, ...SAMPLE_SERIES];
+    const bands: NonNullable<UPlotOptions["bands"]> = [
+      { series: [3, 2], fill: "#a2d49b" },
+      { series: [5, 4], fill: "#e96e7d" },
+    ];
+
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
       height: element.clientHeight || DEFAULT_HEIGHT,
+      ...(mainChart ? { tzDate: toUtcDate } : {}),
       scales: {
         x: { time: true },
-        y: { auto: true },
+        y: { auto: true, ...(mainChart ? { autoMin: 0 } : {}) },
       },
-      series: [{}, ...SAMPLE_SERIES],
-      axes: [
-        {
-          stroke: () => this.theme.text,
-          grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
-          ticks: { stroke: () => this.theme.text, width: 1 },
-          border: { stroke: () => this.theme.grid, width: 1 },
-        },
-        {
-          stroke: () => this.theme.text,
-          grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
-          ticks: { stroke: () => this.theme.text, width: 1 },
-          border: { stroke: () => this.theme.grid, width: 1 },
-        },
-      ],
+      series,
+      axes,
+      ...(mainChart ? { bands } : {}),
     };
+  }
+
+  private createMainChartData(): UPlotData {
+    const zero = new Float32Array(DEMO_ENERGY_DATA.timestamps.length);
+
+    return [
+      DEMO_ENERGY_DATA.timestamps,
+      DEMO_ENERGY_DATA.production,
+      zero,
+      DEMO_ENERGY_DATA.solarDirect,
+      DEMO_ENERGY_DATA.solarDirect.slice(),
+      DEMO_ENERGY_DATA.consumption,
+      DEMO_ENERGY_DATA.production.slice(),
+      DEMO_ENERGY_DATA.consumption.slice(),
+    ];
   }
 
   private readTheme(element: HTMLElement, darkMode: boolean): ChartTheme {
