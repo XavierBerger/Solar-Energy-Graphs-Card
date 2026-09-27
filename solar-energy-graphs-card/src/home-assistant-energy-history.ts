@@ -1,4 +1,3 @@
-const BUCKET_SECONDS = 60;
 const MAX_POWER_STALENESS_SECONDS = 10 * 60;
 const HISTORY_BASELINE_SECONDS = MAX_POWER_STALENESS_SECONDS;
 
@@ -42,11 +41,37 @@ export interface LocalDayWindow {
 
 interface NumericSample {
   timestamp: number;
-  value: number;
+  value: number | null;
 }
 
 export function getLocalDayWindow(now: Date, timeZone: string): LocalDayWindow {
   const dateParts = getZonedDateParts(now, timeZone);
+  return getLocalDayWindowForDate(
+    formatDateParts(dateParts.year, dateParts.month, dateParts.day),
+    timeZone,
+  );
+}
+
+export function getLocalDateString(now: Date, timeZone: string): string {
+  const dateParts = getZonedDateParts(now, timeZone);
+  return formatDateParts(dateParts.year, dateParts.month, dateParts.day);
+}
+
+export function shiftLocalDate(date: string, days: number): string {
+  const { year, month, day } = parseLocalDate(date);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return formatDateParts(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth() + 1,
+    shifted.getUTCDate(),
+  );
+}
+
+export function getLocalDayWindowForDate(
+  date: string,
+  timeZone: string,
+): LocalDayWindow {
+  const dateParts = parseLocalDate(date);
   const start = getLocalMidnightTimestamp(
     dateParts.year,
     dateParts.month,
@@ -116,80 +141,50 @@ export function normalizeEnergyHistory(
     throw new Error("Home Assistant returned an invalid history response.");
   }
 
+  const lastSample = Math.max(window.start, Math.min(now, window.end));
   const productionSamples = parsePowerSamples(
     history[0],
     unitScales.productionToW,
+    lastSample,
   );
   const consumptionSamples = parsePowerSamples(
     history[1],
     unitScales.consumptionToW,
+    lastSample,
   );
   const gridImportSamples = parsePowerSamples(
     history[2],
     unitScales.gridImportToW,
+    lastSample,
   );
   const gridExportSamples = parsePowerSamples(
     history[3],
     unitScales.gridExportToW,
+    lastSample,
   );
-  const sampleTimes = [window.start];
-  const production: Array<number | null> = [null];
-  const consumption: Array<number | null> = [null];
-  const directSolar: Array<number | null> = [null];
-  const gridImport: Array<number | null> = [null];
-  const gridExport: Array<number | null> = [null];
-  const lastSample = Math.min(now, window.end);
-
-  for (
-    let bucketStart = window.start;
-    bucketStart < lastSample;
-    bucketStart += BUCKET_SECONDS
-  ) {
-    const bucketEnd = Math.min(bucketStart + BUCKET_SECONDS, lastSample);
-    const midpoint = (bucketStart + bucketEnd) / 2;
-    const productionPower = powerForInterval(
-      productionSamples,
-      bucketStart,
-      bucketEnd,
-    );
-    const consumptionPower = powerForInterval(
-      consumptionSamples,
-      bucketStart,
-      bucketEnd,
-    );
-    const gridImportPower = powerForInterval(
-      gridImportSamples,
-      bucketStart,
-      bucketEnd,
-    );
-    const gridExportPower = powerForInterval(
-      gridExportSamples,
-      bucketStart,
-      bucketEnd,
-    );
-
-    sampleTimes.push(midpoint);
-    production.push(productionPower);
-    consumption.push(consumptionPower);
-    directSolar.push(
-      productionPower === null || consumptionPower === null
-        ? null
-        : Math.min(productionPower, consumptionPower),
-    );
-    gridImport.push(
-      gridImportPower === null ? null : Math.max(gridImportPower, 0),
-    );
-    gridExport.push(
-      gridExportPower === null ? null : Math.max(gridExportPower, 0),
-    );
-  }
-
-  sampleTimes.push(window.end);
-  production.push(null);
-  consumption.push(null);
-  directSolar.push(null);
-  gridImport.push(null);
-  gridExport.push(null);
+  const sourceTimes = [
+    ...productionSamples,
+    ...consumptionSamples,
+    ...gridImportSamples,
+    ...gridExportSamples,
+  ]
+    .map((sample) => sample.timestamp)
+    .filter((timestamp) => timestamp >= window.start && timestamp < lastSample);
+  const sampleTimes = Array.from(
+    new Set([window.start, ...sourceTimes, lastSample, window.end]),
+  ).sort((first, second) => first - second);
+  const production = alignPowerSamples(productionSamples, sampleTimes);
+  const consumption = alignPowerSamples(consumptionSamples, sampleTimes);
+  const gridImport = alignPowerSamples(gridImportSamples, sampleTimes).map(
+    (value) => (value === null ? null : Math.max(value, 0)),
+  );
+  const gridExport = alignPowerSamples(gridExportSamples, sampleTimes).map(
+    (value) => (value === null ? null : Math.max(value, 0)),
+  );
+  const directSolar = production.map((value, index) => {
+    const load = consumption[index];
+    return value === null || load === null ? null : Math.min(value, load);
+  });
 
   const zero = directSolar.map((value) => (value === null ? null : 0));
   const gridSupplied = consumption.map((value, index) => {
@@ -262,6 +257,33 @@ function getZonedDateParts(
   };
 }
 
+function formatDateParts(year: number, month: number, day: number): string {
+  return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
+
+function parseLocalDate(date: string): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) {
+    throw new Error(`Invalid local date "${date}".`);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw new Error(`Invalid local date "${date}".`);
+  }
+  return { year, month, day };
+}
+
 function getLocalMidnightTimestamp(
   year: number,
   month: number,
@@ -312,19 +334,19 @@ function powerUnitScale(
 function parsePowerSamples(
   history: readonly HomeAssistantHistoryState[],
   unitScale: number,
-): NumericSample[] {
-  return parseNumericSamples(history, unitScale);
-}
-
-function parseNumericSamples(
-  history: readonly HomeAssistantHistoryState[],
-  unitScale: number,
+  lastSample: number,
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
-    const timestamp = Date.parse(state.last_changed ?? state.last_updated ?? "");
+    const timestamp = Date.parse(state.last_updated ?? state.last_changed ?? "");
     const value = state.state.trim() ? Number(state.state) : Number.NaN;
-    return Number.isFinite(timestamp) && Number.isFinite(value)
-      ? [{ timestamp: timestamp / 1000, value: value * unitScale }]
+    const timestampSeconds = timestamp / 1000;
+    return Number.isFinite(timestamp) && timestampSeconds <= lastSample
+      ? [
+          {
+            timestamp: timestampSeconds,
+            value: Number.isFinite(value) ? value * unitScale : null,
+          },
+        ]
       : [];
   });
 
@@ -335,27 +357,30 @@ function parseNumericSamples(
   );
 }
 
-function powerForInterval(
+function alignPowerSamples(
   samples: readonly NumericSample[],
-  start: number,
-  end: number,
-): number | null {
-  const values = samples
-    .filter((sample) => sample.timestamp >= start && sample.timestamp < end)
-    .map((sample) => sample.value);
-  if (values.length > 0) {
-    return values.reduce((sum, value) => sum + value, 0) / values.length;
-  }
-
+  timestamps: readonly number[],
+): Array<number | null> {
+  let sampleIndex = 0;
   let latest: NumericSample | undefined;
-  for (const sample of samples) {
-    if (sample.timestamp >= end) {
-      break;
+  return timestamps.map((timestamp) => {
+    if (timestamp >= timestamps[timestamps.length - 1]) {
+      return null;
     }
-    latest = sample;
-  }
-  if (!latest || start - latest.timestamp > MAX_POWER_STALENESS_SECONDS) {
-    return null;
-  }
-  return latest.value;
+    while (
+      sampleIndex < samples.length &&
+      samples[sampleIndex].timestamp <= timestamp
+    ) {
+      latest = samples[sampleIndex];
+      sampleIndex += 1;
+    }
+    if (
+      !latest ||
+      latest.value === null ||
+      timestamp - latest.timestamp > MAX_POWER_STALENESS_SECONDS
+    ) {
+      return null;
+    }
+    return latest.value;
+  });
 }

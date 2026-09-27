@@ -4,11 +4,14 @@ import { uPlotStyles } from "./uplot-adapter";
 import {
   buildHistoryApiPath,
   getEnergyUnitScales,
-  getLocalDayWindow,
+  getLocalDateString,
+  getLocalDayWindowForDate,
   normalizeEnergyHistory,
+  shiftLocalDate,
   type EnergyUnitScales,
   type EnergySensorMetadata,
   type EnergyHistoryResponse,
+  type LocalDayWindow,
   type HomeAssistantHistoryState,
 } from "./home-assistant-energy-history";
 
@@ -55,12 +58,24 @@ export class SolarEnergyGraphsCard extends LitElement {
   private historyData?: EnergyHistoryResponse;
   private historySignature = "";
   private historyRequestId = 0;
+  private selectedDay?: string;
+  private selectedDayTimeZone?: string;
   private mainStatus = "Waiting for Home Assistant data.";
   private gridStatus = "Waiting for Home Assistant data.";
 
   set hass(hass: HomeAssistantThemeContext) {
+    const timeZoneChanged =
+      this.selectedDayTimeZone !== hass.config.time_zone;
     this.hassContext = hass;
     this.darkMode = hass.themes?.darkMode === true;
+    if (!this.selectedDay || timeZoneChanged) {
+      this.selectedDay = getLocalDateString(
+        new Date(),
+        hass.config.time_zone,
+      );
+      this.selectedDayTimeZone = hass.config.time_zone;
+      this.requestUpdate();
+    }
     this.chartRenderer?.refreshTheme(this.darkMode);
     this.loadHistoryWhenNeeded(hass);
   }
@@ -75,17 +90,60 @@ export class SolarEnergyGraphsCard extends LitElement {
 
     ha-card {
       box-sizing: border-box;
-      display: block;
+      display: flex;
+      flex-direction: column;
       height: 100%;
       padding: 1rem;
     }
 
+    .day-navigation {
+      align-items: center;
+      align-self: flex-end;
+      display: flex;
+      flex: 0 0 auto;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .day-navigation time {
+      color: var(--primary-text-color);
+      font-size: var(--ha-font-size-m, 1rem);
+      font-weight: var(--ha-font-weight-medium, 500);
+      text-align: center;
+    }
+
+    .day-navigation button {
+      align-items: center;
+      background: var(--secondary-background-color);
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-card-border-radius, 0.5rem);
+      color: var(--primary-text-color);
+      cursor: pointer;
+      display: inline-flex;
+      font: inherit;
+      height: 2.25rem;
+      justify-content: center;
+      padding: 0;
+      width: 2.25rem;
+    }
+
+    .day-navigation button:focus-visible {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+
+    .day-navigation button:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+
     .graphs {
       display: grid;
-      height: 100%;
+      flex: 1 1 0;
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: minmax(0, 7fr) minmax(0, 3fr);
       gap: 0.75rem;
+      min-height: 0;
     }
 
     .graph {
@@ -222,6 +280,28 @@ export class SolarEnergyGraphsCard extends LitElement {
   render() {
     return html`
       <ha-card>
+        <nav class="day-navigation" aria-label="Day navigation">
+          <button
+            type="button"
+            aria-label="Previous day"
+            title="Previous day"
+            @click=${this.showAdjacentDay(-1)}
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+          <time datetime=${this.selectedDay ?? ""} aria-live="polite">
+            ${this.formatSelectedDay()}
+          </time>
+          <button
+            type="button"
+            aria-label="Next day"
+            title="Next day"
+            ?disabled=${this.isTodaySelected()}
+            @click=${this.showAdjacentDay(1)}
+          >
+            <span aria-hidden="true">→</span>
+          </button>
+        </nav>
         <div class="graphs">
           <section class="graph" aria-labelledby="graph-one-title">
             <h2 id="graph-one-title">Solar Production and Consumption</h2>
@@ -300,7 +380,8 @@ export class SolarEnergyGraphsCard extends LitElement {
 
     const timeZone = hass.config.time_zone;
     const now = new Date();
-    const dayWindow = getLocalDayWindow(now, timeZone);
+    const selectedDay = this.selectedDay ?? getLocalDateString(now, timeZone);
+    const dayWindow = getLocalDayWindowForDate(selectedDay, timeZone);
     const entityIds = [
       config.entities.production,
       config.entities.consumption,
@@ -313,7 +394,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         return `${entityId}:${state?.last_updated ?? state?.state ?? "missing"}:${JSON.stringify(state?.attributes)}`;
       })
       .join("|");
-    const signature = `${timeZone}:${dayWindow.start}:${stateSignature}`;
+    const signature = `${timeZone}:${selectedDay}:${stateSignature}`;
     if (signature === this.historySignature) {
       return;
     }
@@ -365,7 +446,7 @@ export class SolarEnergyGraphsCard extends LitElement {
   private async fetchHistory(
     hass: HomeAssistantThemeContext,
     apiPath: string,
-    dayWindow: ReturnType<typeof getLocalDayWindow>,
+    dayWindow: LocalDayWindow,
     timeZone: string,
     unitScales: EnergyUnitScales,
     requestId: number,
@@ -385,12 +466,12 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.historyData = data;
       this.mainStatus =
         data.hasProduction && data.hasConsumption
-          ? "Average power per one-minute interval."
-          : "Error: today's production or consumption history is unavailable.";
+          ? "Recorded power samples."
+          : `Error: ${this.formatSelectedDay()} production or consumption history is unavailable.`;
       this.gridStatus =
         data.hasGridImport && data.hasGridExport
           ? "Grid import and export are measured separately."
-          : "Error: today's grid import or export history is unavailable.";
+          : `Error: ${this.formatSelectedDay()} grid import or export history is unavailable.`;
       if (this.chartRenderer) {
         this.chartRenderer.updateData(data);
       } else {
@@ -406,6 +487,44 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.gridStatus = this.mainStatus;
       this.requestUpdate();
     }
+  }
+
+  private formatSelectedDay(): string {
+    if (!this.selectedDay) {
+      return "";
+    }
+    const [year, month, day] = this.selectedDay.split("-").map(Number);
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "long",
+      timeZone: "UTC",
+    }).format(Date.UTC(year, month - 1, day, 12));
+  }
+
+  private isTodaySelected(): boolean {
+    const hass = this.hassContext;
+    return (
+      !this.selectedDay ||
+      !hass ||
+      this.selectedDay >=
+        getLocalDateString(new Date(), hass.config.time_zone)
+    );
+  }
+
+  private showAdjacentDay(days: -1 | 1): () => void {
+    return () => {
+      const hass = this.hassContext;
+      if (
+        !hass ||
+        !this.selectedDay ||
+        (days === 1 && this.isTodaySelected())
+      ) {
+        return;
+      }
+      this.selectedDay = shiftLocalDate(this.selectedDay, days);
+      this.historySignature = "";
+      this.requestUpdate();
+      this.loadHistoryWhenNeeded(hass);
+    };
   }
 }
 
