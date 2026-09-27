@@ -385,7 +385,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.historyData = data;
       this.mainStatus =
         data.hasProduction && data.hasConsumption
-          ? "Puissance moyenne par intervalle de 5 minutes."
+          ? "Puissance moyenne par intervalle d’une minute."
           : "Erreur : historique de production ou de consommation indisponible pour aujourd’hui.";
       this.gridStatus =
         data.hasGridImport && data.hasGridExport
