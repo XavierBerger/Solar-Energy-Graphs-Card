@@ -113,6 +113,25 @@ function createHassContext(
   };
 }
 
+function withSensorState(
+  hass: ReturnType<typeof createHassContext>,
+  entityId: keyof ReturnType<typeof createHassContext>["states"],
+  state: string,
+  lastUpdated: string,
+): ReturnType<typeof createHassContext> {
+  return {
+    ...hass,
+    states: {
+      ...hass.states,
+      [entityId]: { ...hass.states[entityId], state, last_updated: lastUpdated },
+    },
+  };
+}
+
+async function flushHistoryResponse(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("SolarEnergyGraphsCard", () => {
   let card: SolarEnergyGraphsCard;
 
@@ -128,6 +147,7 @@ describe("SolarEnergyGraphsCard", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     card?.remove();
     document.body.replaceChildren();
   });
@@ -381,6 +401,54 @@ describe("SolarEnergyGraphsCard", () => {
 
     await card.updateComplete;
     expect(hass.apiCalls).toHaveBeenCalledOnce();
+  });
+
+  // Adds a live sensor state to the current day's charts without a new history request.
+  it("merges live sensor states into the current day's charts", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    const renderer = rendererInstances[0];
+    renderer.updateData.mockClear();
+
+    card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:05:00Z");
+
+    expect(hass.apiCalls).toHaveBeenCalledOnce();
+    expect(renderer.updateData).toHaveBeenCalledOnce();
+    const data: EnergyHistoryResponse = renderer.updateData.mock.calls[0][0];
+    const index = Array.from(data.mainData[0]).indexOf(
+      Date.parse("2026-09-27T10:05:00Z") / 1000,
+    );
+    expect(data.mainData[1][index]).toBe(300);
+    expect(data.mainData[7][index]).toBe(200);
+  });
+
+  // Leaves a past day untouched when the current sensor states change.
+  it("does not merge live states while a past day is shown", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    card.shadowRoot
+      ?.querySelectorAll<HTMLButtonElement>(".day-navigation button")[0]
+      .click();
+    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(2));
+    await flushHistoryResponse();
+    const renderer = rendererInstances[0];
+    renderer.updateData.mockClear();
+
+    card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:05:00Z");
+
+    expect(renderer.updateData).not.toHaveBeenCalled();
+    expect(hass.apiCalls).toHaveBeenCalledTimes(2);
   });
 
   // Initializes charts using the theme received before history returns.
