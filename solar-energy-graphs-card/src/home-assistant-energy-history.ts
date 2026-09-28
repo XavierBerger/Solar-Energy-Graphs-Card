@@ -185,12 +185,7 @@ export function normalizeEnergyHistory(
     const load = consumption[index];
     return value === null || load === null ? null : Math.min(value, load);
   });
-
   const zero = directSolar.map((value) => (value === null ? null : 0));
-  const gridSupplied = consumption.map((value, index) => {
-    const solar = directSolar[index];
-    return value === null || solar === null ? null : value - solar;
-  });
   const x = Float64Array.from(sampleTimes);
   const productionSeries = production.slice();
   const consumptionSeries = consumption.slice();
@@ -200,7 +195,9 @@ export function normalizeEnergyHistory(
     zero,
     directSolar,
     directSolar.slice(),
-    gridSupplied,
+    consumption.map((value, index) =>
+      value === null || directSolar[index] === null ? null : value,
+    ),
     productionSeries,
     consumptionSeries,
   ];
