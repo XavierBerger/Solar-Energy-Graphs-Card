@@ -429,6 +429,47 @@ describe("SolarEnergyGraphsCard", () => {
     expect(data.mainData[7][index]).toBe(200);
   });
 
+  // Merges a burst of live updates once, from the last state of each sensor.
+  it("coalesces live updates for the current day", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    const renderer = rendererInstances[0];
+    renderer.updateData.mockClear();
+
+    const firstUpdate = withSensorState(
+      hass,
+      "sensor.solar",
+      "300",
+      "2026-09-27T10:05:00Z",
+    );
+    card.hass = firstUpdate;
+    card.hass = withSensorState(
+      firstUpdate,
+      "sensor.consumption",
+      "400",
+      "2026-09-27T10:05:01Z",
+    );
+    await vi.advanceTimersByTimeAsync(249);
+    const beforeWindow = renderer.updateData.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(beforeWindow).toBe(0);
+    expect(renderer.updateData).toHaveBeenCalledOnce();
+    const data: EnergyHistoryResponse = renderer.updateData.mock.calls[0][0];
+    const index = Array.from(data.mainData[0]).indexOf(
+      Date.parse("2026-09-27T10:05:01Z") / 1000,
+    );
+    expect(data.mainData[1][index]).toBe(300);
+    expect(data.mainData[7][index]).toBe(400);
+    expect(hass.apiCalls).toHaveBeenCalledOnce();
+  });
+
   // Leaves a past day untouched when the current sensor states change.
   it("does not merge live states while a past day is shown", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
