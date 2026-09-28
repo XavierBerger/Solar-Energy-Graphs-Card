@@ -33,6 +33,8 @@ const TEST_HISTORY_DATA: EnergyHistoryResponse = {
     [null, 600],
     [null, 1800],
     [null, 1800],
+    [null, 400],
+    [null, 200],
   ],
   gridData: [Float64Array.from([0, 300]), [null, 200], [null, -400]],
   hasProduction: true,
@@ -141,6 +143,18 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.series[3].label).toBe("Self-consumption");
     expect(firstOptions.series[6].label).toBe("Solar production");
     expect(firstOptions.series[7].label).toBe("Consumption");
+    expect(firstOptions.series[8]).toMatchObject({
+      label: "Grid import",
+      class: "legend-values-only",
+      show: false,
+      fill: "#e96e7d",
+    });
+    expect(firstOptions.series[9]).toMatchObject({
+      label: "Grid export",
+      class: "legend-values-only",
+      show: false,
+      fill: "#f59e0b",
+    });
     expect(firstOptions.series[0].class).toBeUndefined();
     expect(
       firstOptions.series
@@ -153,7 +167,11 @@ describe("EnergyChartsRenderer", () => {
         .slice(1)
         .filter((series: { class?: string }) => series.class)
         .map((series: { class?: string }) => series.class),
-    ).toEqual(Array(4).fill("hide-helper-legend"));
+    ).toEqual([
+      ...Array(4).fill("hide-helper-legend"),
+      "legend-values-only",
+      "legend-values-only",
+    ]);
     expect(firstOptions.bands).toEqual([
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
@@ -163,9 +181,11 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
     expect(secondOptions.legend.mount).toBeTypeOf("function");
-    expect(firstData).toHaveLength(8);
+    expect(firstData).toHaveLength(10);
     expect(firstData[0]).toHaveLength(2);
     expect(firstData[1]).toEqual([null, 1800]);
+    expect(firstData[8]).toEqual([null, 400]);
+    expect(firstData[9]).toEqual([null, 200]);
     expect(secondOptions.series[1].label).toBe("Grid export (+W)");
     expect(secondOptions.series[2].label).toBe("Grid import (-W)");
     expect(secondOptions.axes[1].label).toBe("Power (W)");

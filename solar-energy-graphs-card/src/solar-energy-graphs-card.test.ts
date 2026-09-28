@@ -299,6 +299,12 @@ describe("SolarEnergyGraphsCard", () => {
     expect(SolarEnergyGraphsCard.styles.cssText).toContain(
       ".chart .u-legend .u-series.hide-helper-legend",
     );
+    expect(SolarEnergyGraphsCard.styles.cssText).toMatch(
+      /\.chart \.u-legend \.u-series\.legend-values-only\s*\{\s*pointer-events: none;/,
+    );
+    expect(SolarEnergyGraphsCard.styles.cssText).toMatch(
+      /\.chart \.u-legend \.u-series\.legend-values-only > \*\s*\{\s*opacity: 1;/,
+    );
     expect(SolarEnergyGraphsCard.styles.cssText).toContain("display: none");
   });
 

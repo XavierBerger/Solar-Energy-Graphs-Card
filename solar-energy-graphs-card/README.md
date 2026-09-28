@@ -164,7 +164,9 @@ attributs inutiles aux graphiques.
 L'autoconsommation directe est estimée comme le minimum entre la production PV
 et la puissance consommée par la charge ; cette formule suppose l'absence de
 batterie. La légende supérieure affiche **Production solaire**,
-**Consommation** et **Autoconsommation**. Sur ce graphe, la zone verte indique
+**Consommation**, **Autoconsommation**, **Grid import** et **Grid export**.
+Les deux mesures réseau sont indiquées dans la légende supérieure sans ajouter
+de courbes au graphique solaire. Sur ce graphe, la zone verte indique
 l'autoconsommation depuis zéro ; la zone rouge représente le complément de la
 consommation totale et est empilée au-dessus de la zone verte. Le graphe
 inférieur montre l'export au-dessus de zéro et l'import au-dessous. Le curseur

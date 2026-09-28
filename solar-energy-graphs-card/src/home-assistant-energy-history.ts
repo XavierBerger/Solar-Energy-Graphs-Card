@@ -200,6 +200,8 @@ export function normalizeEnergyHistory(
     ),
     productionSeries,
     consumptionSeries,
+    gridImport,
+    gridExport,
   ];
   const negativeImport = gridImport.map((value) =>
     value === null || value === 0 ? value : -value,

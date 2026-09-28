@@ -210,6 +210,18 @@ export class EnergyChartsRenderer {
             stroke: "#3b82f6",
             width: 1.5,
           },
+          {
+            label: "Grid import",
+            class: "legend-values-only",
+            show: false,
+            fill: "#e96e7d",
+          },
+          {
+            label: "Grid export",
+            class: "legend-values-only",
+            show: false,
+            fill: "#f59e0b",
+          },
         ]
       : [
           {},

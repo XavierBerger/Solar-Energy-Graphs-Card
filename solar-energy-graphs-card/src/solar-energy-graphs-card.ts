@@ -201,6 +201,14 @@ export class SolarEnergyGraphsCard extends LitElement {
       display: none;
     }
 
+    .chart .u-legend .u-series.legend-values-only {
+      pointer-events: none;
+    }
+
+    .chart .u-legend .u-series.legend-values-only > * {
+      opacity: 1;
+    }
+
     .chart-status {
       flex: 0 0 auto;
       margin: 0 0 0.25rem;

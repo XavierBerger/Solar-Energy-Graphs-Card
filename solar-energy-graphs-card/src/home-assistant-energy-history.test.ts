@@ -243,6 +243,8 @@ describe("Home Assistant energy history", () => {
     ).toBe(true);
     expect(exported).toEqual([null, 0, 0, 200, 300, 300, null]);
     expect(imported).toEqual([null, -400, -500, -600, -800, -800, null]);
+    expect(data.mainData[8]).toEqual([null, 400, 500, 600, 800, 800, null]);
+    expect(data.mainData[9]).toEqual([null, 0, 0, 200, 300, 300, null]);
     expect(data.hasProduction).toBe(true);
     expect(data.hasConsumption).toBe(true);
     expect(data.hasGridImport).toBe(true);
