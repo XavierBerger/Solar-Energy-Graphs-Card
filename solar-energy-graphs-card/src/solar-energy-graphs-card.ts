@@ -6,11 +6,16 @@ import {
   getEnergyUnitScales,
   getLocalDateString,
   getLocalDayWindowForDate,
-  normalizeEnergyHistory,
+  mergeLiveEnergySamples,
+  parseEnergyHistory,
+  parsePowerState,
+  projectEnergyHistory,
   shiftLocalDate,
+  type EnergyPowerSamples,
   type EnergyUnitScales,
   type EnergySensorMetadata,
   type EnergyHistoryResponse,
+  type LivePowerSample,
   type LocalDayWindow,
   type HomeAssistantHistoryState,
 } from "./home-assistant-energy-history";
@@ -56,7 +61,12 @@ export class SolarEnergyGraphsCard extends LitElement {
   private hassContext?: HomeAssistantThemeContext;
   private darkMode = false;
   private historyData?: EnergyHistoryResponse;
-  private historySignature = "";
+  private historyModel?: {
+    samples: EnergyPowerSamples;
+    window: LocalDayWindow;
+    unitScales: EnergyUnitScales;
+  };
+  private historyLoadKey = "";
   private historyRequestId = 0;
   private selectedDay?: string;
   private selectedDayTimeZone?: string;
@@ -78,6 +88,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
     this.chartRenderer?.refreshTheme(this.darkMode);
     this.loadHistoryWhenNeeded(hass);
+    this.mergeLiveStates(hass);
   }
 
   static styles = css`
@@ -249,7 +260,8 @@ export class SolarEnergyGraphsCard extends LitElement {
       },
     };
     this.historyData = undefined;
-    this.historySignature = "";
+    this.historyModel = undefined;
+    this.historyLoadKey = "";
     this.historyRequestId += 1;
     this.loadHistoryWhenNeeded(this.hassContext);
     this.requestUpdate();
@@ -274,7 +286,8 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   disconnectedCallback(): void {
     this.historyRequestId += 1;
-    this.historySignature = "";
+    this.historyLoadKey = "";
+    this.historyModel = undefined;
     this.chartRenderer?.destroy();
     this.chartRenderer = undefined;
     super.disconnectedCallback();
@@ -390,24 +403,15 @@ export class SolarEnergyGraphsCard extends LitElement {
     const now = new Date();
     const selectedDay = this.selectedDay ?? getLocalDateString(now, timeZone);
     const dayWindow = getLocalDayWindowForDate(selectedDay, timeZone);
-    const entityIds = [
-      config.entities.production,
-      config.entities.consumption,
-      config.entities.grid_import,
-      config.entities.grid_export,
-    ] as const;
-    const stateSignature = entityIds
-      .map((entityId) => {
-        const state = hass.states?.[entityId];
-        return `${entityId}:${state?.last_updated ?? state?.state ?? "missing"}:${JSON.stringify(state?.attributes)}`;
-      })
-      .join("|");
-    const signature = `${timeZone}:${selectedDay}:${stateSignature}`;
-    if (signature === this.historySignature) {
+    const entityIds = configuredEntityIds(config);
+    // Live state changes are merged by mergeLiveStates, never reloaded here.
+    const loadKey = `${timeZone}:${selectedDay}:${entityIds.join(",")}`;
+    if (loadKey === this.historyLoadKey) {
       return;
     }
 
-    this.historySignature = signature;
+    this.historyLoadKey = loadKey;
+    this.historyModel = undefined;
     const requestId = ++this.historyRequestId;
     this.mainStatus = "Loading Home Assistant history…";
     this.gridStatus = this.mainStatus;
@@ -461,31 +465,19 @@ export class SolarEnergyGraphsCard extends LitElement {
   ): Promise<void> {
     try {
       const history = await hass.callApi("GET", apiPath);
-      const data = normalizeEnergyHistory(
-        history,
-        dayWindow,
-        Date.now() / 1000,
-        unitScales,
-      );
+      const samples = parseEnergyHistory(history, unitScales);
       if (!this.isConnected || requestId !== this.historyRequestId) {
         return;
       }
 
-      this.historyData = data;
-      this.mainStatus =
-        data.hasProduction && data.hasConsumption
-          ? "Recorded power samples."
-          : `Error: ${this.formatSelectedDay()} production or consumption history is unavailable.`;
-      this.gridStatus =
-        data.hasGridImport && data.hasGridExport
-          ? "Grid import and export are measured separately."
-          : `Error: ${this.formatSelectedDay()} grid import or export history is unavailable.`;
-      if (this.chartRenderer) {
-        this.chartRenderer.updateData(data);
-      } else {
-        this.initializeCharts();
+      this.historyModel = { samples, window: dayWindow, unitScales };
+      this.showHistoryData(
+        projectEnergyHistory(samples, dayWindow, Date.now() / 1000),
+      );
+      // States that changed while the request was in flight.
+      if (this.hassContext) {
+        this.mergeLiveStates(this.hassContext);
       }
-      this.requestUpdate();
     } catch (error) {
       if (!this.isConnected || requestId !== this.historyRequestId) {
         return;
@@ -495,6 +487,55 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.gridStatus = this.mainStatus;
       this.requestUpdate();
     }
+  }
+
+  private mergeLiveStates(hass: HomeAssistantThemeContext): void {
+    const model = this.historyModel;
+    if (!model || !this.config || !this.isTodaySelected()) {
+      return;
+    }
+
+    const { unitScales } = model;
+    const scales = [
+      unitScales.productionToW,
+      unitScales.consumptionToW,
+      unitScales.gridImportToW,
+      unitScales.gridExportToW,
+    ] as const;
+    const live = configuredEntityIds(this.config).flatMap(
+      (entityId, sensor): LivePowerSample[] => {
+        const state = hass.states?.[entityId];
+        const sample = state && parsePowerState(state, scales[sensor]);
+        return sample ? [{ ...sample, sensor: sensor as 0 | 1 | 2 | 3 }] : [];
+      },
+    );
+    const samples = mergeLiveEnergySamples(model.samples, live);
+    if (samples === model.samples) {
+      return;
+    }
+
+    this.historyModel = { ...model, samples };
+    this.showHistoryData(
+      projectEnergyHistory(samples, model.window, Date.now() / 1000),
+    );
+  }
+
+  private showHistoryData(data: EnergyHistoryResponse): void {
+    this.historyData = data;
+    this.mainStatus =
+      data.hasProduction && data.hasConsumption
+        ? "Recorded power samples."
+        : `Error: ${this.formatSelectedDay()} production or consumption history is unavailable.`;
+    this.gridStatus =
+      data.hasGridImport && data.hasGridExport
+        ? "Grid import and export are measured separately."
+        : `Error: ${this.formatSelectedDay()} grid import or export history is unavailable.`;
+    if (this.chartRenderer) {
+      this.chartRenderer.updateData(data);
+    } else {
+      this.initializeCharts();
+    }
+    this.requestUpdate();
   }
 
   private formatSelectedDay(): string {
@@ -529,11 +570,21 @@ export class SolarEnergyGraphsCard extends LitElement {
         return;
       }
       this.selectedDay = shiftLocalDate(this.selectedDay, days);
-      this.historySignature = "";
       this.requestUpdate();
       this.loadHistoryWhenNeeded(hass);
     };
   }
+}
+
+function configuredEntityIds(
+  config: SolarEnergyGraphsCardConfig,
+): readonly [string, string, string, string] {
+  return [
+    config.entities.production,
+    config.entities.consumption,
+    config.entities.grid_import,
+    config.entities.grid_export,
+  ];
 }
 
 if (!customElements.get(ELEMENT_NAME)) {

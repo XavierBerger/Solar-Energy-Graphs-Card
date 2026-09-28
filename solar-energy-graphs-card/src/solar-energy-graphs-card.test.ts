@@ -356,8 +356,8 @@ describe("SolarEnergyGraphsCard", () => {
     expect(hass.apiCalls).toHaveBeenCalledOnce();
   });
 
-  // Refreshes history when a configured sensor changes, not on unrelated hass updates.
-  it("reloads history only when one of the selected sensor states changes", async () => {
+  // Keeps the loaded history when a configured sensor changes; live states are merged instead.
+  it("does not reload history for live sensor state changes", async () => {
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();
     card.setConfig(CARD_CONFIG);
@@ -379,7 +379,8 @@ describe("SolarEnergyGraphsCard", () => {
       },
     };
 
-    await vi.waitFor(() => expect(hass.apiCalls).toHaveBeenCalledTimes(2));
+    await card.updateComplete;
+    expect(hass.apiCalls).toHaveBeenCalledOnce();
   });
 
   // Initializes charts using the theme received before history returns.
