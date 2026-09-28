@@ -5,7 +5,10 @@ import {
   getLocalDateString,
   getLocalDayWindow,
   getLocalDayWindowForDate,
+  mergeLiveEnergySamples,
   normalizeEnergyHistory,
+  parseEnergyHistory,
+  projectEnergyHistory,
   shiftLocalDate,
   type HomeAssistantHistoryState,
 } from "./home-assistant-energy-history";
@@ -188,6 +191,104 @@ describe("Home Assistant energy history", () => {
     expect(params.get("end_time")).toBe(new Date(2000 * 1000).toISOString());
     expect(params.get("no_attributes")).toBe("1");
     expect(params.get("significant_changes_only")).toBe("0");
+  });
+
+  // Adds a live sample at its own timestamp and keeps the other sensors' last values.
+  it("merges a live sample and recomputes derived series", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 180 };
+    const samples = parseEnergyHistory([
+      [state(start + 5, 1000)],
+      [state(start + 5, 1500)],
+      [state(start + 5, 400)],
+      [state(start + 5, 0)],
+    ]);
+
+    const merged = mergeLiveEnergySamples(samples, [
+      { sensor: 0, timestamp: start + 35, value: 2000 },
+    ]);
+    const data = projectEnergyHistory(merged, window, start + 60);
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 5,
+      start + 35,
+      start + 60,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([null, 1000, 2000, 2000, null]);
+    expect(data.mainData[3]).toEqual([null, 1000, 1500, 1500, null]);
+    expect(data.mainData[7]).toEqual([null, 1500, 1500, 1500, null]);
+    expect(data.gridData[2]).toEqual([null, -400, -400, -400, null]);
+  });
+
+  // Keeps the consumption curve when a live update arrives without solar production.
+  it("keeps consumption after a live update without solar production", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 180 };
+    const samples = parseEnergyHistory([
+      [],
+      [state(start + 5, 1500)],
+      [state(start + 5, 400)],
+      [],
+    ]);
+
+    const merged = mergeLiveEnergySamples(samples, [
+      { sensor: 2, timestamp: start + 35, value: 500 },
+    ]);
+    const data = projectEnergyHistory(merged, window, start + 60);
+
+    expect(data.mainData[4]).toEqual([null, 0, 0, 0, null]);
+    expect(data.mainData[5]).toEqual([null, 1500, 1500, 1500, null]);
+    expect(data.mainData[7]).toEqual([null, 1500, 1500, 1500, null]);
+    expect(data.mainData[8]).toEqual([null, 400, 500, 500, null]);
+  });
+
+  // Ignores an older live sample, replaces one at the same timestamp and reports no-ops.
+  it("orders live samples per sensor", () => {
+    const start = 1_000_020;
+    const samples = parseEnergyHistory([
+      [state(start + 5, 1000)],
+      [],
+      [],
+      [],
+    ]);
+
+    const unchanged = mergeLiveEnergySamples(samples, [
+      { sensor: 0, timestamp: start + 4, value: 900 },
+      { sensor: 0, timestamp: start + 5, value: 1000 },
+    ]);
+    const replaced = mergeLiveEnergySamples(samples, [
+      { sensor: 0, timestamp: start + 5, value: 1100 },
+    ]);
+
+    expect(unchanged).toBe(samples);
+    expect(replaced[0]).toEqual([{ timestamp: start + 5, value: 1100 }]);
+    expect(samples[0]).toEqual([{ timestamp: start + 5, value: 1000 }]);
+  });
+
+  // Applies the ten-minute freshness limit and unavailable gaps to live samples.
+  it("applies freshness and unavailable states to live samples", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 3600 };
+    const samples = parseEnergyHistory([[], [], [], []]);
+
+    const merged = mergeLiveEnergySamples(samples, [
+      { sensor: 0, timestamp: start + 5, value: 1000 },
+      { sensor: 1, timestamp: start + 5, value: 1500 },
+      { sensor: 1, timestamp: start + 65, value: null },
+    ]);
+    const data = projectEnergyHistory(merged, window, start + 700);
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 5,
+      start + 65,
+      start + 700,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([null, 1000, 1000, null, null]);
+    expect(data.mainData[7]).toEqual([null, 1500, null, null, null]);
   });
 
   // Fills consumption from zero when there is no solar production to cover it.
