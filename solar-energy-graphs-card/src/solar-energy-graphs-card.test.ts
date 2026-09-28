@@ -129,7 +129,7 @@ function withSensorState(
 }
 
 async function flushHistoryResponse(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await vi.advanceTimersByTimeAsync(0);
 }
 
 describe("SolarEnergyGraphsCard", () => {
@@ -405,7 +405,7 @@ describe("SolarEnergyGraphsCard", () => {
 
   // Adds a live sensor state to the current day's charts without a new history request.
   it("merges live sensor states into the current day's charts", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-27T10:10:00Z") });
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();
     card.setConfig(CARD_CONFIG);
@@ -417,6 +417,7 @@ describe("SolarEnergyGraphsCard", () => {
     renderer.updateData.mockClear();
 
     card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:05:00Z");
+    await vi.advanceTimersByTimeAsync(250);
 
     expect(hass.apiCalls).toHaveBeenCalledOnce();
     expect(renderer.updateData).toHaveBeenCalledOnce();
@@ -430,7 +431,7 @@ describe("SolarEnergyGraphsCard", () => {
 
   // Leaves a past day untouched when the current sensor states change.
   it("does not merge live states while a past day is shown", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-09-27T10:10:00Z") });
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();
     card.setConfig(CARD_CONFIG);
@@ -446,6 +447,7 @@ describe("SolarEnergyGraphsCard", () => {
     renderer.updateData.mockClear();
 
     card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:05:00Z");
+    await vi.advanceTimersByTimeAsync(250);
 
     expect(renderer.updateData).not.toHaveBeenCalled();
     expect(hass.apiCalls).toHaveBeenCalledTimes(2);

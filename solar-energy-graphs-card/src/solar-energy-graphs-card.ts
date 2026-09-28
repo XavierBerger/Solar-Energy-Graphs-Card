@@ -22,6 +22,8 @@ import {
 
 const CARD_TYPE = "custom:solar-energy-graphs-card";
 const ELEMENT_NAME = "solar-energy-graphs-card";
+// Home Assistant pushes each sensor separately; merge a burst in one pass.
+const LIVE_UPDATE_COALESCE_MS = 250;
 
 interface SolarEnergyGraphsCardConfig {
   type: string;
@@ -68,6 +70,7 @@ export class SolarEnergyGraphsCard extends LitElement {
   };
   private historyLoadKey = "";
   private historyRequestId = 0;
+  private liveUpdateTimer?: ReturnType<typeof setTimeout>;
   private selectedDay?: string;
   private selectedDayTimeZone?: string;
   private mainStatus = "Waiting for Home Assistant data.";
@@ -88,7 +91,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
     this.chartRenderer?.refreshTheme(this.darkMode);
     this.loadHistoryWhenNeeded(hass);
-    this.mergeLiveStates(hass);
+    this.scheduleLiveMerge();
   }
 
   static styles = css`
@@ -263,6 +266,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.historyModel = undefined;
     this.historyLoadKey = "";
     this.historyRequestId += 1;
+    this.cancelLiveMerge();
     this.loadHistoryWhenNeeded(this.hassContext);
     this.requestUpdate();
   }
@@ -288,6 +292,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.historyRequestId += 1;
     this.historyLoadKey = "";
     this.historyModel = undefined;
+    this.cancelLiveMerge();
     this.chartRenderer?.destroy();
     this.chartRenderer = undefined;
     super.disconnectedCallback();
@@ -487,6 +492,24 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.gridStatus = this.mainStatus;
       this.requestUpdate();
     }
+  }
+
+  private scheduleLiveMerge(): void {
+    if (this.liveUpdateTimer !== undefined || !this.historyModel) {
+      return;
+    }
+    this.liveUpdateTimer = setTimeout(() => {
+      this.liveUpdateTimer = undefined;
+      // Read hass when the timer fires: it holds the last state of the burst.
+      if (this.hassContext) {
+        this.mergeLiveStates(this.hassContext);
+      }
+    }, LIVE_UPDATE_COALESCE_MS);
+  }
+
+  private cancelLiveMerge(): void {
+    clearTimeout(this.liveUpdateTimer);
+    this.liveUpdateTimer = undefined;
   }
 
   private mergeLiveStates(hass: HomeAssistantThemeContext): void {
