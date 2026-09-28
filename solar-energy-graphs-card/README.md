@@ -168,7 +168,8 @@ batterie. La légende supérieure affiche **Production solaire**,
 Les deux mesures réseau sont indiquées dans la légende supérieure sans ajouter
 de courbes au graphique solaire. Sur ce graphe, la zone verte indique
 l'autoconsommation depuis zéro ; la zone rouge représente le complément de la
-consommation totale et est empilée au-dessus de la zone verte. Le graphe
+consommation totale et est empilée au-dessus de la zone verte, ou part de zéro
+en l'absence de production solaire. Le graphe
 inférieur montre l'export au-dessus de zéro et l'import au-dessous. Le curseur
 et le zoom horizontal sont synchronisés.
 
