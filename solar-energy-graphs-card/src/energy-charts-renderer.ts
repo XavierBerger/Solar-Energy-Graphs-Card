@@ -203,12 +203,12 @@ export class EnergyChartsRenderer {
           {
             label: "Solar production",
             stroke: "#d4ac1f",
-            width: 1.5,
+            width: 1.25,
           },
           {
             label: "Consumption",
             stroke: "#3b82f6",
-            width: 1.5,
+            width: 1.25,
           },
           {
             label: "Grid import",
@@ -228,13 +228,13 @@ export class EnergyChartsRenderer {
           {
             label: "Grid export (+W)",
             stroke: "#f59e0b",
-            width: 1.5,
+            width: 1.25,
             fill: "rgba(245, 158, 11, 0.35)",
           },
           {
             label: "Grid import (-W)",
             stroke: "#ef4444",
-            width: 1.5,
+            width: 1.25,
             fill: "rgba(239, 68, 68, 0.35)",
           },
         ];
