@@ -207,10 +207,12 @@ export function projectEnergyHistory(
     production,
     zero,
     directSolar,
-    directSolar.slice(),
-    consumption.map((value, index) =>
-      value === null || directSolar[index] === null ? null : value,
+    // The red band spans consumption above self-consumption, or above zero
+    // when there is no solar production to cover it.
+    directSolar.map((value, index) =>
+      value ?? (consumption[index] === null ? null : 0),
     ),
+    consumption.slice(),
     productionSeries,
     consumptionSeries,
     gridImport,
