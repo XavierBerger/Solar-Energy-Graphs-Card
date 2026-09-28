@@ -203,10 +203,10 @@ describe("Home Assistant energy history", () => {
           state(start + 95, 1800),
         ],
         [
-          state(start + 5, 500),
-          state(start + 35, 700),
-          state(start + 65, 800),
-          state(start + 95, 1000),
+          state(start + 5, 1500),
+          state(start + 35, 1600),
+          state(start + 65, 2200),
+          state(start + 95, 2500),
         ],
         [
           state(start + 5, 400),
@@ -227,13 +227,20 @@ describe("Home Assistant energy history", () => {
 
     const production = data.mainData[1]!;
     const directSolar = data.mainData[3]!;
-    const gridSupplied = data.mainData[5]!;
+    const stackedConsumption = data.mainData[5]!;
     const exported = data.gridData[1]!;
     const imported = data.gridData[2]!;
 
     expect(production).toEqual([null, 1000, 1200, 2000, 1800, 1800, null]);
-    expect(directSolar).toEqual([null, 500, 700, 800, 1000, 1000, null]);
-    expect(gridSupplied).toEqual([null, 0, 0, 0, 0, 0, null]);
+    expect(directSolar).toEqual([null, 1000, 1200, 2000, 1800, 1800, null]);
+    expect(stackedConsumption).toEqual([
+      null, 1500, 1600, 2200, 2500, 2500, null,
+    ]);
+    expect(
+      stackedConsumption.slice(1, 5).every(
+        (total, index) => total! > directSolar[index + 1]!,
+      ),
+    ).toBe(true);
     expect(exported).toEqual([null, 0, 0, 200, 300, 300, null]);
     expect(imported).toEqual([null, -400, -500, -600, -800, -800, null]);
     expect(data.hasProduction).toBe(true);
