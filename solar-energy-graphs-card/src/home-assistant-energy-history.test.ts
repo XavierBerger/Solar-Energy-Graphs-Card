@@ -190,6 +190,30 @@ describe("Home Assistant energy history", () => {
     expect(params.get("significant_changes_only")).toBe("0");
   });
 
+  // Fills consumption from zero when there is no solar production to cover it.
+  it("fills the red band from zero without solar production", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 180 };
+
+    const night = normalizeEnergyHistory(
+      [[], [state(start + 5, 1500)], [state(start + 5, 400)], []],
+      window,
+      start + 30,
+    );
+
+    expect(Array.from(night.mainData[0])).toEqual([
+      start,
+      start + 5,
+      start + 30,
+      window.end,
+    ]);
+    expect(night.mainData[3]).toEqual([null, null, null, null]);
+    expect(night.mainData[4]).toEqual([null, 0, 0, null]);
+    expect(night.mainData[5]).toEqual([null, 1500, 1500, null]);
+    expect(night.mainData[7]).toEqual([null, 1500, 1500, null]);
+    expect(night.gridData[2]).toEqual([null, -400, -400, null]);
+  });
+
   // Preserves source timestamps and calculates direct power and separate grid flows.
   it("aligns direct power, autoconsumption and separate grid flows", () => {
     const start = 1_000_020;
