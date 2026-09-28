@@ -166,6 +166,46 @@ export function parseEnergyHistory(
   ];
 }
 
+export interface LivePowerSample extends NumericSample {
+  /** Index in EnergyPowerSamples: production, consumption, grid import, grid export. */
+  sensor: 0 | 1 | 2 | 3;
+}
+
+/**
+ * Appends live samples in W to each sensor at its own timestamp. A sample
+ * older than the sensor's last one is ignored; one at the same timestamp
+ * replaces it. Returns `samples` itself when nothing changed.
+ */
+export function mergeLiveEnergySamples(
+  samples: EnergyPowerSamples,
+  live: readonly LivePowerSample[],
+): EnergyPowerSamples {
+  const merged = [...samples] as [
+    readonly NumericSample[],
+    readonly NumericSample[],
+    readonly NumericSample[],
+    readonly NumericSample[],
+  ];
+  let changed = false;
+  for (const { sensor, timestamp, value } of live) {
+    const series = merged[sensor];
+    const last = series.at(-1);
+    if (!Number.isFinite(timestamp) || (last && timestamp < last.timestamp)) {
+      continue;
+    }
+    if (last?.timestamp === timestamp) {
+      if (last.value === value) {
+        continue;
+      }
+      merged[sensor] = [...series.slice(0, -1), { timestamp, value }];
+    } else {
+      merged[sensor] = [...series, { timestamp, value }];
+    }
+    changed = true;
+  }
+  return changed ? merged : samples;
+}
+
 /** Projects raw samples onto the uPlot series of both charts, up to `now`. */
 export function projectEnergyHistory(
   samples: EnergyPowerSamples,
