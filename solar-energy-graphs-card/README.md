@@ -164,9 +164,11 @@ attributs inutiles aux graphiques.
 L'autoconsommation directe est estimée comme le minimum entre la production PV
 et la puissance consommée par la charge ; cette formule suppose l'absence de
 batterie. La légende supérieure affiche **Production solaire**,
-**Consommation** et **Autoconsommation**. Le graphe inférieur montre l'export
-au-dessus de zéro et l'import au-dessous. Le curseur et le zoom horizontal
-sont synchronisés.
+**Consommation** et **Autoconsommation**. Sur ce graphe, la zone verte indique
+l'autoconsommation depuis zéro ; la zone rouge représente le complément de la
+consommation totale et est empilée au-dessus de la zone verte. Le graphe
+inférieur montre l'export au-dessus de zéro et l'import au-dessous. Le curseur
+et le zoom horizontal sont synchronisés.
 
 La carte signale dans chaque graphe si son historique est indisponible. Les
 capteurs doivent avoir un historique enregistré par Home Assistant pour le jour
