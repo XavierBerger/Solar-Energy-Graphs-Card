@@ -39,10 +39,25 @@ export interface LocalDayWindow {
   end: number;
 }
 
-interface NumericSample {
+export interface NumericSample {
   timestamp: number;
   value: number | null;
 }
+
+/** Chronological samples in W for production, consumption, grid import and grid export. */
+export type EnergyPowerSamples = readonly [
+  readonly NumericSample[],
+  readonly NumericSample[],
+  readonly NumericSample[],
+  readonly NumericSample[],
+];
+
+const WATT_UNIT_SCALES: EnergyUnitScales = {
+  productionToW: 1,
+  consumptionToW: 1,
+  gridImportToW: 1,
+  gridExportToW: 1,
+};
 
 export function getLocalDayWindow(now: Date, timeZone: string): LocalDayWindow {
   const dateParts = getZonedDateParts(now, timeZone);
@@ -130,44 +145,42 @@ export function normalizeEnergyHistory(
   history: readonly (readonly HomeAssistantHistoryState[])[],
   window: LocalDayWindow,
   now: number,
-  unitScales: EnergyUnitScales = {
-    productionToW: 1,
-    consumptionToW: 1,
-    gridImportToW: 1,
-    gridExportToW: 1,
-  },
+  unitScales: EnergyUnitScales = WATT_UNIT_SCALES,
 ): EnergyHistoryResponse {
+  return projectEnergyHistory(parseEnergyHistory(history, unitScales), window, now);
+}
+
+export function parseEnergyHistory(
+  history: readonly (readonly HomeAssistantHistoryState[])[],
+  unitScales: EnergyUnitScales = WATT_UNIT_SCALES,
+): EnergyPowerSamples {
   if (history.length !== 4) {
     throw new Error("Home Assistant returned an invalid history response.");
   }
 
+  return [
+    parsePowerSamples(history[0], unitScales.productionToW),
+    parsePowerSamples(history[1], unitScales.consumptionToW),
+    parsePowerSamples(history[2], unitScales.gridImportToW),
+    parsePowerSamples(history[3], unitScales.gridExportToW),
+  ];
+}
+
+/** Projects raw samples onto the uPlot series of both charts, up to `now`. */
+export function projectEnergyHistory(
+  samples: EnergyPowerSamples,
+  window: LocalDayWindow,
+  now: number,
+): EnergyHistoryResponse {
   const lastSample = Math.max(window.start, Math.min(now, window.end));
-  const productionSamples = parsePowerSamples(
-    history[0],
-    unitScales.productionToW,
-    lastSample,
-  );
-  const consumptionSamples = parsePowerSamples(
-    history[1],
-    unitScales.consumptionToW,
-    lastSample,
-  );
-  const gridImportSamples = parsePowerSamples(
-    history[2],
-    unitScales.gridImportToW,
-    lastSample,
-  );
-  const gridExportSamples = parsePowerSamples(
-    history[3],
-    unitScales.gridExportToW,
-    lastSample,
-  );
-  const sourceTimes = [
-    ...productionSamples,
-    ...consumptionSamples,
-    ...gridImportSamples,
-    ...gridExportSamples,
-  ]
+  const [
+    productionSamples,
+    consumptionSamples,
+    gridImportSamples,
+    gridExportSamples,
+  ] = samples;
+  const sourceTimes = samples
+    .flat()
     .map((sample) => sample.timestamp)
     .filter((timestamp) => timestamp >= window.start && timestamp < lastSample);
   const sampleTimes = Array.from(
@@ -330,24 +343,27 @@ function powerUnitScale(
   return metadata.unit_of_measurement === "kW" ? 1000 : 1;
 }
 
+/** Parses one recorded or live state; undefined when it has no usable timestamp. */
+export function parsePowerState(
+  state: HomeAssistantHistoryState,
+  unitScale: number,
+): NumericSample | undefined {
+  const timestamp = parseTimestampSeconds(
+    state.last_updated ?? state.last_changed ?? "",
+  );
+  const value = state.state.trim() ? Number(state.state) : Number.NaN;
+  return Number.isFinite(timestamp)
+    ? { timestamp, value: Number.isFinite(value) ? value * unitScale : null }
+    : undefined;
+}
+
 function parsePowerSamples(
   history: readonly HomeAssistantHistoryState[],
   unitScale: number,
-  lastSample: number,
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
-    const timestamp = parseTimestampSeconds(
-      state.last_updated ?? state.last_changed ?? "",
-    );
-    const value = state.state.trim() ? Number(state.state) : Number.NaN;
-    return Number.isFinite(timestamp) && timestamp <= lastSample
-      ? [
-          {
-            timestamp,
-            value: Number.isFinite(value) ? value * unitScale : null,
-          },
-        ]
-      : [];
+    const sample = parsePowerState(state, unitScale);
+    return sample ? [sample] : [];
   });
 
   samples.sort((first, second) => first.timestamp - second.timestamp);
