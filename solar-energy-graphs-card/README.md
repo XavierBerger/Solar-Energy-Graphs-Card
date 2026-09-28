@@ -156,6 +156,9 @@ fuseau configuré. Elle conserve tous les horodatages enregistrés par les
 capteurs sans les agréger par minute ni les sous-échantillonner. Entre deux
 mesures, la dernière valeur connue est maintenue pendant dix minutes au maximum ;
 les valeurs indisponibles ou plus anciennes apparaissent comme des trous.
+L'historique est chargé une fois par jour affiché. Pour le jour courant, les
+nouveaux états des quatre capteurs sont ensuite ajoutés au graphe sans nouvelle
+requête, regroupés par fenêtres de 250 ms ; un jour passé reste figé.
 La requête History désactive explicitement le filtre Home Assistant des
 changements « significatifs », afin d'inclure tous les états conservés par le
 Recorder. Elle n'utilise pas non plus `minimal_response`, qui peut fusionner

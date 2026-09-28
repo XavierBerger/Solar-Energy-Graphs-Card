@@ -325,9 +325,15 @@ Mettre cette liste à jour selon la convention de
 **En cours** au démarrage, **Validée** après les tests techniques et la
 confirmation utilisateur dans Home Assistant, **Bloquée** avec la raison.
 
-- [ ] **À faire** — P0.1 : séparer chargement initial et mises à jour live.
-- [ ] **À faire** — P0.2 : coalescer les mises à jour HA.
-- [ ] **À faire** — P0.3 : fusionner les nouveaux points.
+- [ ] **En cours** — P0.1 : séparer chargement initial et mises à jour live.
+  La clé de chargement ne dépend plus que du fuseau, du jour et des entités.
+  Implémenté et testé ; validation dans Home Assistant en attente.
+- [ ] **En cours** — P0.2 : coalescer les mises à jour HA. Fenêtre de 250 ms,
+  fusion depuis le dernier `hass` reçu. Implémenté et testé ; validation dans
+  Home Assistant en attente.
+- [ ] **En cours** — P0.3 : fusionner les nouveaux points. Échantillons bruts
+  par capteur et projection partagée avec le chargement initial. Implémenté et
+  testé ; validation dans Home Assistant en attente.
 - [ ] **À faire** — P0.4 : réconcilier avec History.
 - [ ] **À faire** — P0.5 : mesurer avant optimisation uPlot.
 
