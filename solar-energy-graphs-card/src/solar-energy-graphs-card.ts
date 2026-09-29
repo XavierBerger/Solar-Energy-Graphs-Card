@@ -563,7 +563,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       loadError,
       precision: current.precision,
       highPrecisionAvailable:
-        current.highPrecisionAvailable ?? hasHigherPrecisionSamples(samples, current.statistics),
+        current.highPrecisionAvailable ?? true,
     };
     this.showCurrentModel();
     if (today) {
@@ -903,9 +903,19 @@ export function hasHigherPrecisionSamples(
   samples: EnergyPowerSamples,
   statistics: EnergyStatistics,
 ): boolean {
-  const statisticsPoints = statistics.reduce((total, series) => total + series.length, 0);
-  const rawPoints = samples.reduce((total, series) => total + series.length, 0);
-  return rawPoints > statisticsPoints;
+  for (let sensor = 0; sensor < samples.length; sensor += 1) {
+    const raw = samples[sensor];
+    const stat = statistics[sensor];
+    if (raw.length < 2) {
+      continue;
+    }
+    const rawInterval = raw[1].timestamp - raw[0].timestamp;
+    const statInterval = stat[0] ? stat[0].end - stat[0].start : Number.POSITIVE_INFINITY;
+    if (rawInterval > 0 && rawInterval < statInterval) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function errorMessage(error: unknown): string {
