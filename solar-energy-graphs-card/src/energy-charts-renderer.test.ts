@@ -142,6 +142,9 @@ describe("EnergyChartsRenderer", () => {
     const secondData = createChartMock.mock.calls[1][1];
     expect(firstOptions.series[3].label).toBe("Self-consumption");
     expect(firstOptions.series[6].label).toBe("Solar production");
+    expect(firstOptions.series[6].stroke).toBe("#cc9d00");
+    expect(firstOptions.series[6].fill).toBeUndefined();
+    expect(firstOptions.series[1].fill).toBe("#fbf0a8");
     expect(firstOptions.series[7].label).toBe("Consumption");
     expect(firstOptions.series[8]).toMatchObject({
       label: "Grid import",
@@ -153,7 +156,7 @@ describe("EnergyChartsRenderer", () => {
       label: "Grid export",
       class: "legend-values-only",
       show: false,
-      fill: "#f59e0b",
+      fill: "#fbf0a8",
     });
     expect(firstOptions.series[0].class).toBeUndefined();
     expect(

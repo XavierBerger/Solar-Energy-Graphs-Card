@@ -1,10 +1,10 @@
+import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
 import {
   createChart,
   uPlot,
   type UPlotInstance,
   type UPlotOptions,
 } from "./uplot-adapter";
-import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
 
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
@@ -170,74 +170,74 @@ export class EnergyChartsRenderer {
 
     const series: UPlotOptions["series"] = mainChart
       ? [
-          {},
-          {
-            label: "",
-            class: "hide-helper-legend",
-            stroke: "rgba(0, 0, 0, 0)",
-            width: 0,
-            fill: "rgba(245, 158, 11, 0.12)",
-          },
-          {
-            label: "",
-            class: "hide-helper-legend",
-            stroke: "rgba(0, 0, 0, 0)",
-            width: 0,
-          },
-          {
-            label: "Self-consumption",
-            width: 0,
-            fill: "#a2d49b",
-          },
-          {
-            label: "",
-            class: "hide-helper-legend",
-            stroke: "rgba(0, 0, 0, 0)",
-            width: 0,
-          },
-          {
-            label: "",
-            class: "hide-helper-legend",
-            width: 0,
-          },
-          {
-            label: "Solar production",
-            stroke: "#d4ac1f",
-            width: 1.25,
-          },
-          {
-            label: "Consumption",
-            stroke: "#3b82f6",
-            width: 1.25,
-          },
-          {
-            label: "Grid import",
-            class: "legend-values-only",
-            show: false,
-            fill: "#e96e7d",
-          },
-          {
-            label: "Grid export",
-            class: "legend-values-only",
-            show: false,
-            fill: "#f59e0b",
-          },
-        ]
+        {},
+        {
+          label: "",
+          class: "hide-helper-legend",
+          stroke: "rgba(0, 0, 0, 0)",
+          width: 0,
+          fill: "#fbf0a8",
+        },
+        {
+          label: "",
+          class: "hide-helper-legend",
+          stroke: "rgba(0, 0, 0, 0)",
+          width: 0,
+        },
+        {
+          label: "Self-consumption",
+          width: 0,
+          fill: "#a2d49b",
+        },
+        {
+          label: "",
+          class: "hide-helper-legend",
+          stroke: "rgba(0, 0, 0, 0)",
+          width: 0,
+        },
+        {
+          label: "",
+          class: "hide-helper-legend",
+          width: 0,
+        },
+        {
+          label: "Solar production",
+          stroke: "#cc9d00",
+          width: 1.25,
+        },
+        {
+          label: "Consumption",
+          stroke: "#3b82f6",
+          width: 1.25,
+        },
+        {
+          label: "Grid import",
+          class: "legend-values-only",
+          show: false,
+          fill: "#e96e7d",
+        },
+        {
+          label: "Grid export",
+          class: "legend-values-only",
+          show: false,
+          fill: "#fbf0a8",
+        },
+      ]
       : [
-          {},
-          {
-            label: "Grid export (+W)",
-            stroke: "#f59e0b",
-            width: 1.25,
-            fill: "rgba(245, 158, 11, 0.35)",
-          },
-          {
-            label: "Grid import (-W)",
-            stroke: "#ef4444",
-            width: 1.25,
-            fill: "rgba(239, 68, 68, 0.35)",
-          },
-        ];
+        {},
+        {
+          label: "Grid export (+W)",
+          stroke: "#cc9d00",
+          width: 1.25,
+          fill: "#fbf0a8",
+        },
+        {
+          label: "Grid import (-W)",
+          stroke: "#ef4444",
+          width: 1.25,
+          fill: "#e96e7d",
+        },
+      ];
     const bands: NonNullable<UPlotOptions["bands"]> = [
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
