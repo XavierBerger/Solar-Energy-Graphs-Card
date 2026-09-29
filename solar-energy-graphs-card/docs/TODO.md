@@ -1,6 +1,4 @@
 # Nouvelles fonctionnalités
-- [ ] Si des données plus précises sont disponibles, ajouter un bouton haute précision et les charger sur clique
-    - [ ] Si on est en haute précision, cliquer sur le bouton repasse en basse précision
 - [ ] Ne pas changer le zoom quand de nouvelles données arrivent
     - [ ] Conserver le niveau de détail (haute/basse précision) lors de mise à jour. Idéalement ajouter les nouvelles données sans tout recharger
 - [ ] zoomer sur l'axe temporelle avec le molette. 
@@ -15,21 +13,11 @@
 
 # Corrections
 - [ ] Clarifier le contrat de signe des quatre capteurs : import/export sont forcés positifs (`Math.max(value, 0)`), production et consommation ne sont pas vérifiées. Documenter la précondition (>= 0) ou représenter les valeurs hors contrat par `null`, sans rectifier silencieusement un capteur
-- [ ] Remplacer `showAdjacentDay(-1)` / `showAdjacentDay(1)` du template par deux handlers stables (`previousDay`, `nextDay`)
 - [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
 
 # Qualité
 - [ ] Ajouter la génération de la couverture de tests
-- [ ] Ajouter la documentation d'architecture et d'explicatoin du fonctionnement du programme
-- [ ] Ajouter des test de mutation pour vérifier que les tests sont de vrais tests
-- [ ] Tester une réponse partielle (un capteur absent de la réponse) et le rendu attendu
-- [ ] Tester des valeurs négatives sur les quatre capteurs
-- [ ] Tester une chaîne vide et des valeurs non numériques dans les états bruts et live
-- [ ] Tester la recréation après un changement de configuration : ni anciennes données ni anciennes ressources réutilisées
-- [ ] Vérifier le contrat réel des messages WebSocket `recorder/statistics_during_period` et `history/history_during_period` : test d'intégration contre `ha-dev` ou fixture générée par Home Assistant
-- [ ] Isoler la politique de rafraîchissement des données (chargement, live, statistiques) de l'élément Lit
-- [ ] Remplacer les tuples anonymes des quatre capteurs par un type explicite
-- [ ] Tester dans Home Assistant : responsive, thèmes, plusieurs cartes, changement de jour, robustesse
+- [ ] Ajouter des tests de mutation pour vérifier que les tests sont de vrais tests
 
 # Release
 - [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release
