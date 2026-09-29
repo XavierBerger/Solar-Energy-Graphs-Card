@@ -151,24 +151,25 @@ Les quatre capteurs doivent mesurer une puissance avec `device_class: power`,
 `state_class: measurement` et une unité `W` ou `kW`. Import et export utilisent
 des capteurs séparés ; la carte ne déduit pas l'un à partir de l'autre.
 
-La carte utilise l'historique Home Assistant de la journée affichée, dans le
-fuseau configuré. Elle conserve tous les horodatages enregistrés par les
-capteurs sans les agréger par minute ni les sous-échantillonner. Entre deux
-mesures, la dernière valeur connue est maintenue pendant dix minutes au maximum ;
-les valeurs indisponibles ou plus anciennes apparaissent comme des trous.
-L'historique est chargé une fois par jour affiché. Pour le jour courant, les
-nouveaux états des quatre capteurs sont ensuite ajoutés au graphe sans nouvelle
-requête, regroupés par fenêtres de 250 ms ; un jour passé reste figé.
-L'historique est lu par le WebSocket `history/history_during_period`, avec une
-requête par capteur envoyée en parallèle ; chaque capteur est dessiné dès que
-sa réponse arrive et le statut « Loading » reste affiché jusqu'à la dernière.
-Le format compressé du WebSocket (valeur et horodatage numérique par état)
-réduit fortement le volume transféré par rapport à l'API REST, sans perdre de
-point. La requête désactive explicitement le filtre Home Assistant des
-changements « significatifs », afin d'inclure tous les états conservés par le
-Recorder. Elle n'utilise pas non plus `minimal_response`, qui peut fusionner
-des entrées identiques ; `no_attributes` évite seulement de transférer les
-attributs inutiles aux graphiques.
+La carte affiche les statistiques Home Assistant de la journée, dans le fuseau
+configuré : pour chaque capteur, la puissance moyenne (`mean`) de chaque
+intervalle de 5 minutes est tracée en ligne, et une bande pâle couvre sa plage
+`min`–`max`. Chaque point est placé au milieu de son intervalle ; un intervalle
+manquant laisse un trou. Les statistiques sont lues par le WebSocket
+`recorder/statistics_during_period`, converties en W par Home Assistant
+(`units: { power: "W" }`) : environ 288 intervalles par capteur et par jour au
+lieu de milliers d'états bruts.
+
+Home Assistant ne conserve les statistiques 5 minutes que `purge_keep_days`
+jours (10 par défaut). Pour la partie d'un jour plus ancien, la carte utilise
+les statistiques horaires, conservées indéfiniment, avec le même rendu.
+
+Pour le jour courant, la ligne est prolongée après le dernier intervalle
+compilé par les états bruts des 15 dernières minutes, puis par les nouveaux
+états des capteurs (regroupés par fenêtres de 250 ms), sans bande. Entre deux
+états bruts, la dernière valeur connue est maintenue dix minutes au maximum.
+Les statistiques sont rechargées 30 s après chaque frontière de 5 minutes, le
+temps que Home Assistant les compile. Un jour passé reste figé.
 L'autoconsommation directe est estimée comme le minimum entre la production PV
 et la puissance consommée par la charge ; cette formule suppose l'absence de
 batterie. La légende supérieure affiche **Production solaire**,

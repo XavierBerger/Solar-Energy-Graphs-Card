@@ -130,11 +130,18 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   deux graphes sont synchronisés. La normalisation conserve tous les timestamps
   source sans agrégation ni downsampling ; les 43 tests, le typecheck/build
   Podman et la validation visuelle utilisateur sont réussis.
-- [ ] **En cours** — Accélérer le chargement de l'historique (~4 s pour
-  ~9 000 états × 4 capteurs via REST) sans perdre de point : WebSocket
-  `history/history_during_period` au format compressé, une requête par
-  capteur en parallèle, affichage progressif de chaque capteur dès sa réponse.
-  Voir l'étape 9.
+- [x] **Remplacée par l'étape 10** — Accélérer le chargement de l'historique
+  (~4 s pour ~9 000 états × 4 capteurs via REST) sans perdre de point :
+  WebSocket `history/history_during_period` au format compressé, une requête
+  par capteur en parallèle, affichage progressif. Implémentée et commitée
+  (tests/build réussis), non mesurée dans HA ; l'utilisateur a ensuite choisi
+  les statistiques 5 min. Voir l'étape 9.
+- [x] **Validée** — Afficher les statistiques Recorder 5 min : ligne `mean`
+  et bande `min`–`max` sur les quatre capteurs, repli horaire pour les jours
+  purgés, prolongation brute en direct pour le jour courant. Remplace la règle
+  « tous les points » de l'étape 8. Marqueurs de points uPlot désactivés
+  (points blancs sur les intervalles espacés). 71 tests et build Podman
+  réussis, validation visuelle utilisateur reçue. Voir l'étape 10.
 
 La connexion aux capteurs, la navigation journalière et la présentation de la
 légende sont implémentées, testées, déployées et validées visuellement dans
@@ -311,6 +318,34 @@ point, pas leur nombre.
 quatre réponses à l'ancienne requête REST ; vérifier l'apparition progressive
 des courbes, leur identité avec l'affichage précédent (jour courant et jour
 passé), la navigation pendant un chargement et les mises à jour live.
+
+### Étape 10 — Statistiques 5 min : moyenne et bande min/max — Validée
+
+Décision utilisateur : remplacer l'historique brut par les statistiques du
+Recorder (~288 intervalles par capteur et par jour au lieu de ~9 000 états).
+La règle « tous les points » de l'étape 8 est abandonnée.
+
+- **Source.** `recorder/statistics_during_period` avec `types: mean, min, max`
+  et `units: { power: "W" }`, en périodes `5minute` et `hour` envoyées en
+  parallèle. Pour chaque capteur, les intervalles horaires ne comblent que la
+  partie du jour antérieure au premier intervalle 5 min (jours purgés au-delà
+  de `purge_keep_days`, 10 jours par défaut).
+- **Rendu.** Chaque intervalle est placé en son milieu. Les aires existantes
+  (production, autoconsommation, consommation non couverte, export/import)
+  utilisent `mean` ; une bande pâle `min`–`max` est ajoutée pour production,
+  consommation, export et import. Entre deux points, la valeur de
+  l'intervalle qui les contient est maintenue ; un intervalle manquant laisse
+  un trou.
+- **Jour courant.** Après le dernier intervalle clôturé, la ligne est
+  prolongée par les états bruts (15 dernières minutes d'historique puis états
+  live), sans bande. Les statistiques sont rechargées 30 s après chaque
+  frontière de 5 min, le temps que HA les compile.
+- **Statuts.** « Loading » jusqu'à la fin des requêtes ; toute requête en
+  échec est signalée sans retirer les données reçues.
+
+**Validation :** vérifier dans Lovelace la ligne moyenne et les bandes sur les
+deux graphes, un jour passé récent, un jour de plus de 10 jours (horaire), la
+prolongation en direct et le rafraîchissement toutes les 5 min.
 
 ## 6. Règles permanentes
 
