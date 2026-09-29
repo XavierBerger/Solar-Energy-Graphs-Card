@@ -159,7 +159,12 @@ les valeurs indisponibles ou plus anciennes apparaissent comme des trous.
 L'historique est chargé une fois par jour affiché. Pour le jour courant, les
 nouveaux états des quatre capteurs sont ensuite ajoutés au graphe sans nouvelle
 requête, regroupés par fenêtres de 250 ms ; un jour passé reste figé.
-La requête History désactive explicitement le filtre Home Assistant des
+L'historique est lu par le WebSocket `history/history_during_period`, avec une
+requête par capteur envoyée en parallèle ; chaque capteur est dessiné dès que
+sa réponse arrive et le statut « Loading » reste affiché jusqu'à la dernière.
+Le format compressé du WebSocket (valeur et horodatage numérique par état)
+réduit fortement le volume transféré par rapport à l'API REST, sans perdre de
+point. La requête désactive explicitement le filtre Home Assistant des
 changements « significatifs », afin d'inclure tous les états conservés par le
 Recorder. Elle n'utilise pas non plus `minimal_response`, qui peut fusionner
 des entrées identiques ; `no_attributes` évite seulement de transférer les

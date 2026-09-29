@@ -130,6 +130,11 @@ Ajouter les tâches découvertes sans effacer l'historique utile.
   deux graphes sont synchronisés. La normalisation conserve tous les timestamps
   source sans agrégation ni downsampling ; les 43 tests, le typecheck/build
   Podman et la validation visuelle utilisateur sont réussis.
+- [ ] **En cours** — Accélérer le chargement de l'historique (~4 s pour
+  ~9 000 états × 4 capteurs via REST) sans perdre de point : WebSocket
+  `history/history_during_period` au format compressé, une requête par
+  capteur en parallèle, affichage progressif de chaque capteur dès sa réponse.
+  Voir l'étape 9.
 
 La connexion aux capteurs, la navigation journalière et la présentation de la
 légende sont implémentées, testées, déployées et validées visuellement dans
@@ -280,6 +285,32 @@ il est impossible de naviguer dans le futur.
 les deux flèches, l'impossibilité d'aller dans le futur, le changement
 d'historique et la cohérence des graphes. Aucun calendrier ou choix direct
 d'une date n'est attendu dans cette version.
+
+### Étape 9 — Accélérer le chargement de l'historique
+
+Le chargement REST `history/period` des quatre capteurs (~9 000 états chacun)
+prend environ 4 s. L'API History ne sous-échantillonne pas et la règle « tous
+les points » de l'étape 8 reste en vigueur : on réduit le poids de chaque
+point, pas leur nombre.
+
+- **WebSocket compressé.** Remplacer la requête REST par
+  `history/history_during_period` (`significant_changes_only: false`,
+  `minimal_response: false`, `no_attributes: true`, même fenêtre et même
+  baseline de dix minutes). Chaque état arrive sous la forme
+  `{ "s": "1234", "lu": 1759140000.123456 }` (`lc` seulement s'il diffère) au
+  lieu de `entity_id`, `attributes` et deux dates ISO.
+- **Parallèle et progressif.** Une requête par capteur, envoyées ensemble.
+  Chaque réponse est projetée et dessinée dès son arrivée ; les états live
+  reçus pendant le chargement sont conservés s'ils sont plus récents que
+  l'historique. Le statut « Loading » reste affiché tant qu'une requête est en
+  attente ; une erreur n'est signalée qu'une fois toutes les requêtes
+  terminées, sans retirer les capteurs déjà reçus. Les réponses obsolètes
+  restent ignorées.
+
+**Validation :** dans DevTools → Network → WS, comparer taille et durée des
+quatre réponses à l'ancienne requête REST ; vérifier l'apparition progressive
+des courbes, leur identité avec l'affichage précédent (jour courant et jour
+passé), la navigation pendant un chargement et les mises à jour live.
 
 ## 6. Règles permanentes
 
