@@ -1,30 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildHistoryApiPath,
+  buildHistoryRequest,
   getEnergyUnitScales,
   getLocalDateString,
   getLocalDayWindow,
   getLocalDayWindowForDate,
+  historyStatesOf,
   mergeLiveEnergySamples,
   normalizeEnergyHistory,
+  parseCompressedPowerSamples,
   parseEnergyHistory,
+  parsePowerState,
   projectEnergyHistory,
+  replaceSensorHistory,
   shiftLocalDate,
-  type HomeAssistantHistoryState,
+  type HistoryDuringPeriodResponse,
+  type HomeAssistantCompressedState,
 } from "./home-assistant-energy-history";
 
-const SENSOR_IDS = [
-  "sensor.solar",
-  "sensor.consumption",
-  "sensor.grid_import",
-  "sensor.grid_export",
-] as const;
-
-function state(timestamp: number, value: number | string): HomeAssistantHistoryState {
-  return {
-    state: String(value),
-    last_changed: new Date(timestamp * 1000).toISOString(),
-  };
+function state(
+  timestamp: number,
+  value: number | string,
+): HomeAssistantCompressedState {
+  return { s: String(value), lu: timestamp };
 }
 
 describe("Home Assistant energy history", () => {
@@ -177,20 +175,115 @@ describe("Home Assistant energy history", () => {
     ]);
   });
 
-  // Requests every recorded state for four entities with a baseline before midnight.
-  it("builds an unfiltered Home Assistant history API request", () => {
+  // Requests every recorded state of one entity with a baseline before midnight.
+  it("builds an unfiltered WebSocket history request", () => {
     const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
-    const path = buildHistoryApiPath(SENSOR_IDS, window, 2000);
-    const [encodedStart, query] = path.slice("history/period/".length).split("?");
-    const params = new URLSearchParams(query);
 
-    expect(decodeURIComponent(encodedStart)).toBe(
-      new Date((window.start - 10 * 60) * 1000).toISOString(),
+    const request = buildHistoryRequest("sensor.solar", window, 2000);
+
+    expect(request).toEqual({
+      type: "history/history_during_period",
+      start_time: new Date((window.start - 10 * 60) * 1000).toISOString(),
+      end_time: new Date(2000 * 1000).toISOString(),
+      entity_ids: ["sensor.solar"],
+      include_start_time_state: true,
+      significant_changes_only: false,
+      minimal_response: false,
+      no_attributes: true,
+    });
+  });
+
+  // Stops a past-day request at midnight instead of the current time.
+  it("ends a past-day history request at the end of the day", () => {
+    const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
+
+    const request = buildHistoryRequest("sensor.solar", window, window.end + 5000);
+
+    expect(request.end_time).toBe(new Date(window.end * 1000).toISOString());
+  });
+
+  // Treats an entity absent from the response as a sensor without history.
+  it("reads the states of one entity from a history response", () => {
+    const response: HistoryDuringPeriodResponse = {
+      "sensor.solar": [state(10, 500)],
+    };
+
+    expect(historyStatesOf(response, "sensor.solar")).toEqual([state(10, 500)]);
+    expect(historyStatesOf({}, "sensor.solar")).toEqual([]);
+  });
+
+  // Rejects a malformed response instead of drawing an empty history.
+  it("rejects an invalid history response", () => {
+    const invalid = {
+      "sensor.solar": "not a list",
+    } as unknown as HistoryDuringPeriodResponse;
+
+    expect(() => historyStatesOf(invalid, "sensor.solar")).toThrow(
+      "Home Assistant returned an invalid history response.",
     );
-    expect(params.get("filter_entity_id")).toBe(SENSOR_IDS.join(","));
-    expect(params.get("end_time")).toBe(new Date(2000 * 1000).toISOString());
-    expect(params.get("no_attributes")).toBe("1");
-    expect(params.get("significant_changes_only")).toBe("0");
+    expect(() =>
+      historyStatesOf(null as unknown as HistoryDuringPeriodResponse, "sensor.solar"),
+    ).toThrow("Home Assistant returned an invalid history response.");
+  });
+
+  // Parses compressed states into sorted watt samples, one per timestamp.
+  it("parses compressed recorder states", () => {
+    const history: HomeAssistantCompressedState[] = [
+      { s: "2", lu: 30 },
+      { s: "unavailable", lu: 20 },
+      { s: "1.5", lc: 10 },
+      { s: "3", lu: 30 },
+      { s: "4" },
+    ];
+
+    const samples = parseCompressedPowerSamples(history, 1000);
+
+    expect(samples).toEqual([
+      { timestamp: 10, value: 1500 },
+      { timestamp: 20, value: null },
+      { timestamp: 30, value: 2000 },
+    ]);
+  });
+
+  // Uses the update time when a compressed state also carries its change time.
+  it("prefers the last update over the last change of a compressed state", () => {
+    const samples = parseCompressedPowerSamples([{ s: "5", lu: 20, lc: 10 }], 1);
+
+    expect(samples).toEqual([{ timestamp: 20, value: 5 }]);
+  });
+
+  // Keeps sub-millisecond precision from live ISO timestamps.
+  it("parses live states with sub-millisecond timestamps", () => {
+    const sample = parsePowerState(
+      { state: "0.5", last_updated: "1970-01-12T13:47:05.123456Z" },
+      1000,
+    );
+
+    expect(sample?.timestamp).toBeCloseTo(1_000_025.123456, 6);
+    expect(sample?.value).toBe(500);
+  });
+
+  // Keeps live samples merged during loading only when newer than the history.
+  it("replaces one sensor history and keeps newer live samples", () => {
+    const loading = mergeLiveEnergySamples(
+      [[], [], [], []],
+      [
+        { sensor: 1, timestamp: 20, value: 100 },
+        { sensor: 1, timestamp: 40, value: 200 },
+      ],
+    );
+
+    const samples = replaceSensorHistory(loading, 1, [
+      { timestamp: 10, value: 50 },
+      { timestamp: 20, value: 100 },
+    ]);
+
+    expect(samples[1]).toEqual([
+      { timestamp: 10, value: 50 },
+      { timestamp: 20, value: 100 },
+      { timestamp: 40, value: 200 },
+    ]);
+    expect(samples[0]).toBe(loading[0]);
   });
 
   // Adds a live sample at its own timestamp and keeps the other sensors' last values.
@@ -418,14 +511,8 @@ describe("Home Assistant energy history", () => {
     const data = normalizeEnergyHistory(
       [
         [
-          {
-            state: "500",
-            last_updated: "1970-01-12T13:47:05.123456Z",
-          },
-          {
-            state: "500",
-            last_updated: "1970-01-12T13:47:05.123789Z",
-          },
+          state(start + 5.123456, 500),
+          state(start + 5.123789, 500),
         ],
         [],
         [],

@@ -7,6 +7,30 @@ export interface HomeAssistantHistoryState {
   last_updated?: string;
 }
 
+/** Recorder state in the WebSocket compressed format, timestamps in seconds. */
+export interface HomeAssistantCompressedState {
+  s: string;
+  lu?: number;
+  lc?: number;
+}
+
+/** Response of `history/history_during_period`, keyed by entity ID. */
+export type HistoryDuringPeriodResponse = Record<
+  string,
+  readonly HomeAssistantCompressedState[] | undefined
+>;
+
+export interface HistoryDuringPeriodMessage {
+  type: "history/history_during_period";
+  start_time: string;
+  end_time: string;
+  entity_ids: [string];
+  include_start_time_state: true;
+  significant_changes_only: false;
+  minimal_response: false;
+  no_attributes: true;
+}
+
 export interface EnergySensorMetadata {
   unit_of_measurement?: string;
   device_class?: string;
@@ -105,22 +129,43 @@ export function getLocalDayWindowForDate(
   return { start, end };
 }
 
-export function buildHistoryApiPath(
-  entityIds: readonly [string, string, string, string],
+/**
+ * Builds the WebSocket history request of one sensor. Every recorded state is
+ * requested: `minimal_response` would drop repeated values and the
+ * significant-changes filter would drop other states.
+ */
+export function buildHistoryRequest(
+  entityId: string,
   window: LocalDayWindow,
   now: number,
-): string {
-  const start = new Date(
-    (window.start - HISTORY_BASELINE_SECONDS) * 1000,
-  ).toISOString();
-  const end = new Date(Math.min(now, window.end) * 1000).toISOString();
-  const query = new URLSearchParams({
-    filter_entity_id: entityIds.join(","),
-    end_time: end,
-    no_attributes: "1",
-    significant_changes_only: "0",
-  });
-  return `history/period/${encodeURIComponent(start)}?${query.toString()}`;
+): HistoryDuringPeriodMessage {
+  return {
+    type: "history/history_during_period",
+    start_time: new Date(
+      (window.start - HISTORY_BASELINE_SECONDS) * 1000,
+    ).toISOString(),
+    end_time: new Date(Math.min(now, window.end) * 1000).toISOString(),
+    entity_ids: [entityId],
+    include_start_time_state: true,
+    significant_changes_only: false,
+    minimal_response: false,
+    no_attributes: true,
+  };
+}
+
+/** Extracts the states of `entityId`; Home Assistant omits entities without history. */
+export function historyStatesOf(
+  response: HistoryDuringPeriodResponse,
+  entityId: string,
+): readonly HomeAssistantCompressedState[] {
+  if (typeof response !== "object" || response === null) {
+    throw new Error("Home Assistant returned an invalid history response.");
+  }
+  const states = response[entityId] ?? [];
+  if (!Array.isArray(states)) {
+    throw new Error("Home Assistant returned an invalid history response.");
+  }
+  return states;
 }
 
 export function getEnergyUnitScales(
@@ -142,7 +187,7 @@ export function getEnergyUnitScales(
 }
 
 export function normalizeEnergyHistory(
-  history: readonly (readonly HomeAssistantHistoryState[])[],
+  history: readonly (readonly HomeAssistantCompressedState[])[],
   window: LocalDayWindow,
   now: number,
   unitScales: EnergyUnitScales = WATT_UNIT_SCALES,
@@ -151,7 +196,7 @@ export function normalizeEnergyHistory(
 }
 
 export function parseEnergyHistory(
-  history: readonly (readonly HomeAssistantHistoryState[])[],
+  history: readonly (readonly HomeAssistantCompressedState[])[],
   unitScales: EnergyUnitScales = WATT_UNIT_SCALES,
 ): EnergyPowerSamples {
   if (history.length !== 4) {
@@ -159,10 +204,10 @@ export function parseEnergyHistory(
   }
 
   return [
-    parsePowerSamples(history[0], unitScales.productionToW),
-    parsePowerSamples(history[1], unitScales.consumptionToW),
-    parsePowerSamples(history[2], unitScales.gridImportToW),
-    parsePowerSamples(history[3], unitScales.gridExportToW),
+    parseCompressedPowerSamples(history[0], unitScales.productionToW),
+    parseCompressedPowerSamples(history[1], unitScales.consumptionToW),
+    parseCompressedPowerSamples(history[2], unitScales.gridImportToW),
+    parseCompressedPowerSamples(history[3], unitScales.gridExportToW),
   ];
 }
 
@@ -204,6 +249,29 @@ export function mergeLiveEnergySamples(
     changed = true;
   }
   return changed ? merged : samples;
+}
+
+/**
+ * Sets the recorded history of one sensor, keeping the live samples merged
+ * while it was loading when they are newer than its last recorded state.
+ */
+export function replaceSensorHistory(
+  samples: EnergyPowerSamples,
+  sensor: LivePowerSample["sensor"],
+  history: readonly NumericSample[],
+): EnergyPowerSamples {
+  const lastRecorded = history.at(-1)?.timestamp ?? Number.NEGATIVE_INFINITY;
+  const replaced = [...samples] as [
+    readonly NumericSample[],
+    readonly NumericSample[],
+    readonly NumericSample[],
+    readonly NumericSample[],
+  ];
+  replaced[sensor] = [
+    ...history,
+    ...samples[sensor].filter((sample) => sample.timestamp > lastRecorded),
+  ];
+  return replaced;
 }
 
 /** Projects raw samples onto the uPlot series of both charts, up to `now`. */
@@ -385,7 +453,7 @@ function powerUnitScale(
   return metadata.unit_of_measurement === "kW" ? 1000 : 1;
 }
 
-/** Parses one recorded or live state; undefined when it has no usable timestamp. */
+/** Parses one live state; undefined when it has no usable timestamp. */
 export function parsePowerState(
   state: HomeAssistantHistoryState,
   unitScale: number,
@@ -393,19 +461,21 @@ export function parsePowerState(
   const timestamp = parseTimestampSeconds(
     state.last_updated ?? state.last_changed ?? "",
   );
-  const value = state.state.trim() ? Number(state.state) : Number.NaN;
   return Number.isFinite(timestamp)
-    ? { timestamp, value: Number.isFinite(value) ? value * unitScale : null }
+    ? { timestamp, value: parsePowerValue(state.state, unitScale) }
     : undefined;
 }
 
-function parsePowerSamples(
-  history: readonly HomeAssistantHistoryState[],
+/** Parses recorded states, sorted and with one sample per timestamp. */
+export function parseCompressedPowerSamples(
+  history: readonly HomeAssistantCompressedState[],
   unitScale: number,
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
-    const sample = parsePowerState(state, unitScale);
-    return sample ? [sample] : [];
+    const timestamp = state.lu ?? state.lc;
+    return typeof timestamp === "number" && Number.isFinite(timestamp)
+      ? [{ timestamp, value: parsePowerValue(state.s, unitScale) }]
+      : [];
   });
 
   samples.sort((first, second) => first.timestamp - second.timestamp);
@@ -413,6 +483,11 @@ function parsePowerSamples(
     (sample, index) =>
       index === 0 || sample.timestamp !== samples[index - 1].timestamp,
   );
+}
+
+function parsePowerValue(state: string, unitScale: number): number | null {
+  const value = state.trim() ? Number(state) : Number.NaN;
+  return Number.isFinite(value) ? value * unitScale : null;
 }
 
 function parseTimestampSeconds(value: string): number {
