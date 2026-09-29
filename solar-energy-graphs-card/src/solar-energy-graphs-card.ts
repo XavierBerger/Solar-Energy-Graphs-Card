@@ -899,7 +899,7 @@ async function fetchStatistics(
   return [production, consumption, gridImport, gridExport];
 }
 
-function hasHigherPrecisionSamples(
+export function hasHigherPrecisionSamples(
   samples: EnergyPowerSamples,
   statistics: EnergyStatistics,
 ): boolean {
