@@ -1,0 +1,34 @@
+sequenceDiagram
+  autonumber
+  participant L as Lovelace
+  participant C as SolarEnergyGraphsCard
+  participant H as home-assistant-energy-history
+  participant WS as HA WebSocket
+  participant R as EnergyChartsRenderer
+
+  L->>C: setConfig(config)
+  Note over C: validate the 4 entity IDs<br/>reset model, bump historyRequestId
+  L->>C: set hass(hass)
+  C->>C: loadHistoryWhenNeeded()
+  Note over C: loadKey = timeZone:day:entities<br/>same key -> nothing to do
+  C->>H: getEnergyUnitScales(sensor attributes)
+  H-->>C: W or kW factor per sensor (or error)
+  par fetchHistory -- Promise.allSettled
+    C->>WS: statistics 5minute + hour
+    WS-->>C: mean / min / max rows
+  and today only
+    C->>WS: history, last 15 min
+    WS-->>C: compressed raw states
+  end
+  Note over C: response dropped if historyRequestId changed
+  C->>H: combineStatistics, parseCompressedPowerSamples,<br/>replaceSensorHistory
+  C->>H: projectEnergyHistory(samples, window, now, statistics)
+  H-->>C: EnergyHistoryResponse
+  alt first data
+    C->>R: new EnergyChartsRenderer(containers, legends, data)
+  else charts exist
+    C->>R: updateData(data)
+  end
+  L->>C: disconnectedCallback()
+  C->>R: destroy()
+  Note over C: timers cancelled, pending requests ignored

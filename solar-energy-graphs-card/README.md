@@ -217,3 +217,9 @@ affiché. Le tableau de bord principal n'est pas modifié.
 Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
 ressource Lovelace et, si vous le souhaitez, supprimez le fichier
 `www/solar-energy-graphs-card.js`.
+
+## Développement
+
+L'architecture de la carte et l'environnement de développement sont décrits
+dans [`docs/architecture.md`](docs/architecture.md)
+(en anglais).

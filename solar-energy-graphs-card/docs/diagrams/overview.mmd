@@ -1,0 +1,35 @@
+flowchart TB
+  subgraph HA["Home Assistant frontend"]
+    direction LR
+    hass(["hass object<br/>states, config.time_zone, themes"])
+    ws[("WebSocket API<br/>recorder/statistics_during_period<br/>history/history_during_period")]
+  end
+
+  subgraph CARD["solar-energy-graphs-card.js -- one ES module"]
+    direction LR
+    el["SolarEnergyGraphsCard<br/>Lit element, orchestrates"]
+    model["home-assistant-energy-history.ts<br/>pure functions: parse, merge, project"]
+    rend["EnergyChartsRenderer<br/>owns the two uPlot charts"]
+    model -- "EnergyHistoryResponse" --> el
+    el -- "updateData()" --> rend
+  end
+
+  subgraph DOM["Card shadow DOM"]
+    direction LR
+    c1["Chart 1<br/>Solar Production and Consumption"]
+    c2["Chart 2<br/>Grid Exchange"]
+    c1 <-. "uPlot.sync: cursor + x zoom" .-> c2
+  end
+
+  hass -- "set hass, on every state push" --> el
+  el <-- "callWS()" --> ws
+  el -- "raw rows" --> model
+  rend --> c1
+  rend --> c2
+
+  classDef ha fill:#e8f0fe,stroke:#3b82f6,color:#1f2937
+  classDef logic fill:#e3f2df,stroke:#4b9a42,color:#1f2937
+  classDef view fill:#fdf6d3,stroke:#cc9d00,color:#1f2937
+  class hass,ws ha
+  class el,model,rend logic
+  class c1,c2 view

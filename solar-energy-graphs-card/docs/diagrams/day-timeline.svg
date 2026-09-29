@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" width="1000" height="600" font-family="Noto Sans, sans-serif" font-size="14" fill="#1f2937">
+  <!-- Where each point of a sensor comes from, for today at 15:07:10. -->
+  <rect width="1000" height="600" fill="#ffffff"/>
+  <text x="80" y="34" font-size="17" font-weight="600">Today, seen at 15:07:10 -- one sensor</text>
+  <rect x="80.0" y="56" width="527.9" height="30" fill="#dbeafe" stroke="#3b82f6"/>
+  <rect x="607.9" y="56" width="1.3" height="30" fill="#a2d49b" stroke="#4b9a42"/>
+  <rect x="609.2" y="56" width="310.8" height="30" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="344.0" y="76" text-anchor="middle">statistics: 5-minute (hourly where purged)</text>
+  <text x="764.6" y="76" text-anchor="middle" fill="#6b7280">null -- nothing drawn after now</text>
+  <text x="80.0" y="104" text-anchor="middle" font-size="12" fill="#6b7280">00:00</text>
+  <text x="500.0" y="104" text-anchor="middle" font-size="12" fill="#6b7280">12:00</text>
+  <text x="920.0" y="104" text-anchor="middle" font-size="12" fill="#6b7280">24:00</text>
+  <path d="M587.5,86 L80,150 M610.8,86 L920,150" stroke="#9ca3af" stroke-dasharray="4 3" fill="none"/>
+  <rect x="587.5" y="52" width="23.3" height="38" fill="none" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="80" y="138" font-size="12" fill="#6b7280">zoom 14:30 -- 15:10</text>
+  <rect x="80" y="150" width="840" height="360" fill="#fafafa" stroke="#e5e7eb"/>
+  <line x1="80.0" y1="150" x2="80.0" y2="510" stroke="#e5e7eb"/>
+  <line x1="185.0" y1="150" x2="185.0" y2="510" stroke="#e5e7eb"/>
+  <line x1="290.0" y1="150" x2="290.0" y2="510" stroke="#e5e7eb"/>
+  <line x1="395.0" y1="150" x2="395.0" y2="510" stroke="#e5e7eb"/>
+  <line x1="500.0" y1="150" x2="500.0" y2="510" stroke="#e5e7eb"/>
+  <line x1="605.0" y1="150" x2="605.0" y2="510" stroke="#e5e7eb"/>
+  <line x1="710.0" y1="150" x2="710.0" y2="510" stroke="#e5e7eb"/>
+  <rect x="815.0" y="150" width="45.5" height="360" fill="#e3f2df"/>
+  <rect x="860.5" y="150" width="59.5" height="360" fill="#f3f4f6"/>
+  <polygon points="132.5,385.0 237.5,351.0 342.5,376.5 447.5,334.0 552.5,359.5 657.5,325.5 762.5,334.0 762.5,402.0 657.5,393.5 552.5,419.0 447.5,410.5 342.5,436.0 237.5,427.5 132.5,444.5" fill="rgba(59, 130, 246, 0.2)"/>
+  <polyline points="132.5,419.0 237.5,393.5 342.5,410.5 447.5,376.5 552.5,385.0 657.5,359.5 762.5,368.0" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+  <polyline points="762.5,368.0 815.0,363.8 832.5,346.8 846.5,372.2 860.5,372.2" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+  <circle cx="132.5" cy="419.0" r="4" fill="#3b82f6"/>
+  <circle cx="237.5" cy="393.5" r="4" fill="#3b82f6"/>
+  <circle cx="342.5" cy="410.5" r="4" fill="#3b82f6"/>
+  <circle cx="447.5" cy="376.5" r="4" fill="#3b82f6"/>
+  <circle cx="552.5" cy="385.0" r="4" fill="#3b82f6"/>
+  <circle cx="657.5" cy="359.5" r="4" fill="#3b82f6"/>
+  <circle cx="762.5" cy="368.0" r="4" fill="#3b82f6"/>
+  <circle cx="808.0" cy="363.8" r="4.5" fill="#ffffff" stroke="#9ca3af" stroke-width="2" stroke-dasharray="2 2"/>
+  <circle cx="815.0" cy="363.8" r="3" fill="#4b9a42"/>
+  <circle cx="832.5" cy="346.8" r="4.5" fill="#ffffff" stroke="#4b9a42" stroke-width="2"/>
+  <circle cx="846.5" cy="372.2" r="4.5" fill="#ffffff" stroke="#4b9a42" stroke-width="2"/>
+  <line x1="815.0" y1="150" x2="815.0" y2="510" stroke="#1f2937" stroke-dasharray="5 4"/>
+  <text x="809.0" y="170" text-anchor="end" font-weight="600">rawStart</text>
+  <line x1="860.5" y1="150" x2="860.5" y2="510" stroke="#1f2937" stroke-dasharray="5 4"/>
+  <text x="866.5" y="170" text-anchor="start" font-weight="600">now</text>
+  <text x="101.0" y="195" font-size="13">one point per interval, at its midpoint: mean</text>
+  <text x="101.0" y="213" font-size="13">pale band: min -- max of the interval</text>
+  <text x="101.0" y="231" font-size="13" fill="#6b7280">a missing interval leaves a gap</text>
+  <text x="821.0" y="490" font-size="12" fill="#1f2937">raw states,</text>
+  <text x="821.0" y="504" font-size="12" fill="#1f2937">no band</text>
+  <path d="M545.5,528 v8 H860.5 v-8" fill="none" stroke="#4b9a42" stroke-width="1.5"/>
+  <text x="80" y="554" font-size="13">history/history_during_period: now - 15 min .. now, then live states from hass</text>
+  <text x="80" y="572" font-size="12" fill="#6b7280">only states after rawStart are drawn; the latest one before it seeds the line</text>
+  <text x="80" y="594" font-size="12" fill="#6b7280">A raw value is carried forward for 10 min at most (MAX_POWER_STALENESS_SECONDS), then the line breaks.</text>
+  <circle cx="90" cy="308.5" r="4" fill="#3b82f6"/><text x="100" y="312.5" font-size="12">statistics mean</text>
+  <circle cx="210" cy="308.5" r="4.5" fill="#fff" stroke="#4b9a42" stroke-width="2"/><text x="220" y="312.5" font-size="12">raw state</text><circle cx="310" cy="308.5" r="4.5" fill="#fff" stroke="#9ca3af" stroke-width="2" stroke-dasharray="2 2"/><text x="320" y="312.5" font-size="12">seed state before rawStart, not drawn</text>
+</svg>

@@ -1,0 +1,41 @@
+flowchart TB
+  subgraph STATS["Statistics branch -- every day"]
+    direction TB
+    s5["5-minute statistics rows<br/>start/end in ms, mean/min/max in W"]
+    sh["Hourly statistics rows<br/>kept forever by the recorder"]
+    psr["parseStatisticRows<br/>ms to s, non-finite to null, sorted"]
+    comb["combineStatistics<br/>hourly rows only before the first 5-minute one"]
+    stats[/"EnergyStatistics<br/>4 x StatisticSample[]"/]
+    s5 --> psr
+    sh --> psr
+    psr --> comb --> stats
+  end
+
+  subgraph RAW["Raw branch -- today only"]
+    direction TB
+    attrs["Sensor attributes<br/>unit, device_class, state_class"]
+    scales["getEnergyUnitScales<br/>W = 1, kW = 1000, else error"]
+    raw["Compressed raw states, last 15 min<br/>s, lu, lc in seconds"]
+    live["hass.states<br/>state, last_updated"]
+    pcps["parseCompressedPowerSamples<br/>+ replaceSensorHistory"]
+    pps["parsePowerState<br/>+ mergeLiveEnergySamples"]
+    samples[/"EnergyPowerSamples<br/>4 x NumericSample[] in W"/]
+    attrs --> scales
+    scales -. "factor" .-> pcps
+    scales -. "factor" .-> pps
+    raw --> pcps --> samples
+    live --> pps --> samples
+  end
+
+  proj["projectEnergyHistory(samples, window, now, statistics)"]
+  out[/"EnergyHistoryResponse<br/>mainData: 14 columns, gridData: 7 columns<br/>hasProduction, hasConsumption, hasGridImport, hasGridExport"/]
+  stats --> proj
+  samples --> proj
+  proj --> out
+
+  classDef input fill:#e8f0fe,stroke:#3b82f6,color:#1f2937
+  classDef fn fill:#e3f2df,stroke:#4b9a42,color:#1f2937
+  classDef data fill:#fdf6d3,stroke:#cc9d00,color:#1f2937
+  class s5,sh,attrs,raw,live input
+  class psr,comb,scales,pcps,pps,proj fn
+  class stats,samples,out data
