@@ -6,7 +6,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { SolarEnergyGraphsCard } from "./solar-energy-graphs-card";
+import { hasHigherPrecisionSamples, SolarEnergyGraphsCard } from "./solar-energy-graphs-card";
 import {
   getLocalDateString,
   getLocalDayWindowForDate,
