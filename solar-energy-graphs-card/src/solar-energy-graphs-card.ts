@@ -145,6 +145,22 @@ export class SolarEnergyGraphsCard extends LitElement {
       font-size: var(--ha-font-size-m, 1rem);
       font-weight: var(--ha-font-weight-medium, 500);
       text-align: center;
+      white-space: nowrap;
+    }
+
+    .day-navigation .selected-day {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      padding: 0.5rem;
+      width: 75%
+    }
+
+    .day-navigation .selected-day:focus-visible {
+      border-radius: 0.25rem;
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
     }
 
     .day-navigation button {
@@ -338,9 +354,17 @@ export class SolarEnergyGraphsCard extends LitElement {
           >
             <span aria-hidden="true">←</span>
           </button>
-          <time datetime=${this.selectedDay ?? ""} aria-live="polite">
-            ${this.formatSelectedDay()}
-          </time>
+          <button
+            type="button"
+            class="selected-day"
+            aria-label="Return to today"
+            title="Return to today"
+            @click=${this.showToday}
+          >
+            <time datetime=${this.selectedDay ?? ""} aria-live="polite">
+              ${this.formatSelectedDay()}
+            </time>
+          </button>
           <button
             type="button"
             aria-label="Next day"
@@ -699,9 +723,23 @@ export class SolarEnergyGraphsCard extends LitElement {
       !this.selectedDay ||
       !hass ||
       this.selectedDay >=
-        getLocalDateString(new Date(), hass.config.time_zone)
+      getLocalDateString(new Date(), hass.config.time_zone)
     );
   }
+
+  private showToday = (): void => {
+    const hass = this.hassContext;
+    if (!hass) {
+      return;
+    }
+    const today = getLocalDateString(new Date(), hass.config.time_zone);
+    if (this.selectedDay === today) {
+      return;
+    }
+    this.selectedDay = today;
+    this.requestUpdate();
+    this.loadHistoryWhenNeeded(hass);
+  };
 
   private showAdjacentDay(days: -1 | 1): () => void {
     return () => {
