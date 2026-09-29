@@ -182,9 +182,9 @@ describe("SolarEnergyGraphsCard", () => {
   it("detects higher precision history", () => {
     expect(hasHigherPrecisionSamples(
       [[{ timestamp: 1, value: 1 }, { timestamp: 1.5, value: 2 }], [], [], []],
-      [[statistic(0, 1, 1, 1)], [], [], []],
+      [[{ start: 0, end: 60, mean: 1, min: 1, max: 1 }], [], [], []],
     )).toBe(true);
-    expect(hasHigherPrecisionSamples([[], [], [], []], [[statistic(0, 1, 1, 1)], [], [], []])).toBe(false);
+    expect(hasHigherPrecisionSamples([[], [], [], []], [[{ start: 0, end: 60, mean: 1, min: 1, max: 1 }], [], [], []])).toBe(false);
   });
 
   let card: SolarEnergyGraphsCard;
