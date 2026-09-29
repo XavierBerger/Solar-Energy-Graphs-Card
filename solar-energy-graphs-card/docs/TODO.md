@@ -20,7 +20,7 @@
 - [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release
 
 # Nouvelles fonctionnalités
-- [ ] CLiquer sur la date pour revenir au jour courant
+- [x] Cliquer sur la date pour revenir au jour courant
 - [ ] Si des données plus précises sont disponibles, ajouter un bouton haute précision et les charger sur clique
 - [ ] Ne pas changer le zoom quand de nouvelles données arrivent
 - [ ] zoomer sur l'axe temporelle avec le molette. 
