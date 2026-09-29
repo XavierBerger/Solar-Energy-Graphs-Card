@@ -350,6 +350,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     return html`
       <ha-card>
         <nav class="day-navigation" aria-label="Day navigation">
+          ${this.renderPrecisionButton()}
           <button
             type="button"
             aria-label="Previous day"
@@ -560,6 +561,9 @@ export class SolarEnergyGraphsCard extends LitElement {
       samples,
       loading: false,
       loadError,
+      precision: current.precision,
+      highPrecisionAvailable:
+        current.highPrecisionAvailable ?? hasHigherPrecisionSamples(samples, current.statistics),
     };
     this.showCurrentModel();
     if (today) {
@@ -631,9 +635,108 @@ export class SolarEnergyGraphsCard extends LitElement {
           model.samples,
           model.window,
           Date.now() / 1000,
-          model.statistics,
+          model.precision === "raw" ? NO_STATISTICS : model.statistics,
         ),
       );
+    }
+  }
+
+  private renderPrecisionButton() {
+    const model = this.historyModel;
+    if (model?.highPrecisionAvailable === false) {
+      return html``;
+    }
+    const highPrecision = model?.precision === "raw";
+    return html`
+      <button
+        type="button"
+        aria-label=${highPrecision ? "Use standard precision" : "Load high precision"}
+        title=${highPrecision ? "Standard precision" : "High precision"}
+        ?disabled=${model?.loading === true}
+        @click=${this.togglePrecision}
+      >
+        <span aria-hidden="true">${highPrecision ? "▤" : "≋"}</span>
+      </button>
+    `;
+  }
+
+  private togglePrecision = (): void => {
+    const hass = this.hassContext;
+    const model = this.historyModel;
+    const config = this.config;
+    if (!hass || !model || !config || model.loading) {
+      return;
+    }
+    if (model.precision === "raw") {
+      this.historyModel = { ...model, precision: "statistics" };
+      this.showCurrentModel();
+      return;
+    }
+    void this.loadHighPrecision(hass, config, model);
+  };
+
+  private async loadHighPrecision(
+    hass: HomeAssistantThemeContext,
+    config: SolarEnergyGraphsCardConfig,
+    model: NonNullable<SolarEnergyGraphsCard["historyModel"]>,
+  ): Promise<void> {
+    const requestId = ++this.historyRequestId;
+    this.historyModel = { ...model, loading: true, loadError: undefined };
+    this.mainStatus = LOADING_STATUS;
+    this.gridStatus = LOADING_STATUS;
+    this.requestUpdate();
+
+    try {
+      const now = Date.now() / 1000;
+      const end = Math.min(now, model.window.end);
+      const response = await hass.callWS(
+        buildHistoryRequest(configuredEntityIds(config), model.window.start, end),
+      );
+      const current = this.historyModel;
+      if (!this.isConnected || requestId !== this.historyRequestId || !current) {
+        return;
+      }
+      const scales = sensorUnitScales(current.unitScales);
+      let samples = [[], [], [], []] as EnergyPowerSamples;
+      configuredEntityIds(config).forEach((entityId, sensor) => {
+        samples = replaceSensorHistory(
+          samples,
+          sensor as LivePowerSample["sensor"],
+          parseCompressedPowerSamples(
+            entityRowsOf(response, entityId),
+            scales[sensor],
+          ),
+        );
+      });
+      if (!hasHigherPrecisionSamples(samples, current.statistics)) {
+        this.historyModel = {
+          ...current,
+          loading: false,
+          highPrecisionAvailable: false,
+          precision: "statistics",
+        };
+        this.showCurrentModel();
+        return;
+      }
+      this.historyModel = {
+        ...current,
+        samples,
+        loading: false,
+        precision: "raw",
+        highPrecisionAvailable: true,
+      };
+      this.showCurrentModel();
+    } catch (error) {
+      const current = this.historyModel;
+      if (!this.isConnected || requestId !== this.historyRequestId || !current) {
+        return;
+      }
+      this.historyModel = {
+        ...current,
+        loading: false,
+        loadError: errorMessage(error),
+      };
+      this.showCurrentModel();
     }
   }
 
@@ -794,6 +897,15 @@ async function fetchStatistics(
       ),
   );
   return [production, consumption, gridImport, gridExport];
+}
+
+function hasHigherPrecisionSamples(
+  samples: EnergyPowerSamples,
+  statistics: EnergyStatistics,
+): boolean {
+  const statisticsPoints = statistics.reduce((total, series) => total + series.length, 0);
+  const rawPoints = samples.reduce((total, series) => total + series.length, 0);
+  return rawPoints > statisticsPoints;
 }
 
 function errorMessage(error: unknown): string {
