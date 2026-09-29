@@ -178,7 +178,7 @@ async function flushHistoryResponse(): Promise<void> {
 
 describe("SolarEnergyGraphsCard", () => {
 
-  // Detects raw history only when it contains more points than statistics.
+  // Detects raw history only when its sampling interval is finer than statistics.
   it("detects higher precision history", () => {
     expect(hasHigherPrecisionSamples(
       [[{ timestamp: 1, value: 1 }, { timestamp: 1.5, value: 2 }], [], [], []],
