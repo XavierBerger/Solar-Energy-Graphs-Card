@@ -41,6 +41,8 @@ const STATISTICS_REFRESH_DELAY_SECONDS = 30;
 // Raw states cover the current day after its last compiled interval.
 const RAW_TAIL_SECONDS = 15 * 60;
 
+type HistoryPrecision = "statistics" | "raw";
+
 interface SolarEnergyGraphsCardConfig {
   type: string;
   entities: {
@@ -87,6 +89,8 @@ export class SolarEnergyGraphsCard extends LitElement {
     unitScales: EnergyUnitScales;
     loading: boolean;
     loadError?: string;
+    precision: HistoryPrecision;
+    highPrecisionAvailable?: boolean;
   };
   private historyLoadKey = "";
   private historyRequestId = 0;
@@ -498,6 +502,8 @@ export class SolarEnergyGraphsCard extends LitElement {
       window: dayWindow,
       unitScales,
       loading: true,
+      precision: "statistics",
+      highPrecisionAvailable: undefined,
     };
     void this.fetchHistory(hass, entityIds, requestId);
   }
