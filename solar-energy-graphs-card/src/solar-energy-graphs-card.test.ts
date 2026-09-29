@@ -14,6 +14,8 @@ import {
   type EnergyHistoryResponse,
   type HistoryDuringPeriodMessage,
   type HistoryDuringPeriodResponse,
+  type StatisticsDuringPeriodMessage,
+  type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
 
 const { rendererInstances } = vi.hoisted(() => ({
@@ -59,9 +61,17 @@ const CARD_CONFIG = {
 
 const SENSOR_IDS = Object.values(CARD_CONFIG.entities);
 
-type HistoryApi = (
-  message: HistoryDuringPeriodMessage,
-) => Promise<HistoryDuringPeriodResponse>;
+type WebSocketMessage = HistoryDuringPeriodMessage | StatisticsDuringPeriodMessage;
+type WebSocketResponse = HistoryDuringPeriodResponse | StatisticsDuringPeriodResponse;
+// Returns `any` to satisfy the overloaded callWS of the card context.
+type HistoryApi = (message: WebSocketMessage) => Promise<any>;
+
+/** Names a request by its type and, for statistics, its period. */
+function requestKind(message: WebSocketMessage): string {
+  return message.type === "recorder/statistics_during_period"
+    ? `statistics:${message.period}`
+    : "history";
+}
 
 function createHassContext(
   callWS: ReturnType<typeof vi.fn<HistoryApi>> = vi.fn<HistoryApi>(
@@ -129,20 +139,36 @@ function withSensorState(
   };
 }
 
-/** Mocks WebSocket history requests that resolve or fail on demand. */
+/** Mocks WebSocket requests that resolve or fail on demand. */
 function deferredHistoryApi() {
   const pending: Array<{
-    entityId: string;
-    resolve: (response: HistoryDuringPeriodResponse) => void;
+    kind: string;
+    resolve: (response: WebSocketResponse) => void;
     reject: (error: Error) => void;
   }> = [];
   const callWS = vi.fn<HistoryApi>(
     (message) =>
       new Promise((resolve, reject) =>
-        pending.push({ entityId: message.entity_ids[0], resolve, reject }),
+        pending.push({ kind: requestKind(message), resolve, reject }),
       ),
   );
   return { callWS, pending };
+}
+
+/** Mocks WebSocket requests answered from fixed responses by request kind. */
+function fixedHistoryApi(responses: Record<string, WebSocketResponse | Error>) {
+  return vi.fn<HistoryApi>(async (message) => {
+    const response = responses[requestKind(message)] ?? {};
+    if (response instanceof Error) {
+      throw response;
+    }
+    return response;
+  });
+}
+
+function statisticRow(start: string, mean: number, min: number, max: number) {
+  const startMs = Date.parse(start);
+  return { start: startMs, end: startMs + 5 * 60 * 1000, mean, min, max };
 }
 
 /** Settles history responses and the live merge scheduled while loading. */
@@ -243,22 +269,28 @@ describe("SolarEnergyGraphsCard", () => {
     expect(buttons?.[1].disabled).toBe(true);
 
     buttons?.[0].click();
-    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     await card.updateComplete;
 
     expect(date?.dateTime).toBe(previousDay);
     expect(buttons?.[1].disabled).toBe(false);
-    const [request] = hass.callWS.mock.calls[4];
+    const previousDayRequests = hass.callWS.mock.calls
+      .slice(3)
+      .map(([request]) => request);
     const previousWindow = getLocalDayWindowForDate(
       previousDay,
       "Europe/Paris",
     );
-    expect(request.start_time).toBe(
-      new Date((previousWindow.start - 10 * 60) * 1000).toISOString(),
+    expect(previousDayRequests.map(requestKind)).toEqual([
+      "statistics:5minute",
+      "statistics:hour",
+    ]);
+    expect(previousDayRequests[0].start_time).toBe(
+      new Date(previousWindow.start * 1000).toISOString(),
     );
 
     buttons?.[1].click();
-    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(12));
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
     await card.updateComplete;
 
     expect(date?.dateTime).toBe(today);
@@ -278,14 +310,14 @@ describe("SolarEnergyGraphsCard", () => {
       ".day-navigation button",
     );
     button?.click();
-    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     const selectedDay = card.shadowRoot?.querySelector("time")?.dateTime;
 
     card.hass = { ...hass, states: { ...hass.states } };
     await card.updateComplete;
 
     expect(card.shadowRoot?.querySelector("time")?.dateTime).toBe(selectedDay);
-    expect(hass.callWS).toHaveBeenCalledTimes(8);
+    expect(hass.callWS).toHaveBeenCalledTimes(5);
   });
 
   // Ignores an earlier day's response when a later navigation request finishes first.
@@ -296,19 +328,19 @@ describe("SolarEnergyGraphsCard", () => {
     card.setConfig(CARD_CONFIG);
     document.body.append(card);
     card.hass = hass;
-    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(3));
 
     card.shadowRoot
       ?.querySelector<HTMLButtonElement>(".day-navigation button")
       ?.click();
-    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
 
-    pending.slice(0, 4).forEach(({ resolve }) => resolve({}));
+    pending.slice(0, 3).forEach(({ resolve }) => resolve({}));
     await Promise.resolve();
     await Promise.resolve();
     expect(rendererInstances).toHaveLength(0);
 
-    pending.slice(4).forEach(({ resolve }) => resolve({}));
+    pending.slice(3).forEach(({ resolve }) => resolve({}));
     await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
   });
 
@@ -359,90 +391,100 @@ describe("SolarEnergyGraphsCard", () => {
     expect(rendererInstances[0].data.hasGridImport).toBe(false);
     expect(rendererInstances[0].data.hasGridExport).toBe(false);
     expect(rendererInstances[0].timeZone).toBe("Europe/Paris");
-    expect(
-      hass.callWS.mock.calls.map(([request]) => [request.type, request.entity_ids]),
-    ).toEqual(
-      SENSOR_IDS.map((entityId) => ["history/history_during_period", [entityId]]),
-    );
-  });
-
-  // Requests the four sensor histories together instead of one after another.
-  it("sends one history request per sensor in parallel", async () => {
-    const { callWS, pending } = deferredHistoryApi();
-    card = new SolarEnergyGraphsCard();
-    card.setConfig(CARD_CONFIG);
-    document.body.append(card);
-
-    card.hass = createHassContext(callWS);
-    await card.updateComplete;
-
-    expect(pending.map(({ entityId }) => entityId)).toEqual(SENSOR_IDS);
-  });
-
-  // Draws a sensor as soon as its history arrives and reports loading until the last one.
-  it("renders each sensor history progressively", async () => {
-    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
-    const { callWS, pending } = deferredHistoryApi();
-    card = new SolarEnergyGraphsCard();
-    card.setConfig(CARD_CONFIG);
-    document.body.append(card);
-    card.hass = createHassContext(callWS);
-    await vi.waitFor(() => expect(pending).toHaveLength(4));
-    const firstState = Date.parse("2026-09-27T09:00:00Z") / 1000;
-    const statuses = () =>
-      Array.from(card.shadowRoot?.querySelectorAll(".chart-status") ?? []).map(
-        (status) => status.textContent?.trim(),
-      );
-
-    pending[3].resolve({ "sensor.grid_export": [{ s: "250", lu: firstState }] });
-    await flushHistoryResponse();
-    await card.updateComplete;
-    const renderer = rendererInstances[0];
-    const partial: EnergyHistoryResponse =
-      renderer.updateData.mock.lastCall?.[0] ?? renderer.data;
-    const partialStatuses = statuses();
-    pending.slice(0, 3).forEach(({ resolve }) => resolve({}));
-    await flushHistoryResponse();
-    await card.updateComplete;
-
-    const index = Array.from(partial.mainData[0]).indexOf(firstState);
-    expect(partial.gridData[1][index]).toBe(250);
-    expect(partialStatuses).toEqual([
-      "Loading Home Assistant history…",
-      "Loading Home Assistant history…",
+    const requests = hass.callWS.mock.calls.map(([request]) => request);
+    expect(requests.map(requestKind)).toEqual([
+      "statistics:5minute",
+      "statistics:hour",
+      "history",
     ]);
-    expect(statuses()[0]).toBe("Recorded power samples.");
+    expect(requests.map((request) =>
+      "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
+    )).toEqual([SENSOR_IDS, SENSOR_IDS, SENSOR_IDS]);
   });
 
-  // Reports a failed sensor request once all requests settle, keeping received data.
-  it("keeps received sensors when one history request fails", async () => {
+  // Draws each statistics interval at its midpoint with its min-max range.
+  it("draws statistics as a mean line with a min-max band", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
-    const { callWS, pending } = deferredHistoryApi();
     card = new SolarEnergyGraphsCard();
     card.setConfig(CARD_CONFIG);
     document.body.append(card);
-    card.hass = createHassContext(callWS);
-    await vi.waitFor(() => expect(pending).toHaveLength(4));
-    const firstState = Date.parse("2026-09-27T09:00:00Z") / 1000;
 
-    pending[0].resolve({ "sensor.solar": [{ s: "800", lu: firstState }] });
-    pending[1].reject(new Error("Connection lost"));
-    pending[2].resolve({});
-    pending[3].resolve({});
-    await vi.waitFor(() =>
-      expect(card.shadowRoot?.querySelector(".chart-status")?.textContent).toContain(
-        "History loading error: Connection lost",
-      ),
+    card.hass = createHassContext(
+      fixedHistoryApi({
+        "statistics:5minute": {
+          "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+          "sensor.grid_import": [statisticRow("2026-09-27T09:00:00Z", 100, 50, 150)],
+        },
+      }),
     );
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
 
     const renderer = rendererInstances[0];
     const data: EnergyHistoryResponse =
       renderer.updateData.mock.lastCall?.[0] ?? renderer.data;
-    const index = Array.from(data.mainData[0]).indexOf(firstState);
-    expect(data.mainData[1][index]).toBe(800);
+    const index = Array.from(data.mainData[0]).indexOf(
+      Date.parse("2026-09-27T09:02:30Z") / 1000,
+    );
+    expect([data.mainData[1][index], data.mainData[10][index], data.mainData[11][index]])
+      .toEqual([500, 600, 400]);
+    expect([data.gridData[2][index], data.gridData[5][index], data.gridData[6][index]])
+      .toEqual([-100, -50, -150]);
   });
 
-  // Keeps a live state received while its sensor history was still loading.
+  // Reloads the day's statistics once Home Assistant has compiled a new interval.
+  it("refreshes statistics after each 5-minute boundary", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    const initialCalls = hass.callWS.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:15:30Z") - Date.now() - 1,
+    );
+    const beforeRefresh = hass.callWS.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(initialCalls).toBe(3);
+    expect(beforeRefresh).toBe(3);
+    expect(
+      hass.callWS.mock.calls.slice(3).map(([request]) => requestKind(request)),
+    ).toEqual(["statistics:5minute", "statistics:hour"]);
+  });
+
+  // Keeps the raw states drawn and reports the failed statistics request.
+  it("reports a failed statistics request", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const recorded = Date.parse("2026-09-27T10:08:00Z") / 1000;
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+
+    card.hass = createHassContext(
+      fixedHistoryApi({
+        "statistics:hour": new Error("Connection lost"),
+        history: { "sensor.solar": [{ s: "800", lu: recorded }] },
+      }),
+    );
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    const renderer = rendererInstances[0];
+    const data: EnergyHistoryResponse =
+      renderer.updateData.mock.lastCall?.[0] ?? renderer.data;
+    expect(card.shadowRoot?.querySelector(".chart-status")?.textContent).toContain(
+      "History loading error: Connection lost",
+    );
+    expect(data.mainData[1][Array.from(data.mainData[0]).indexOf(recorded)]).toBe(800);
+  });
+
+  // Keeps a live state received while the recent raw history was still loading.
   it("keeps live states merged before the history response", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     const { callWS, pending } = deferredHistoryApi();
@@ -451,12 +493,14 @@ describe("SolarEnergyGraphsCard", () => {
     card.setConfig(CARD_CONFIG);
     document.body.append(card);
     card.hass = hass;
-    await vi.waitFor(() => expect(pending).toHaveLength(4));
-    card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:05:00Z");
+    await vi.waitFor(() => expect(pending).toHaveLength(3));
+    card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:09:00Z");
     await vi.advanceTimersByTimeAsync(250);
-    const recorded = Date.parse("2026-09-27T10:00:00Z") / 1000;
+    const recorded = Date.parse("2026-09-27T10:05:00Z") / 1000;
 
-    pending[0].resolve({ "sensor.solar": [{ s: "100", lu: recorded }] });
+    pending[0].resolve({});
+    pending[1].resolve({});
+    pending[2].resolve({ "sensor.solar": [{ s: "100", lu: recorded }] });
     await flushHistoryResponse();
 
     const data: EnergyHistoryResponse =
@@ -464,7 +508,7 @@ describe("SolarEnergyGraphsCard", () => {
     const x = Array.from(data.mainData[0]);
     expect(data.mainData[1][x.indexOf(recorded)]).toBe(100);
     expect(
-      data.mainData[1][x.indexOf(Date.parse("2026-09-27T10:05:00Z") / 1000)],
+      data.mainData[1][x.indexOf(Date.parse("2026-09-27T10:09:00Z") / 1000)],
     ).toBe(300);
   });
 
@@ -480,7 +524,7 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = { ...hass, themes: { darkMode: true } };
 
     expect(rendererInstances[0].refreshTheme).toHaveBeenCalledWith(true);
-    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS).toHaveBeenCalledTimes(3);
   });
 
   // Keeps the loaded history when a configured sensor changes; live states are merged instead.
@@ -493,7 +537,7 @@ describe("SolarEnergyGraphsCard", () => {
     await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
 
     card.hass = { ...hass, states: { ...hass.states } };
-    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS).toHaveBeenCalledTimes(3);
 
     card.hass = {
       ...hass,
@@ -507,7 +551,7 @@ describe("SolarEnergyGraphsCard", () => {
     };
 
     await card.updateComplete;
-    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS).toHaveBeenCalledTimes(3);
   });
 
   // Adds a live sensor state to the current day's charts without a new history request.
@@ -526,7 +570,7 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:05:00Z");
     await vi.advanceTimersByTimeAsync(250);
 
-    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS).toHaveBeenCalledTimes(3);
     expect(renderer.updateData).toHaveBeenCalledOnce();
     const data: EnergyHistoryResponse = renderer.updateData.mock.calls[0][0];
     const index = Array.from(data.mainData[0]).indexOf(
@@ -574,7 +618,7 @@ describe("SolarEnergyGraphsCard", () => {
     );
     expect(data.mainData[1][index]).toBe(300);
     expect(data.mainData[7][index]).toBe(400);
-    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS).toHaveBeenCalledTimes(3);
   });
 
   // Leaves a past day untouched when the current sensor states change.
@@ -589,7 +633,7 @@ describe("SolarEnergyGraphsCard", () => {
     card.shadowRoot
       ?.querySelectorAll<HTMLButtonElement>(".day-navigation button")[0]
       .click();
-    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     await flushHistoryResponse();
     const renderer = rendererInstances[0];
     renderer.updateData.mockClear();
@@ -598,7 +642,7 @@ describe("SolarEnergyGraphsCard", () => {
     await vi.advanceTimersByTimeAsync(250);
 
     expect(renderer.updateData).not.toHaveBeenCalled();
-    expect(hass.callWS).toHaveBeenCalledTimes(8);
+    expect(hass.callWS).toHaveBeenCalledTimes(5);
   });
 
   // Initializes charts using the theme received before history returns.

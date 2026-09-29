@@ -35,8 +35,20 @@ const TEST_HISTORY_DATA: EnergyHistoryResponse = {
     [null, 1800],
     [null, 400],
     [null, 200],
+    [null, 2000],
+    [null, 1600],
+    [null, 1900],
+    [null, 1700],
   ],
-  gridData: [Float64Array.from([0, 300]), [null, 200], [null, -400]],
+  gridData: [
+    Float64Array.from([0, 300]),
+    [null, 200],
+    [null, -400],
+    [null, 250],
+    [null, 150],
+    [null, -300],
+    [null, -500],
+  ],
   hasProduction: true,
   hasConsumption: true,
   hasGridImport: true,
@@ -131,6 +143,22 @@ describe("EnergyChartsRenderer", () => {
     document.body.replaceChildren();
   });
 
+  // Hides uPlot point markers, drawn in white on sparse statistics intervals.
+  it("disables point markers on every data series", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+
+    const [firstOptions, secondOptions] = createChartMock.mock.calls.map(
+      ([options]) => options,
+    );
+    for (const options of [firstOptions, secondOptions]) {
+      expect(
+        options.series
+          .slice(1)
+          .every((series: { points?: { show?: boolean } }) => series.points?.show === false),
+      ).toBe(true);
+    }
+  });
+
   // Builds both energy charts with the shared time scale and sign convention.
   it("creates the solar and signed grid-exchange charts", () => {
     new EnergyChartsRenderer(containers, legendContainers);
@@ -174,17 +202,20 @@ describe("EnergyChartsRenderer", () => {
       ...Array(4).fill("hide-helper-legend"),
       "legend-values-only",
       "legend-values-only",
+      ...Array(4).fill("hide-helper-legend"),
     ]);
     expect(firstOptions.bands).toEqual([
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
+      { series: [10, 11], fill: "rgba(204, 157, 0, 0.25)" },
+      { series: [12, 13], fill: "rgba(59, 130, 246, 0.2)" },
     ]);
     expect(firstOptions.axes[1].label).toBe("Power (W)");
     expect(firstOptions.scales.y.autoMin).toBe(0);
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
     expect(secondOptions.legend.mount).toBeTypeOf("function");
-    expect(firstData).toHaveLength(10);
+    expect(firstData).toHaveLength(14);
     expect(firstData[0]).toHaveLength(2);
     expect(firstData[1]).toEqual([null, 1800]);
     expect(firstData[8]).toEqual([null, 400]);
@@ -192,9 +223,17 @@ describe("EnergyChartsRenderer", () => {
     expect(secondOptions.series[1].label).toBe("Grid export (+W)");
     expect(secondOptions.series[2].label).toBe("Grid import (-W)");
     expect(secondOptions.axes[1].label).toBe("Power (W)");
-    expect(secondOptions.bands).toBeUndefined();
+    expect(secondOptions.bands).toEqual([
+      { series: [3, 4], fill: "rgba(204, 157, 0, 0.25)" },
+      { series: [5, 6], fill: "rgba(239, 68, 68, 0.3)" },
+    ]);
+    expect(
+      secondOptions.series
+        .slice(3)
+        .map((series: { class?: string; width?: number }) => [series.class, series.width]),
+    ).toEqual(Array(4).fill(["hide-helper-legend", 0]));
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
-    expect(secondData).toHaveLength(3);
+    expect(secondData).toHaveLength(7);
     expect(secondData[0]).toHaveLength(2);
     expect(secondData[1]).toEqual([null, 200]);
     expect(secondData[2]).toEqual([null, -400]);

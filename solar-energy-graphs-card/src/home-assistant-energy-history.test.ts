@@ -1,22 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHistoryRequest,
+  buildStatisticsRequest,
+  combineStatistics,
   getEnergyUnitScales,
   getLocalDateString,
   getLocalDayWindow,
   getLocalDayWindowForDate,
-  historyStatesOf,
+  entityRowsOf,
   mergeLiveEnergySamples,
   normalizeEnergyHistory,
   parseCompressedPowerSamples,
   parseEnergyHistory,
   parsePowerState,
+  parseStatisticRows,
   projectEnergyHistory,
   replaceSensorHistory,
   shiftLocalDate,
   type HistoryDuringPeriodResponse,
   type HomeAssistantCompressedState,
+  type StatisticSample,
 } from "./home-assistant-energy-history";
+
+function statistic(
+  start: number,
+  mean: number | null,
+  min: number | null,
+  max: number | null,
+  length = 300,
+): StatisticSample {
+  return { start, end: start + length, mean, min, max };
+}
 
 function state(
   timestamp: number,
@@ -175,17 +189,15 @@ describe("Home Assistant energy history", () => {
     ]);
   });
 
-  // Requests every recorded state of one entity with a baseline before midnight.
+  // Requests every recorded state of the sensors over the given period.
   it("builds an unfiltered WebSocket history request", () => {
-    const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
-
-    const request = buildHistoryRequest("sensor.solar", window, 2000);
+    const request = buildHistoryRequest(["sensor.solar", "sensor.load"], 1000, 2000);
 
     expect(request).toEqual({
       type: "history/history_during_period",
-      start_time: new Date((window.start - 10 * 60) * 1000).toISOString(),
+      start_time: new Date(1000 * 1000).toISOString(),
       end_time: new Date(2000 * 1000).toISOString(),
-      entity_ids: ["sensor.solar"],
+      entity_ids: ["sensor.solar", "sensor.load"],
       include_start_time_state: true,
       significant_changes_only: false,
       minimal_response: false,
@@ -193,13 +205,147 @@ describe("Home Assistant energy history", () => {
     });
   });
 
-  // Stops a past-day request at midnight instead of the current time.
-  it("ends a past-day history request at the end of the day", () => {
+  // Requests mean, min and max in watts from midnight up to the current time.
+  it("builds a statistics request in watts", () => {
     const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
 
-    const request = buildHistoryRequest("sensor.solar", window, window.end + 5000);
+    const request = buildStatisticsRequest(["sensor.solar"], window, 2000, "5minute");
+
+    expect(request).toEqual({
+      type: "recorder/statistics_during_period",
+      start_time: new Date(1000 * 1000).toISOString(),
+      end_time: new Date(2000 * 1000).toISOString(),
+      statistic_ids: ["sensor.solar"],
+      period: "5minute",
+      types: ["mean", "min", "max"],
+      units: { power: "W" },
+    });
+  });
+
+  // Stops a past-day statistics request at midnight instead of the current time.
+  it("ends a past-day statistics request at the end of the day", () => {
+    const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
+
+    const request = buildStatisticsRequest(
+      ["sensor.solar"],
+      window,
+      window.end + 5000,
+      "hour",
+    );
 
     expect(request.end_time).toBe(new Date(window.end * 1000).toISOString());
+  });
+
+  // Converts millisecond bounds to seconds and missing values to gaps.
+  it("parses statistic rows in chronological order", () => {
+    const samples = parseStatisticRows([
+      { start: 600_000, end: 900_000, mean: 2, min: 1, max: 3 },
+      { start: 300_000, end: 600_000, mean: null, min: 1 },
+    ]);
+
+    expect(samples).toEqual([
+      { start: 300, end: 600, mean: null, min: 1, max: null },
+      { start: 600, end: 900, mean: 2, min: 1, max: 3 },
+    ]);
+  });
+
+  // Fills only the purged part of the day with hourly statistics.
+  it("completes 5-minute statistics with earlier hourly ones", () => {
+    const hourly = [
+      statistic(0, 1, 1, 1, 3600),
+      statistic(3600, 2, 2, 2, 3600),
+      statistic(7200, 3, 3, 3, 3600),
+    ];
+    const fiveMinute = [statistic(3600, 4, 4, 4), statistic(3900, 5, 5, 5)];
+
+    expect(combineStatistics(fiveMinute, hourly)).toEqual([
+      hourly[0],
+      ...fiveMinute,
+    ]);
+    expect(combineStatistics([], hourly)).toEqual(hourly);
+    expect(combineStatistics(fiveMinute, [])).toEqual(fiveMinute);
+  });
+
+  // Places each interval mean at its midpoint with its min-max range.
+  it("projects statistics as mean and min-max series", () => {
+    const start = 1_000_200;
+    const window = { start, end: start + 3600 };
+    const data = projectEnergyHistory(
+      [[], [], [], []],
+      window,
+      window.end,
+      [
+        [statistic(start, 500, 400, 600), statistic(start + 300, 700, 600, 900)],
+        [statistic(start, 300, 200, 350), statistic(start + 300, 800, 750, 850)],
+        [statistic(start, 100, 50, 150), statistic(start + 300, 0, 0, 0)],
+        [statistic(start, 0, 0, 0), statistic(start + 300, 50, 20, 80)],
+      ],
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 150,
+      start + 450,
+      start + 600,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([500, 500, 700, null, null]);
+    expect(data.mainData[3]).toEqual([300, 300, 700, null, null]);
+    expect(data.mainData[10]).toEqual([600, 600, 900, null, null]);
+    expect(data.mainData[11]).toEqual([400, 400, 600, null, null]);
+    expect(data.mainData[12]).toEqual([350, 350, 850, null, null]);
+    expect(data.mainData[13]).toEqual([200, 200, 750, null, null]);
+    expect(data.gridData[3]).toEqual([0, 0, 80, null, null]);
+    expect(data.gridData[4]).toEqual([0, 0, 20, null, null]);
+    expect(data.gridData[5]).toEqual([-50, -50, 0, null, null]);
+    expect(data.gridData[6]).toEqual([-150, -150, 0, null, null]);
+  });
+
+  // Leaves a gap for a missing interval instead of bridging it.
+  it("leaves a gap between non-contiguous statistics intervals", () => {
+    const start = 1_000_200;
+    const window = { start, end: start + 3600 };
+    const data = projectEnergyHistory([[], [], [], []], window, window.end, [
+      [statistic(start, 500, 400, 600), statistic(start + 600, 700, 600, 900)],
+      [],
+      [],
+      [],
+    ]);
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 150,
+      start + 750,
+      start + 900,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([500, 500, 700, null, null]);
+  });
+
+  // Continues with raw samples, without range, after the last compiled interval.
+  it("extends statistics with raw samples after the last interval", () => {
+    const start = 1_000_200;
+    const window = { start, end: start + 3600 };
+    const data = projectEnergyHistory(
+      [[state(start + 200, 999), state(start + 320, 650)].map((sample) => ({
+        timestamp: sample.lu!,
+        value: Number(sample.s),
+      })), [], [], []],
+      window,
+      start + 400,
+      [[statistic(start, 500, 400, 600)], [], [], []],
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 150,
+      start + 300,
+      start + 320,
+      start + 400,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([500, 500, 999, 650, 650, null]);
+    expect(data.mainData[10]).toEqual([600, 600, null, null, null, null]);
   });
 
   // Treats an entity absent from the response as a sensor without history.
@@ -208,8 +354,8 @@ describe("Home Assistant energy history", () => {
       "sensor.solar": [state(10, 500)],
     };
 
-    expect(historyStatesOf(response, "sensor.solar")).toEqual([state(10, 500)]);
-    expect(historyStatesOf({}, "sensor.solar")).toEqual([]);
+    expect(entityRowsOf(response, "sensor.solar")).toEqual([state(10, 500)]);
+    expect(entityRowsOf({}, "sensor.solar")).toEqual([]);
   });
 
   // Rejects a malformed response instead of drawing an empty history.
@@ -218,11 +364,11 @@ describe("Home Assistant energy history", () => {
       "sensor.solar": "not a list",
     } as unknown as HistoryDuringPeriodResponse;
 
-    expect(() => historyStatesOf(invalid, "sensor.solar")).toThrow(
+    expect(() => entityRowsOf(invalid, "sensor.solar")).toThrow(
       "Home Assistant returned an invalid history response.",
     );
     expect(() =>
-      historyStatesOf(null as unknown as HistoryDuringPeriodResponse, "sensor.solar"),
+      entityRowsOf(null as unknown as HistoryDuringPeriodResponse, "sensor.solar"),
     ).toThrow("Home Assistant returned an invalid history response.");
   });
 

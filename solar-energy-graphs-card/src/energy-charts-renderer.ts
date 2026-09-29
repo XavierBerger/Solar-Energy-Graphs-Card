@@ -10,6 +10,18 @@ const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
 let nextSyncGroupId = 0;
 
+// Pale min-max ranges drawn around the mean of each sensor.
+const PRODUCTION_RANGE_FILL = "rgba(204, 157, 0, 0.25)";
+const CONSUMPTION_RANGE_FILL = "rgba(59, 130, 246, 0.2)";
+const IMPORT_RANGE_FILL = "rgba(239, 68, 68, 0.3)";
+
+const RANGE_BOUND_SERIES = {
+  label: "",
+  class: "hide-helper-legend",
+  stroke: "rgba(0, 0, 0, 0)",
+  width: 0,
+};
+
 interface ZeroLineChart {
   scales: Record<string, { min?: number; max?: number }>;
   valToPos(value: number, scale: string, canvasPosition?: boolean): number;
@@ -222,6 +234,10 @@ export class EnergyChartsRenderer {
           show: false,
           fill: "#fbf0a8",
         },
+        { ...RANGE_BOUND_SERIES },
+        { ...RANGE_BOUND_SERIES },
+        { ...RANGE_BOUND_SERIES },
+        { ...RANGE_BOUND_SERIES },
       ]
       : [
         {},
@@ -237,11 +253,22 @@ export class EnergyChartsRenderer {
           width: 1.25,
           fill: "#e96e7d",
         },
+        { ...RANGE_BOUND_SERIES },
+        { ...RANGE_BOUND_SERIES },
+        { ...RANGE_BOUND_SERIES },
+        { ...RANGE_BOUND_SERIES },
       ];
-    const bands: NonNullable<UPlotOptions["bands"]> = [
-      { series: [3, 2], fill: "#a2d49b" },
-      { series: [5, 4], fill: "#e96e7d" },
-    ];
+    const bands: NonNullable<UPlotOptions["bands"]> = mainChart
+      ? [
+        { series: [3, 2], fill: "#a2d49b" },
+        { series: [5, 4], fill: "#e96e7d" },
+        { series: [10, 11], fill: PRODUCTION_RANGE_FILL },
+        { series: [12, 13], fill: CONSUMPTION_RANGE_FILL },
+      ]
+      : [
+        { series: [3, 4], fill: PRODUCTION_RANGE_FILL },
+        { series: [5, 6], fill: IMPORT_RANGE_FILL },
+      ];
 
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
@@ -261,10 +288,15 @@ export class EnergyChartsRenderer {
         x: { time: true },
         y: { auto: true, ...(mainChart ? { autoMin: 0 } : {}) },
       },
-      series,
+      // uPlot draws white point markers once samples are sparse enough, as
+      // with statistics intervals; the charts only show lines and areas.
+      series: series.map((options, index) =>
+        index === 0 ? options : { ...options, points: { show: false } },
+      ),
       axes,
+      bands,
       ...(mainChart
-        ? { bands }
+        ? {}
         : { hooks: { draw: [(chart) => drawZeroLine(chart, this.theme.grid)] } }),
     };
   }

@@ -3,17 +3,22 @@ import { EnergyChartsRenderer } from "./energy-charts-renderer";
 import { uPlotStyles } from "./uplot-adapter";
 import {
   buildHistoryRequest,
+  buildStatisticsRequest,
+  combineStatistics,
+  entityRowsOf,
   getEnergyUnitScales,
   getLocalDateString,
   getLocalDayWindowForDate,
-  historyStatesOf,
   mergeLiveEnergySamples,
+  NO_STATISTICS,
   parseCompressedPowerSamples,
   parsePowerState,
+  parseStatisticRows,
   projectEnergyHistory,
   replaceSensorHistory,
   shiftLocalDate,
   type EnergyPowerSamples,
+  type EnergyStatistics,
   type EnergyUnitScales,
   type EnergySensorMetadata,
   type EnergyHistoryResponse,
@@ -21,7 +26,8 @@ import {
   type HistoryDuringPeriodResponse,
   type LivePowerSample,
   type LocalDayWindow,
-  type NumericSample,
+  type StatisticsDuringPeriodMessage,
+  type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
 
 const CARD_TYPE = "custom:solar-energy-graphs-card";
@@ -29,6 +35,11 @@ const ELEMENT_NAME = "solar-energy-graphs-card";
 // Home Assistant pushes each sensor separately; merge a burst in one pass.
 const LIVE_UPDATE_COALESCE_MS = 250;
 const LOADING_STATUS = "Loading Home Assistant history…";
+const STATISTICS_PERIOD_SECONDS = 5 * 60;
+// Home Assistant compiles 5-minute statistics shortly after each boundary.
+const STATISTICS_REFRESH_DELAY_SECONDS = 30;
+// Raw states cover the current day after its last compiled interval.
+const RAW_TAIL_SECONDS = 15 * 60;
 
 interface SolarEnergyGraphsCardConfig {
   type: string;
@@ -57,6 +68,9 @@ interface HomeAssistantThemeContext {
     }
   >;
   callWS(message: HistoryDuringPeriodMessage): Promise<HistoryDuringPeriodResponse>;
+  callWS(
+    message: StatisticsDuringPeriodMessage,
+  ): Promise<StatisticsDuringPeriodResponse>;
 }
 
 export class SolarEnergyGraphsCard extends LitElement {
@@ -66,16 +80,18 @@ export class SolarEnergyGraphsCard extends LitElement {
   private darkMode = false;
   private historyData?: EnergyHistoryResponse;
   private historyModel?: {
+    statistics: EnergyStatistics;
+    /** Raw states in W, drawn after each sensor's last statistics interval. */
     samples: EnergyPowerSamples;
     window: LocalDayWindow;
     unitScales: EnergyUnitScales;
-    /** Sensors whose history request has not settled yet. */
-    pending: number;
+    loading: boolean;
     loadError?: string;
   };
   private historyLoadKey = "";
   private historyRequestId = 0;
   private liveUpdateTimer?: ReturnType<typeof setTimeout>;
+  private statisticsRefreshTimer?: ReturnType<typeof setTimeout>;
   private selectedDay?: string;
   private selectedDayTimeZone?: string;
   private mainStatus = "Waiting for Home Assistant data.";
@@ -272,6 +288,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.historyLoadKey = "";
     this.historyRequestId += 1;
     this.cancelLiveMerge();
+    this.cancelStatisticsRefresh();
     this.loadHistoryWhenNeeded(this.hassContext);
     this.requestUpdate();
   }
@@ -298,6 +315,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.historyLoadKey = "";
     this.historyModel = undefined;
     this.cancelLiveMerge();
+    this.cancelStatisticsRefresh();
     this.chartRenderer?.destroy();
     this.chartRenderer = undefined;
     super.disconnectedCallback();
@@ -422,6 +440,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
     this.historyLoadKey = loadKey;
     this.historyModel = undefined;
+    this.cancelStatisticsRefresh();
     const requestId = ++this.historyRequestId;
     this.mainStatus = LOADING_STATUS;
     this.gridStatus = this.mainStatus;
@@ -439,8 +458,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         hass.states?.[entityIds[3]]?.attributes,
       ]);
     } catch (error) {
-      const details = error instanceof Error ? error.message : String(error);
-      this.mainStatus = `Sensor configuration error: ${details}`;
+      this.mainStatus = `Sensor configuration error: ${errorMessage(error)}`;
       this.gridStatus = this.mainStatus;
       queueMicrotask(() => {
         if (this.isConnected && requestId === this.historyRequestId) {
@@ -451,65 +469,142 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
 
     this.historyModel = {
+      statistics: NO_STATISTICS,
       samples: [[], [], [], []],
       window: dayWindow,
       unitScales,
-      pending: entityIds.length,
+      loading: true,
     };
-    const scales = sensorUnitScales(unitScales);
-    const nowSeconds = now.getTime() / 1000;
-    // One request per sensor: each chart series is drawn as soon as it arrives.
-    entityIds.forEach((entityId, sensor) => {
-      void this.fetchSensorHistory(
-        hass,
-        entityId,
-        sensor as LivePowerSample["sensor"],
-        buildHistoryRequest(entityId, dayWindow, nowSeconds),
-        scales[sensor],
-        requestId,
-      );
-    });
+    void this.fetchHistory(hass, entityIds, requestId);
   }
 
-  private async fetchSensorHistory(
+  private async fetchHistory(
     hass: HomeAssistantThemeContext,
-    entityId: string,
-    sensor: LivePowerSample["sensor"],
-    request: HistoryDuringPeriodMessage,
-    unitScale: number,
+    entityIds: readonly [string, string, string, string],
     requestId: number,
   ): Promise<void> {
-    let history: NumericSample[] | undefined;
+    const model = this.historyModel;
+    if (!model) {
+      return;
+    }
+    const now = Date.now() / 1000;
+    const today = this.isTodaySelected();
+    const [statistics, tail] = await Promise.allSettled([
+      fetchStatistics(hass, entityIds, model.window, now),
+      today
+        ? hass.callWS(
+          buildHistoryRequest(entityIds, now - RAW_TAIL_SECONDS, now),
+        )
+        : Promise.resolve<HistoryDuringPeriodResponse>({}),
+    ]);
+    const current = this.historyModel;
+    if (!this.isConnected || requestId !== this.historyRequestId || !current) {
+      return;
+    }
+
+    let samples = current.samples;
+    let loadError =
+      statistics.status === "rejected" ? errorMessage(statistics.reason) : undefined;
+    try {
+      if (tail.status === "rejected") {
+        throw tail.reason;
+      }
+      const scales = sensorUnitScales(current.unitScales);
+      entityIds.forEach((entityId, sensor) => {
+        samples = replaceSensorHistory(
+          samples,
+          sensor as LivePowerSample["sensor"],
+          parseCompressedPowerSamples(
+            entityRowsOf(tail.value, entityId),
+            scales[sensor],
+          ),
+        );
+      });
+    } catch (error) {
+      loadError ??= errorMessage(error);
+    }
+    this.historyModel = {
+      ...current,
+      statistics:
+        statistics.status === "fulfilled" ? statistics.value : current.statistics,
+      samples,
+      loading: false,
+      loadError,
+    };
+    this.showCurrentModel();
+    if (today) {
+      this.scheduleStatisticsRefresh(hass, entityIds, requestId);
+    }
+  }
+
+  private scheduleStatisticsRefresh(
+    hass: HomeAssistantThemeContext,
+    entityIds: readonly [string, string, string, string],
+    requestId: number,
+  ): void {
+    const now = Date.now() / 1000;
+    const nextBoundary =
+      (Math.floor(now / STATISTICS_PERIOD_SECONDS) + 1) * STATISTICS_PERIOD_SECONDS;
+    const delay = nextBoundary + STATISTICS_REFRESH_DELAY_SECONDS - now;
+    this.cancelStatisticsRefresh();
+    this.statisticsRefreshTimer = setTimeout(() => {
+      this.statisticsRefreshTimer = undefined;
+      void this.refreshStatistics(hass, entityIds, requestId);
+    }, delay * 1000);
+  }
+
+  private cancelStatisticsRefresh(): void {
+    clearTimeout(this.statisticsRefreshTimer);
+    this.statisticsRefreshTimer = undefined;
+  }
+
+  private async refreshStatistics(
+    hass: HomeAssistantThemeContext,
+    entityIds: readonly [string, string, string, string],
+    requestId: number,
+  ): Promise<void> {
+    const model = this.historyModel;
+    if (!model || !this.isTodaySelected()) {
+      return;
+    }
+    let statistics: EnergyStatistics | undefined;
     let loadError: string | undefined;
     try {
-      const response = await hass.callWS(request);
-      history = parseCompressedPowerSamples(
-        historyStatesOf(response, entityId),
-        unitScale,
+      statistics = await fetchStatistics(
+        hass,
+        entityIds,
+        model.window,
+        Date.now() / 1000,
       );
     } catch (error) {
-      loadError = error instanceof Error ? error.message : String(error);
+      loadError = errorMessage(error);
     }
-    const model = this.historyModel;
-    if (!this.isConnected || requestId !== this.historyRequestId || !model) {
+    const current = this.historyModel;
+    if (!this.isConnected || requestId !== this.historyRequestId || !current) {
       return;
     }
 
     this.historyModel = {
-      ...model,
-      samples: history
-        ? replaceSensorHistory(model.samples, sensor, history)
-        : model.samples,
-      pending: model.pending - 1,
-      loadError: model.loadError ?? loadError,
+      ...current,
+      statistics: statistics ?? current.statistics,
+      loadError,
     };
-    this.showHistoryData(
-      projectEnergyHistory(
-        this.historyModel.samples,
-        model.window,
-        Date.now() / 1000,
-      ),
-    );
+    this.showCurrentModel();
+    this.scheduleStatisticsRefresh(hass, entityIds, requestId);
+  }
+
+  private showCurrentModel(): void {
+    const model = this.historyModel;
+    if (model) {
+      this.showHistoryData(
+        projectEnergyHistory(
+          model.samples,
+          model.window,
+          Date.now() / 1000,
+          model.statistics,
+        ),
+      );
+    }
   }
 
   private scheduleLiveMerge(): void {
@@ -550,9 +645,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
 
     this.historyModel = { ...model, samples };
-    this.showHistoryData(
-      projectEnergyHistory(samples, model.window, Date.now() / 1000),
-    );
+    this.showCurrentModel();
   }
 
   private showHistoryData(data: EnergyHistoryResponse): void {
@@ -568,20 +661,20 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private updateHistoryStatus(data: EnergyHistoryResponse): void {
     const model = this.historyModel;
-    if (model?.loadError !== undefined && model.pending === 0) {
-      this.mainStatus = `History loading error: ${model.loadError}`;
-      this.gridStatus = this.mainStatus;
-      return;
-    }
-    // Missing series are expected until every sensor history has arrived.
-    if (model && model.pending > 0) {
+    // Missing series are expected until every request has settled.
+    if (model?.loading) {
       this.mainStatus = LOADING_STATUS;
       this.gridStatus = LOADING_STATUS;
       return;
     }
+    if (model?.loadError !== undefined) {
+      this.mainStatus = `History loading error: ${model.loadError}`;
+      this.gridStatus = this.mainStatus;
+      return;
+    }
     this.mainStatus =
       data.hasProduction && data.hasConsumption
-        ? "Recorded power samples."
+        ? "Power statistics: mean line with min–max range."
         : `Error: ${this.formatSelectedDay()} production or consumption history is unavailable.`;
     this.gridStatus =
       data.hasGridImport && data.hasGridExport
@@ -636,6 +729,31 @@ function configuredEntityIds(
     config.entities.grid_import,
     config.entities.grid_export,
   ];
+}
+
+/** Fetches 5-minute statistics, completed by hourly ones where purged. */
+async function fetchStatistics(
+  hass: HomeAssistantThemeContext,
+  entityIds: readonly [string, string, string, string],
+  window: LocalDayWindow,
+  now: number,
+): Promise<EnergyStatistics> {
+  const [fiveMinute, hourly] = await Promise.all([
+    hass.callWS(buildStatisticsRequest(entityIds, window, now, "5minute")),
+    hass.callWS(buildStatisticsRequest(entityIds, window, now, "hour")),
+  ]);
+  const [production, consumption, gridImport, gridExport] = entityIds.map(
+    (entityId) =>
+      combineStatistics(
+        parseStatisticRows(entityRowsOf(fiveMinute, entityId)),
+        parseStatisticRows(entityRowsOf(hourly, entityId)),
+      ),
+  );
+  return [production, consumption, gridImport, gridExport];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function sensorUnitScales(
