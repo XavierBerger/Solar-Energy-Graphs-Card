@@ -562,6 +562,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       loading: false,
       loadError,
       precision: current.precision,
+      // Availability is confirmed when the user requests the raw history.
       highPrecisionAvailable:
         current.highPrecisionAvailable ?? true,
     };
