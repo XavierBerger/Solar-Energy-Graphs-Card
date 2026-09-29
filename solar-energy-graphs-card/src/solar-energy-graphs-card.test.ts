@@ -297,6 +297,35 @@ describe("SolarEnergyGraphsCard", () => {
     expect(buttons?.[1].disabled).toBe(true);
   });
 
+  // Returns to the current local day when the displayed date is clicked.
+  it("returns to today when the selected date is clicked", async () => {
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const today = getLocalDateString(new Date(), "Europe/Paris");
+    const previousDay = shiftLocalDate(today, -1);
+    const buttons = card.shadowRoot?.querySelectorAll<HTMLButtonElement>(
+      ".day-navigation button",
+    );
+    const date = card.shadowRoot?.querySelector("time");
+
+    buttons?.[0].click();
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
+    await card.updateComplete;
+    expect(date?.dateTime).toBe(previousDay);
+
+    date?.click();
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
+    await card.updateComplete;
+
+    expect(date?.dateTime).toBe(today);
+    expect(buttons?.[1].disabled).toBe(true);
+  });
+
   // Keeps a user-selected day when Home Assistant sends unrelated state updates.
   it("does not reset the selected day on ordinary Home Assistant updates", async () => {
     card = new SolarEnergyGraphsCard();
