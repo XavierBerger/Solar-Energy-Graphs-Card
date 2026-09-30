@@ -1,6 +1,5 @@
-import { LitElement, css, html, unsafeCSS } from "lit";
+import { css, html, LitElement, unsafeCSS } from "lit";
 import { EnergyChartsRenderer } from "./energy-charts-renderer";
-import { uPlotStyles } from "./uplot-adapter";
 import {
   buildHistoryRequest,
   buildStatisticsRequest,
@@ -17,11 +16,11 @@ import {
   projectEnergyHistory,
   replaceSensorHistory,
   shiftLocalDate,
+  type EnergyHistoryResponse,
   type EnergyPowerSamples,
+  type EnergySensorMetadata,
   type EnergyStatistics,
   type EnergyUnitScales,
-  type EnergySensorMetadata,
-  type EnergyHistoryResponse,
   type HistoryDuringPeriodMessage,
   type HistoryDuringPeriodResponse,
   type LivePowerSample,
@@ -29,6 +28,7 @@ import {
   type StatisticsDuringPeriodMessage,
   type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
+import { uPlotStyles } from "./uplot-adapter";
 
 const CARD_TYPE = "custom:solar-energy-graphs-card";
 const ELEMENT_NAME = "solar-energy-graphs-card";

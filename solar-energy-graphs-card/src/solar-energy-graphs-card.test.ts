@@ -196,6 +196,16 @@ describe("SolarEnergyGraphsCard", () => {
     await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
   }
 
+  /** Finds a day-navigation button by its accessible label, whatever its position. */
+  function navigationButton(
+    target: SolarEnergyGraphsCard,
+    label: string,
+  ): HTMLButtonElement | null | undefined {
+    return target.shadowRoot?.querySelector<HTMLButtonElement>(
+      `.day-navigation button[aria-label="${label}"]`,
+    );
+  }
+
   beforeEach(() => {
     rendererInstances.length = 0;
   });
@@ -254,10 +264,13 @@ describe("SolarEnergyGraphsCard", () => {
     expect(card.shadowRoot?.querySelectorAll(".chart-status")).toHaveLength(2);
     expect(card.shadowRoot?.querySelector(".day-navigation")).not.toBeNull();
     expect(
-      card.shadowRoot?.querySelectorAll<HTMLButtonElement>(
-        ".day-navigation button",
+      Array.from(
+        card.shadowRoot?.querySelectorAll<HTMLButtonElement>(
+          ".day-navigation button",
+        ) ?? [],
+        (button) => button.getAttribute("aria-label"),
       ),
-    ).toHaveLength(2);
+    ).toEqual(["Load high precision", "Previous day", "Return to today", "Next day"]);
   });
 
   // Navigates between adjacent local days and prevents navigation into the future.
@@ -271,19 +284,19 @@ describe("SolarEnergyGraphsCard", () => {
 
     const today = getLocalDateString(new Date(), "Europe/Paris");
     const previousDay = shiftLocalDate(today, -1);
-    const navigation = card.shadowRoot?.querySelector(".day-navigation");
-    const buttons = navigation?.querySelectorAll<HTMLButtonElement>("button");
-    const date = navigation?.querySelector("time");
+    const previousButton = navigationButton(card, "Previous day");
+    const nextButton = navigationButton(card, "Next day");
+    const date = card.shadowRoot?.querySelector("time");
 
     expect(date?.dateTime).toBe(today);
-    expect(buttons?.[1].disabled).toBe(true);
+    expect(nextButton?.disabled).toBe(true);
 
-    buttons?.[0].click();
+    previousButton?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     await card.updateComplete;
 
     expect(date?.dateTime).toBe(previousDay);
-    expect(buttons?.[1].disabled).toBe(false);
+    expect(nextButton?.disabled).toBe(false);
     const previousDayRequests = hass.callWS.mock.calls
       .slice(3)
       .map(([request]) => request);
@@ -299,12 +312,12 @@ describe("SolarEnergyGraphsCard", () => {
       new Date(previousWindow.start * 1000).toISOString(),
     );
 
-    buttons?.[1].click();
+    nextButton?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(8));
     await card.updateComplete;
 
     expect(date?.dateTime).toBe(today);
-    expect(buttons?.[1].disabled).toBe(true);
+    expect(nextButton?.disabled).toBe(true);
   });
 
   // Returns to the current local day when the displayed date is clicked.
@@ -318,12 +331,10 @@ describe("SolarEnergyGraphsCard", () => {
 
     const today = getLocalDateString(new Date(), "Europe/Paris");
     const previousDay = shiftLocalDate(today, -1);
-    const buttons = card.shadowRoot?.querySelectorAll<HTMLButtonElement>(
-      ".day-navigation button",
-    );
+    const nextButton = navigationButton(card, "Next day");
     const date = card.shadowRoot?.querySelector("time");
 
-    buttons?.[0].click();
+    navigationButton(card, "Previous day")?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     await card.updateComplete;
     expect(date?.dateTime).toBe(previousDay);
@@ -333,7 +344,7 @@ describe("SolarEnergyGraphsCard", () => {
     await card.updateComplete;
 
     expect(date?.dateTime).toBe(today);
-    expect(buttons?.[1].disabled).toBe(true);
+    expect(nextButton?.disabled).toBe(true);
   });
 
   // Keeps a user-selected day when Home Assistant sends unrelated state updates.
@@ -345,10 +356,7 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = hass;
     await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
 
-    const button = card.shadowRoot?.querySelector<HTMLButtonElement>(
-      ".day-navigation button",
-    );
-    button?.click();
+    navigationButton(card, "Previous day")?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     const selectedDay = card.shadowRoot?.querySelector("time")?.dateTime;
 
@@ -369,9 +377,7 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = hass;
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(3));
 
-    card.shadowRoot
-      ?.querySelector<HTMLButtonElement>(".day-navigation button")
-      ?.click();
+    navigationButton(card, "Previous day")?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
 
     pending.slice(0, 3).forEach(({ resolve }) => resolve({}));
@@ -551,6 +557,162 @@ describe("SolarEnergyGraphsCard", () => {
     ).toBe(300);
   });
 
+  // Requests the whole day's raw states and draws them in place of statistics.
+  it("loads the day's raw history at high precision", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const recorded = Date.parse("2026-09-27T09:01:00Z") / 1000;
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext(
+      fixedHistoryApi({
+        "statistics:5minute": {
+          "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+        },
+        history: {
+          "sensor.solar": [
+            { s: "700", lu: recorded },
+            { s: "900", lu: recorded + 10 },
+          ],
+        },
+      }),
+    );
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    const clickedAt = new Date().toISOString();
+
+    navigationButton(card, "Load high precision")?.click();
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS.mock.calls[3][0]).toMatchObject({
+      type: "history/history_during_period",
+      start_time: "2026-09-26T22:00:00.000Z",
+      end_time: clickedAt,
+      entity_ids: SENSOR_IDS,
+    });
+    const data: EnergyHistoryResponse =
+      rendererInstances[0].updateData.mock.lastCall![0];
+    const x = Array.from(data.mainData[0]);
+    expect(data.mainData[1][x.indexOf(recorded)]).toBe(700);
+    expect(data.mainData[1][x.indexOf(recorded + 10)]).toBe(900);
+    expect(x).not.toContain(Date.parse("2026-09-27T09:02:30Z") / 1000);
+    expect(navigationButton(card, "Use standard precision")).not.toBeNull();
+  });
+
+  // Switches back to statistics from the already loaded model, without a new request.
+  it("returns to standard precision without reloading history", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const recorded = Date.parse("2026-09-27T09:01:00Z") / 1000;
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext(
+      fixedHistoryApi({
+        "statistics:5minute": {
+          "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+        },
+        history: {
+          "sensor.solar": [
+            { s: "700", lu: recorded },
+            { s: "900", lu: recorded + 10 },
+          ],
+        },
+      }),
+    );
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    navigationButton(card, "Load high precision")?.click();
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    navigationButton(card, "Use standard precision")?.click();
+    await card.updateComplete;
+
+    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    const data: EnergyHistoryResponse =
+      rendererInstances[0].updateData.mock.lastCall![0];
+    const x = Array.from(data.mainData[0]);
+    expect(data.mainData[1][x.indexOf(Date.parse("2026-09-27T09:02:30Z") / 1000)])
+      .toBe(500);
+    expect(x).not.toContain(recorded);
+    expect(navigationButton(card, "Load high precision")).not.toBeNull();
+  });
+
+  // Hides the toggle once raw states prove no finer than the 5-minute statistics.
+  it("hides the precision button when no finer history exists", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext(
+      fixedHistoryApi({
+        "statistics:5minute": {
+          "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+        },
+        history: {
+          "sensor.solar": [
+            { s: "700", lu: Date.parse("2026-09-27T09:00:00Z") / 1000 },
+            { s: "900", lu: Date.parse("2026-09-27T09:05:00Z") / 1000 },
+          ],
+        },
+      }),
+    );
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+
+    navigationButton(card, "Load high precision")?.click();
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(navigationButton(card, "Load high precision")).toBeNull();
+    expect(navigationButton(card, "Use standard precision")).toBeNull();
+    const data: EnergyHistoryResponse =
+      rendererInstances[0].updateData.mock.lastCall![0];
+    const x = Array.from(data.mainData[0]);
+    expect(data.mainData[1][x.indexOf(Date.parse("2026-09-27T09:02:30Z") / 1000)])
+      .toBe(500);
+  });
+
+  // Disables the toggle during the initial load and the raw history request.
+  it("disables the precision button while history is loading", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const recorded = Date.parse("2026-09-27T09:01:00Z") / 1000;
+    const { callWS, pending } = deferredHistoryApi();
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = createHassContext(callWS);
+    await vi.waitFor(() => expect(pending).toHaveLength(3));
+    await card.updateComplete;
+    const initialLoad = navigationButton(card, "Load high precision")?.disabled;
+    pending.forEach(({ resolve }) => resolve({}));
+    await flushHistoryResponse();
+    await card.updateComplete;
+    const afterInitialLoad = navigationButton(card, "Load high precision")?.disabled;
+
+    navigationButton(card, "Load high precision")?.click();
+    await card.updateComplete;
+    const rawLoad = navigationButton(card, "Load high precision")?.disabled;
+    pending[3].resolve({
+      "sensor.solar": [
+        { s: "700", lu: recorded },
+        { s: "900", lu: recorded + 10 },
+      ],
+    });
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect([initialLoad, afterInitialLoad, rawLoad]).toEqual([true, false, true]);
+    expect(pending).toHaveLength(4);
+    expect(navigationButton(card, "Use standard precision")?.disabled).toBe(false);
+  });
+
   // Passes Home Assistant's explicit dark-mode state to the renderer.
   it("updates chart theme mode when hass changes", async () => {
     card = new SolarEnergyGraphsCard();
@@ -669,9 +831,7 @@ describe("SolarEnergyGraphsCard", () => {
     document.body.append(card);
     card.hass = hass;
     await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
-    card.shadowRoot
-      ?.querySelectorAll<HTMLButtonElement>(".day-navigation button")[0]
-      .click();
+    navigationButton(card, "Previous day")?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(5));
     await flushHistoryResponse();
     const renderer = rendererInstances[0];
