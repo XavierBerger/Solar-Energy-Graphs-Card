@@ -243,6 +243,26 @@ describe("SolarEnergyGraphsCard", () => {
     ).toThrow('Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".');
   });
 
+  it("accepts null entities and omits them from Home Assistant requests", async () => {
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    const config = {
+      ...CARD_CONFIG,
+      entities: { ...CARD_CONFIG.entities, grid_import: null },
+    };
+    card.setConfig(config);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const expectedIds = SENSOR_IDS.filter((id) => id !== "sensor.grid_import");
+    const requests = hass.callWS.mock.calls.map(([request]) => request);
+    expect(requests.map((request) =>
+      "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
+    )).toEqual([expectedIds, expectedIds, expectedIds]);
+    expect(rendererInstances[0].data.hasGridImport).toBe(false);
+  });
+
   // Keeps Home Assistant's layout estimate aligned with the viewport-height card.
   it("reports a card size of twelve rows", () => {
     card = new SolarEnergyGraphsCard();

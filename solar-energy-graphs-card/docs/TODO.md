@@ -3,7 +3,7 @@
     - [ ] Choix des 4 entrées
     - [ ] Choix des couleurs des courbes et coloriages
     - [ ] Choix du rapport de taille entre les graphs
-- [ ] Si une entrée vaut `null` ne pas planter, juste ne pas l'afficher
+- [x] Si une entrée vaut `null` ne pas planter, juste ne pas l'afficher
 - [ ] Traduction en Français
 
 # Qualité

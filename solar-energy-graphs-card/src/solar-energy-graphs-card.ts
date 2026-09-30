@@ -46,10 +46,10 @@ type HistoryPrecision = "statistics" | "raw";
 interface SolarEnergyGraphsCardConfig {
   type: string;
   entities: {
-    production: string;
-    consumption: string;
-    grid_import: string;
-    grid_export: string;
+    production: string | null;
+    consumption: string | null;
+    grid_import: string | null;
+    grid_export: string | null;
   };
 }
 
@@ -288,7 +288,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         entities.consumption,
         entities.grid_import,
         entities.grid_export,
-      ].every((entityId) => typeof entityId === "string" && entityId.trim().length > 0)
+      ].every((entityId) => entityId === null || (typeof entityId === "string" && entityId.trim().length > 0))
     ) {
       throw new Error(
         'Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".',
@@ -297,10 +297,10 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.config = {
       ...config,
       entities: {
-        production: entities.production.trim(),
-        consumption: entities.consumption.trim(),
-        grid_import: entities.grid_import.trim(),
-        grid_export: entities.grid_export.trim(),
+        production: normalizeEntityId(entities.production),
+        consumption: normalizeEntityId(entities.consumption),
+        grid_import: normalizeEntityId(entities.grid_import),
+        grid_export: normalizeEntityId(entities.grid_export),
       },
     };
     this.historyData = undefined;
@@ -481,10 +481,10 @@ export class SolarEnergyGraphsCard extends LitElement {
     let unitScales: EnergyUnitScales;
     try {
       unitScales = getEnergyUnitScales([
-        hass.states?.[entityIds[0]]?.attributes,
-        hass.states?.[entityIds[1]]?.attributes,
-        hass.states?.[entityIds[2]]?.attributes,
-        hass.states?.[entityIds[3]]?.attributes,
+        entityIds[0] ? hass.states?.[entityIds[0]]?.attributes : undefined,
+        entityIds[1] ? hass.states?.[entityIds[1]]?.attributes : undefined,
+        entityIds[2] ? hass.states?.[entityIds[2]]?.attributes : undefined,
+        entityIds[3] ? hass.states?.[entityIds[3]]?.attributes : undefined,
       ]);
     } catch (error) {
       this.mainStatus = `Sensor configuration error: ${errorMessage(error)}`;
@@ -511,7 +511,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private async fetchHistory(
     hass: HomeAssistantThemeContext,
-    entityIds: readonly [string, string, string, string],
+    entityIds: readonly [string | null, string | null, string | null, string | null],
     requestId: number,
   ): Promise<void> {
     const model = this.historyModel;
@@ -522,9 +522,9 @@ export class SolarEnergyGraphsCard extends LitElement {
     const today = this.isTodaySelected();
     const [statistics, tail] = await Promise.allSettled([
       fetchStatistics(hass, entityIds, model.window, now),
-      today
+      today && activeEntityIds(entityIds).length > 0
         ? hass.callWS(
-          buildHistoryRequest(entityIds, now - RAW_TAIL_SECONDS, now),
+          buildHistoryRequest(activeEntityIds(entityIds), now - RAW_TAIL_SECONDS, now),
         )
         : Promise.resolve<HistoryDuringPeriodResponse>({}),
     ]);
@@ -542,6 +542,9 @@ export class SolarEnergyGraphsCard extends LitElement {
       }
       const scales = sensorUnitScales(current.unitScales);
       entityIds.forEach((entityId, sensor) => {
+        if (!entityId) {
+          return;
+        }
         samples = replaceSensorHistory(
           samples,
           sensor as LivePowerSample["sensor"],
@@ -574,7 +577,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private scheduleStatisticsRefresh(
     hass: HomeAssistantThemeContext,
-    entityIds: readonly [string, string, string, string],
+    entityIds: readonly [string | null, string | null, string | null, string | null],
     requestId: number,
   ): void {
     const now = Date.now() / 1000;
@@ -595,7 +598,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private async refreshStatistics(
     hass: HomeAssistantThemeContext,
-    entityIds: readonly [string, string, string, string],
+    entityIds: readonly [string | null, string | null, string | null, string | null],
     requestId: number,
   ): Promise<void> {
     const model = this.historyModel;
@@ -698,7 +701,11 @@ export class SolarEnergyGraphsCard extends LitElement {
       const now = Date.now() / 1000;
       const end = Math.min(now, model.window.end);
       const response = await hass.callWS(
-        buildHistoryRequest(configuredEntityIds(config), model.window.start, end),
+        buildHistoryRequest(
+          activeEntityIds(configuredEntityIds(config)),
+          model.window.start,
+          end,
+        ),
       );
       const current = this.historyModel;
       if (!this.isConnected || requestId !== this.historyRequestId || !current) {
@@ -707,6 +714,9 @@ export class SolarEnergyGraphsCard extends LitElement {
       const scales = sensorUnitScales(current.unitScales);
       let samples = [[], [], [], []] as EnergyPowerSamples;
       configuredEntityIds(config).forEach((entityId, sensor) => {
+        if (!entityId) {
+          return;
+        }
         samples = replaceSensorHistory(
           samples,
           sensor as LivePowerSample["sensor"],
@@ -775,6 +785,9 @@ export class SolarEnergyGraphsCard extends LitElement {
     const scales = sensorUnitScales(model.unitScales);
     const live = configuredEntityIds(this.config).flatMap(
       (entityId, sensor): LivePowerSample[] => {
+        if (!entityId) {
+          return [];
+        }
         const state = hass.states?.[entityId];
         const sample = state && parsePowerState(state, scales[sensor]);
         return sample ? [{ ...sample, sensor: sensor as 0 | 1 | 2 | 3 }] : [];
@@ -877,7 +890,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
 function configuredEntityIds(
   config: SolarEnergyGraphsCardConfig,
-): readonly [string, string, string, string] {
+): readonly [string | null, string | null, string | null, string | null] {
   return [
     config.entities.production,
     config.entities.consumption,
@@ -886,25 +899,44 @@ function configuredEntityIds(
   ];
 }
 
+function activeEntityIds(
+  entityIds: readonly [string | null, string | null, string | null, string | null],
+): string[] {
+  return entityIds.filter((entityId): entityId is string => entityId !== null);
+}
+
+function normalizeEntityId(entityId: string | null): string | null {
+  return entityId === null ? null : entityId.trim();
+}
+
 /** Fetches 5-minute statistics, completed by hourly ones where purged. */
 async function fetchStatistics(
   hass: HomeAssistantThemeContext,
-  entityIds: readonly [string, string, string, string],
+  entityIds: readonly [string | null, string | null, string | null, string | null],
   window: LocalDayWindow,
   now: number,
 ): Promise<EnergyStatistics> {
+  const activeIds = activeEntityIds(entityIds);
+  if (activeIds.length === 0) {
+    return NO_STATISTICS;
+  }
   const [fiveMinute, hourly] = await Promise.all([
-    hass.callWS(buildStatisticsRequest(entityIds, window, now, "5minute")),
-    hass.callWS(buildStatisticsRequest(entityIds, window, now, "hour")),
+    hass.callWS(buildStatisticsRequest(activeIds, window, now, "5minute")),
+    hass.callWS(buildStatisticsRequest(activeIds, window, now, "hour")),
   ]);
-  const [production, consumption, gridImport, gridExport] = entityIds.map(
-    (entityId) =>
-      combineStatistics(
+  const statisticsOf = (entityId: string | null) =>
+    entityId === null
+      ? []
+      : combineStatistics(
         parseStatisticRows(entityRowsOf(fiveMinute, entityId)),
         parseStatisticRows(entityRowsOf(hourly, entityId)),
-      ),
-  );
-  return [production, consumption, gridImport, gridExport];
+      );
+  return [
+    statisticsOf(entityIds[0]),
+    statisticsOf(entityIds[1]),
+    statisticsOf(entityIds[2]),
+    statisticsOf(entityIds[3]),
+  ];
 }
 
 export function hasHigherPrecisionSamples(
