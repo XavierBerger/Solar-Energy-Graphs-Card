@@ -502,6 +502,107 @@ describe("SolarEnergyGraphsCard", () => {
     ).toEqual(["statistics:5minute", "statistics:hour"]);
   });
 
+  /** Mounts today's card at 10:10Z and switches it to high precision. */
+  async function mountInHighPrecision() {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const rawStart = Date.parse("2026-09-27T09:00:00Z") / 1000;
+    const hass = createHassContext(
+      fixedHistoryApi({
+        history: {
+          "sensor.solar": [
+            { s: "100", lu: rawStart },
+            { s: "150", lu: rawStart + 60 },
+          ],
+        },
+        "statistics:5minute": {
+          "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+        },
+      }),
+    );
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    await card.updateComplete;
+    precisionButton("Load high precision").click();
+    await flushHistoryResponse();
+    await card.updateComplete;
+    return hass;
+  }
+
+  function precisionButton(label: string): HTMLButtonElement {
+    const button = card.shadowRoot?.querySelector<HTMLButtonElement>(
+      `.day-navigation button[aria-label="${label}"]`,
+    );
+    expect(button).toBeTruthy();
+    return button!;
+  }
+
+  /** Tells whether the drawn data holds the 09:00Z statistics interval midpoint. */
+  function drawsStatistics(data: EnergyHistoryResponse): boolean {
+    return Array.from(data.mainData[0]).includes(
+      Date.parse("2026-09-27T09:02:30Z") / 1000,
+    );
+  }
+
+  // In high precision, a 5-minute boundary requests nothing: raw history is loaded.
+  it("does not refresh statistics in high precision", async () => {
+    const hass = await mountInHighPrecision();
+    const beforeBoundary = hass.callWS.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:15:31Z") - Date.now(),
+    );
+
+    expect(hass.callWS).toHaveBeenCalledTimes(beforeBoundary);
+  });
+
+  // Appends live states in high precision without falling back to statistics.
+  it("keeps high precision when live states and boundaries arrive", async () => {
+    const hass = await mountInHighPrecision();
+    const renderer = rendererInstances[0];
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:15:31Z") - Date.now(),
+    );
+    renderer.updateData.mockClear();
+
+    card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:15:00Z");
+    await vi.advanceTimersByTimeAsync(250);
+    await card.updateComplete;
+
+    const data: EnergyHistoryResponse = renderer.updateData.mock.lastCall![0];
+    const index = Array.from(data.mainData[0]).indexOf(
+      Date.parse("2026-09-27T10:15:00Z") / 1000,
+    );
+    expect(data.mainData[1][index]).toBe(300);
+    expect(drawsStatistics(data)).toBe(false);
+    expect(precisionButton("Use standard precision")).toBeTruthy();
+  });
+
+  // Resumes the statistics refresh after a boundary spent in high precision.
+  it("refreshes statistics again after leaving high precision", async () => {
+    const hass = await mountInHighPrecision();
+    const renderer = rendererInstances[0];
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:15:31Z") - Date.now(),
+    );
+    precisionButton("Use standard precision").click();
+    const beforeBoundary = hass.callWS.mock.calls.length;
+    renderer.updateData.mockClear();
+
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:20:31Z") - Date.now(),
+    );
+
+    expect(
+      hass.callWS.mock.calls.slice(beforeBoundary).map(([request]) => requestKind(request)),
+    ).toEqual(["statistics:5minute", "statistics:hour"]);
+    expect(renderer.updateData).toHaveBeenCalledOnce();
+    expect(drawsStatistics(renderer.updateData.mock.lastCall![0])).toBe(true);
+  });
+
   // Keeps the raw states drawn and reports the failed statistics request.
   it("reports a failed statistics request", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });

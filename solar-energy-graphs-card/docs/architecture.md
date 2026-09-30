@@ -153,7 +153,8 @@ part: it is statistics only.
 - **Statistics, every 5 minutes.** `scheduleStatisticsRefresh` waits for the
   next 5-minute boundary plus 30 s (`STATISTICS_REFRESH_DELAY_SECONDS`), the
   time Home Assistant needs to compile it, then reloads the statistics and
-  re-arms itself.
+  re-arms itself. In high precision it only re-arms: the raw history already
+  covers the day, and live states extend it.
 - **Wall clock.** Every projection uses `Date.now()`, so the lines always stop
   at the present moment.
 

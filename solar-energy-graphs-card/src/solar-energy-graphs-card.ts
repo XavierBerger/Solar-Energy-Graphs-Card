@@ -602,6 +602,12 @@ export class SolarEnergyGraphsCard extends LitElement {
     if (!model || !this.isTodaySelected()) {
       return;
     }
+    // Raw history already covers the day and live states extend it; the
+    // statistics are refreshed at the first boundary after switching back.
+    if (model.precision === "raw") {
+      this.scheduleStatisticsRefresh(hass, entityIds, requestId);
+      return;
+    }
     let statistics: EnergyStatistics | undefined;
     let loadError: string | undefined;
     try {
@@ -681,7 +687,8 @@ export class SolarEnergyGraphsCard extends LitElement {
     config: SolarEnergyGraphsCardConfig,
     model: NonNullable<SolarEnergyGraphsCard["historyModel"]>,
   ): Promise<void> {
-    const requestId = ++this.historyRequestId;
+    // Keep the load's id: a new one would stop its statistics refresh chain.
+    const requestId = this.historyRequestId;
     this.historyModel = { ...model, loading: true, loadError: undefined };
     this.mainStatus = LOADING_STATUS;
     this.gridStatus = LOADING_STATUS;
