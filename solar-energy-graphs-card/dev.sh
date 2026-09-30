@@ -9,10 +9,10 @@ NPM_CACHE_VOLUME=solar-energy-graphs-card-npm-cache
 ACTION=${1:-build}
 
 case "$ACTION" in
-  build|install|test|typecheck|deploy|diagrams)
+  build|install|test|coverage|typecheck|deploy|diagrams)
     ;;
   *)
-    printf 'Usage: %s [build|install|test|typecheck|deploy|diagrams]\n' "$0" >&2
+    printf 'Usage: %s [build|install|test|coverage|typecheck|deploy|diagrams]\n' "$0" >&2
     exit 2
     ;;
 esac
@@ -67,6 +67,10 @@ podman run --rm \
     if [ "$1" = build ]; then
       rm -rf /source/dist
       cp -R dist /source/dist
+    fi
+    if [ "$1" = coverage ]; then
+      rm -rf /source/coverage
+      cp -R coverage /source/coverage
     fi
     if [ "$1" = diagrams ]; then
       cp docs/diagrams/*.svg /source/docs/diagrams/

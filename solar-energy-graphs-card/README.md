@@ -64,6 +64,13 @@ Pour exécuter les tests unitaires du projet dans le même environnement Podman 
 ./dev.sh test
 ```
 
+Pour mesurer la couverture des tests, avec un résumé dans le terminal et un
+rapport HTML dans `coverage/index.html` :
+
+```sh
+./dev.sh coverage
+```
+
 ## 2. Copier le fichier dans Home Assistant
 
 Dans le dossier de configuration de Home Assistant, créez le dossier `www` s'il

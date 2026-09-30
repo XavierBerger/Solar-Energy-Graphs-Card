@@ -13,5 +13,12 @@ export default defineConfig({
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
     clearMocks: true,
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.test.ts", "src/vite-env.d.ts"],
+      reporter: ["text", "html"],
+      reportsDirectory: "coverage",
+    },
   },
 });

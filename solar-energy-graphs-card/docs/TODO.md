@@ -16,7 +16,6 @@
 - [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
 
 # Qualité
-- [ ] Ajouter la génération de la couverture de tests
 - [ ] Ajouter des tests de mutation pour vérifier que les tests sont de vrais tests
 
 # Release
