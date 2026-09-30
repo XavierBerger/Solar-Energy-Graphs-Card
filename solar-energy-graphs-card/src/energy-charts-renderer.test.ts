@@ -18,6 +18,7 @@ vi.mock("./uplot-adapter", () => ({
 }));
 
 import {
+  computeDragPanRange,
   computeWheelZoomRange,
   drawZeroLine,
   EnergyChartsRenderer as Renderer,
@@ -250,8 +251,8 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.cursor.sync.key).toBe(secondOptions.cursor.sync.key);
     expect(firstOptions.cursor.sync.scales).toEqual(["x", null]);
     expect(secondOptions.cursor.sync.scales).toEqual(["x", null]);
-    expect(firstOptions.cursor.drag).toEqual({ x: true, y: false });
-    expect(secondOptions.cursor.drag).toEqual({ x: true, y: false });
+    expect(firstOptions.cursor.drag).toEqual({ x: false, y: false });
+    expect(secondOptions.cursor.drag).toEqual({ x: false, y: false });
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.legend.mount).toBeTypeOf("function");
     expect(firstOptions.hooks).toBeUndefined();
@@ -593,6 +594,137 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
+
+  // Pans both charts when the user press+drags while zoomed in.
+  it("pans both charts on mousedown+mousemove when zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    // Simulate a zoomed-in state on both charts.
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const mousedown = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      button: 0,
+    });
+    containers[0].dispatchEvent(mousedown);
+
+    const mousemove = new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 150,
+    });
+    document.dispatchEvent(mousemove);
+
+    // deltaPx = 50, plotWidth = 200, range = 150
+    // deltaTime = -(50/200) * 150 = -37.5
+    // newMin = 50 - 37.5 = 12.5, newMax = 200 - 37.5 = 162.5
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 12.5, max: 162.5 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 12.5, max: 162.5 });
+  });
+
+  // Does not start panning when the view shows the full day (not zoomed).
+  it("does not pan on drag when at full day bounds", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const mousedown = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      button: 0,
+    });
+    containers[0].dispatchEvent(mousedown);
+
+    const mousemove = new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 150,
+    });
+    document.dispatchEvent(mousemove);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Stops panning on mouseup and removes document-level move/up listeners.
+  it("stops panning on mouseup", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true, clientX: 100, button: 0,
+    }));
+
+    document.dispatchEvent(new MouseEvent("mouseup", {
+      bubbles: true, cancelable: true, clientX: 120,
+    }));
+
+    // After mouseup, further moves should not pan.
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+
+    document.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true, cancelable: true, clientX: 200,
+    }));
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Removes mousedown listeners from chart containers when destroyed.
+  it("removes mousedown listeners when destroyed", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    renderer.destroy();
+
+    containers[0].dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true, clientX: 100, button: 0,
+    }));
+    document.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true, cancelable: true, clientX: 150,
+    }));
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Cleans up document listeners for an active drag when destroyed mid-drag.
+  it("cleans up active drag state on destroy", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true, cancelable: true, clientX: 100, button: 0,
+    }));
+
+    renderer.destroy();
+
+    // After destroy, moves should not pan.
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+
+    document.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true, cancelable: true, clientX: 200,
+    }));
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
 });
 
 describe("computeWheelZoomRange", () => {
@@ -670,3 +802,82 @@ describe("computeWheelZoomRange", () => {
   });
 });
 
+describe("computeDragPanRange", () => {
+  const dayWindow = { min: 0, max: 86400 };
+
+  // Shifts the visible window left (earlier in time) when dragging right.
+  it("pans left when dragging right", () => {
+    const current = { min: 20000, max: 60000 };
+    const result = computeDragPanRange(current, dayWindow, 50, 200);
+
+    // deltaPx=50, plotWidth=200 → fraction=0.25, duration=40000
+    // deltaTime = -(50/200)*40000 = -10000
+    // newMin = 20000 - 10000 = 10000, newMax = 60000 - 10000 = 50000
+    expect(result).toEqual({ min: 10000, max: 50000 });
+  });
+
+  // Shifts the visible window right (later in time) when dragging left.
+  it("pans right when dragging left", () => {
+    const current = { min: 20000, max: 60000 };
+    const result = computeDragPanRange(current, dayWindow, -50, 200);
+
+    // deltaTime = -(-50/200)*40000 = 10000
+    // newMin = 30000, newMax = 70000
+    expect(result).toEqual({ min: 30000, max: 70000 });
+  });
+
+  // Clamps the panned range so it does not go before the start of the day.
+  it("clamps at the day start boundary", () => {
+    const current = { min: 5000, max: 45000 };
+    const result = computeDragPanRange(current, dayWindow, 100, 200);
+
+    // deltaTime = -(100/200)*40000 = -20000
+    // newMin = 5000 - 20000 = -15000 → clamped to 0
+    expect(result).toEqual({ min: 0, max: 40000 });
+  });
+
+  // Clamps the panned range so it does not go past the end of the day.
+  it("clamps at the day end boundary", () => {
+    const current = { min: 46400, max: 86400 };
+    const result = computeDragPanRange(current, dayWindow, -100, 200);
+
+    // deltaTime = -(-100/200)*40000 = 20000
+    // newMax = 86400 + 20000 = 106400 → clamped to 86400
+    expect(result).toEqual({ min: 46400, max: 86400 });
+  });
+
+  // Returns undefined when not zoomed in (no panning at full day).
+  it("returns undefined when not zoomed in", () => {
+    const current = { min: 0, max: 86400 };
+    const result = computeDragPanRange(current, dayWindow, 50, 200);
+
+    expect(result).toBeUndefined();
+  });
+
+  // Returns undefined when pixel displacement is zero.
+  it("returns undefined when deltaPx is zero", () => {
+    const current = { min: 20000, max: 60000 };
+    const result = computeDragPanRange(current, dayWindow, 0, 200);
+
+    expect(result).toBeUndefined();
+  });
+
+  // Returns undefined when plot width is zero or negative.
+  it("returns undefined for zero or negative plot width", () => {
+    const current = { min: 20000, max: 60000 };
+
+    expect(computeDragPanRange(current, dayWindow, 50, 0)).toBeUndefined();
+    expect(computeDragPanRange(current, dayWindow, 50, -10)).toBeUndefined();
+  });
+
+  // Returns undefined when already clamped at the boundary in the drag direction.
+  it("returns undefined when already at the boundary", () => {
+    const atStart = { min: 0, max: 40000 };
+    // Dragging right should go earlier, but already at day start.
+    expect(computeDragPanRange(atStart, dayWindow, 50, 200)).toBeUndefined();
+
+    const atEnd = { min: 46400, max: 86400 };
+    // Dragging left should go later, but already at day end.
+    expect(computeDragPanRange(atEnd, dayWindow, -50, 200)).toBeUndefined();
+  });
+});

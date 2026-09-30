@@ -117,6 +117,49 @@ export function computeWheelZoomRange(
   return { min: newMin, max: newMax };
 }
 
+/** Computes the new horizontal time range when dragging to pan. */
+export function computeDragPanRange(
+  currentRange: TimeRange,
+  dayWindow: TimeRange,
+  deltaPx: number,
+  plotWidthPx: number,
+): TimeRange | undefined {
+  if (deltaPx === 0 || plotWidthPx <= 0) {
+    return undefined;
+  }
+
+  const { min: currentMin, max: currentMax } = currentRange;
+  const { min: dayStart, max: dayEnd } = dayWindow;
+  const currentDuration = currentMax - currentMin;
+  const dayDuration = dayEnd - dayStart;
+
+  // Not zoomed in — nothing to pan.
+  if (currentDuration >= dayDuration) {
+    return undefined;
+  }
+
+  // Convert pixel displacement to time units.
+  // Dragging right (positive deltaPx) moves the view left (earlier in time).
+  const deltaTime = -(deltaPx / plotWidthPx) * currentDuration;
+
+  let newMin = currentMin + deltaTime;
+  let newMax = currentMax + deltaTime;
+
+  if (newMin < dayStart) {
+    newMin = dayStart;
+    newMax = dayStart + currentDuration;
+  } else if (newMax > dayEnd) {
+    newMax = dayEnd;
+    newMin = dayEnd - currentDuration;
+  }
+
+  if (newMin === currentMin && newMax === currentMax) {
+    return undefined;
+  }
+
+  return { min: newMin, max: newMax };
+}
+
 interface ChartTheme {
   text: string;
   grid: string;
@@ -137,6 +180,18 @@ export class EnergyChartsRenderer {
     element: HTMLElement;
     listener: (event: WheelEvent) => void;
   }> = [];
+  private readonly dragListeners: Array<{
+    element: HTMLElement;
+    listener: (event: MouseEvent) => void;
+  }> = [];
+  private dragState?: {
+    startX: number;
+    rangeAtStart: TimeRange;
+    dayWindow: TimeRange;
+    plotWidth: number;
+    onMove: (event: MouseEvent) => void;
+    onUp: (event: MouseEvent) => void;
+  };
   private destroyed = false;
   private theme: ChartTheme;
 
@@ -169,6 +224,11 @@ export class EnergyChartsRenderer {
       };
       element.addEventListener("wheel", onWheel, { passive: false });
       this.wheelListeners.push({ element, listener: onWheel });
+      const onMouseDown = (event: MouseEvent) => {
+        this.handleDragStart(event, index);
+      };
+      element.addEventListener("mousedown", onMouseDown);
+      this.dragListeners.push({ element, listener: onMouseDown });
       return { element, legendElement, chart };
     });
   }
@@ -184,6 +244,15 @@ export class EnergyChartsRenderer {
       element.removeEventListener("wheel", listener);
     });
     this.wheelListeners.length = 0;
+    this.dragListeners.forEach(({ element, listener }) => {
+      element.removeEventListener("mousedown", listener);
+    });
+    this.dragListeners.length = 0;
+    if (this.dragState) {
+      document.removeEventListener("mousemove", this.dragState.onMove);
+      document.removeEventListener("mouseup", this.dragState.onUp);
+      this.dragState = undefined;
+    }
     this.charts.forEach(({ chart, legendElement }) => {
       chart.destroy();
       legendElement.replaceChildren();
@@ -265,6 +334,90 @@ export class EnergyChartsRenderer {
         chart.setScale("x", newRange);
       });
     }
+  }
+
+  private handleDragStart(event: MouseEvent, targetIndex: number): void {
+    if (this.destroyed || event.button !== 0 || this.dragState) {
+      return;
+    }
+
+    const target = this.charts[targetIndex];
+    if (!target) {
+      return;
+    }
+
+    const { data, scales } = target.chart;
+    const xData = data[0];
+    if (!xData || xData.length < 2) {
+      return;
+    }
+
+    const dayStart = xData[0];
+    const dayEnd = xData[xData.length - 1];
+    const currentMin = scales.x?.min ?? dayStart;
+    const currentMax = scales.x?.max ?? dayEnd;
+    const currentDuration = currentMax - currentMin;
+    const dayDuration = dayEnd - dayStart;
+
+    // Not zoomed: let normal cursor behavior through.
+    if (currentDuration >= dayDuration) {
+      return;
+    }
+
+    const overlay = target.chart.over ?? target.element;
+    const rect = overlay.getBoundingClientRect?.() ?? { width: 0 };
+    if (!rect.width || rect.width <= 0) {
+      return;
+    }
+
+    const onMove = (e: MouseEvent) => {
+      this.handleDragMove(e);
+    };
+    const onUp = (e: MouseEvent) => {
+      this.handleDragEnd(e);
+    };
+
+    this.dragState = {
+      startX: event.clientX,
+      rangeAtStart: { min: currentMin, max: currentMax },
+      dayWindow: { min: dayStart, max: dayEnd },
+      plotWidth: rect.width,
+      onMove,
+      onUp,
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  private handleDragMove(event: MouseEvent): void {
+    if (!this.dragState) {
+      return;
+    }
+
+    const deltaPx = event.clientX - this.dragState.startX;
+    const newRange = computeDragPanRange(
+      this.dragState.rangeAtStart,
+      this.dragState.dayWindow,
+      deltaPx,
+      this.dragState.plotWidth,
+    );
+
+    if (newRange) {
+      this.charts.forEach(({ chart }) => {
+        chart.setScale("x", newRange);
+      });
+    }
+  }
+
+  private handleDragEnd(_event: MouseEvent): void {
+    if (!this.dragState) {
+      return;
+    }
+
+    document.removeEventListener("mousemove", this.dragState.onMove);
+    document.removeEventListener("mouseup", this.dragState.onUp);
+    this.dragState = undefined;
   }
 
   refreshTheme(darkMode: boolean): void {
@@ -411,7 +564,7 @@ export class EnergyChartsRenderer {
         uPlot.tzDate(new Date(timestamp * 1000), timeZone),
       cursor: {
         sync: { key: this.syncGroup.key, scales: ["x", null] },
-        drag: { x: true, y: false },
+        drag: { x: false, y: false },
       },
       legend: {
         mount: (_chart, legend) => {
