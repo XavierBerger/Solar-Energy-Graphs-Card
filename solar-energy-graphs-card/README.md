@@ -71,6 +71,15 @@ rapport HTML dans `coverage/index.html` :
 ./dev.sh coverage
 ```
 
+Pour évaluer la pertinence des tests par des tests de mutation avec Stryker,
+avec un résumé dans le terminal et un rapport HTML dans
+`reports/mutation/mutation.html` :
+
+```sh
+./dev.sh mutation
+```
+
+
 ## 2. Copier le fichier dans Home Assistant
 
 Dans le dossier de configuration de Home Assistant, créez le dossier `www` s'il
