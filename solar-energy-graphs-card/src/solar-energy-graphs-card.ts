@@ -656,7 +656,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         ?disabled=${model?.loading === true}
         @click=${this.togglePrecision}
       >
-        <span aria-hidden="true">${highPrecision ? "▤" : "≋"}</span>
+        <span aria-hidden="true">${highPrecision ? "≋" : "▤"}</span>
       </button>
     `;
   }
