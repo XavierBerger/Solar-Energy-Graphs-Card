@@ -18,6 +18,7 @@ vi.mock("./uplot-adapter", () => ({
 }));
 
 import {
+  computeWheelZoomRange,
   drawZeroLine,
   EnergyChartsRenderer as Renderer,
 } from "./energy-charts-renderer";
@@ -515,4 +516,157 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[0].destroy).toHaveBeenCalledOnce();
     expect(charts[1].destroy).toHaveBeenCalledOnce();
   });
+
+  // Zooms both energy charts synchronously when the mouse wheel scrolls on the first chart.
+  it("zooms both charts synchronously when scrolling over the solar chart", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: -100,
+    });
+    containers[0].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+  });
+
+  // Zooms both energy charts synchronously when the mouse wheel scrolls on the second chart.
+  it("zooms both charts synchronously when scrolling over the grid chart", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    containers[1].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: -100,
+    });
+    containers[1].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+  });
+
+  // Prevents scrolling and leaves scales unchanged when zooming out while already at full day.
+  it("does not update scale when zooming out from the full day bounds", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: 100,
+    });
+    containers[0].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Stops responding to wheel events after the renderer is destroyed.
+  it("removes wheel event listeners when destroyed", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    renderer.destroy();
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: -100,
+    });
+    containers[0].dispatchEvent(event);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
 });
+
+describe("computeWheelZoomRange", () => {
+  const dayWindow = { min: 0, max: 86400 };
+
+  // Reduces the visible time span centered around the cursor position on zoom in.
+  it("zooms in centered at the cursor fraction", () => {
+    const current = { min: 0, max: 86400 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, -100, 0.8);
+
+    expect(zoomed).toEqual({ min: 8640, max: 77760 });
+  });
+
+  // Keeps zooming in without any artificial minimum duration limit.
+  it("allows unlimited zoom in down to arbitrarily small intervals", () => {
+    const current = { min: 1000, max: 1000.01 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, -100, 0.8);
+
+    expect(zoomed).toBeDefined();
+    expect(zoomed!.max - zoomed!.min).toBeCloseTo(0.008, 6);
+  });
+
+  // Expands the visible time span when zooming out while staying within the day.
+  it("clamps zoom out to stay within the day boundaries", () => {
+    const current = { min: 10000, max: 30000 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, 100, 0.8);
+
+    expect(zoomed).toEqual({ min: 7500, max: 32500 });
+  });
+
+  // Restores exact day window bounds when zoom out duration exceeds the full day.
+  it("clamps zoom out exceeding full day duration to exact day bounds", () => {
+    const current = { min: 5000, max: 80000 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, 100, 0.8);
+
+    expect(zoomed).toEqual({ min: 0, max: 86400 });
+  });
+
+  // Avoids unnecessary scale updates when zooming out while already showing the full day.
+  it("returns undefined when zooming out while already at full day bounds", () => {
+    const current = { min: 0, max: 86400 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, 100, 0.8);
+
+    expect(zoomed).toBeUndefined();
+  });
+
+  // Leaves the time range unchanged when the wheel event has zero deltaY.
+  it("returns undefined when deltaY is zero", () => {
+    const current = { min: 10000, max: 30000 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, 0, 0.8);
+
+    expect(zoomed).toBeUndefined();
+  });
+
+  // Shifts the zoom window to avoid falling before the start of the day.
+  it("shifts the zoomed range when the cursor is near the day start", () => {
+    const current = { min: 0, max: 50000 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 0, -100, 0.8);
+
+    expect(zoomed).toEqual({ min: 0, max: 40000 });
+  });
+
+  // Shifts the zoom window to avoid extending beyond the end of the day.
+  it("shifts the zoomed range when the cursor is near the day end", () => {
+    const current = { min: 36400, max: 86400 };
+    const zoomed = computeWheelZoomRange(current, dayWindow, 1, -100, 0.8);
+
+    expect(zoomed).toEqual({ min: 46400, max: 86400 });
+  });
+
+  // Rejects invalid non-positive day or range durations safely.
+  it("returns undefined for non-positive range or day window durations", () => {
+    expect(computeWheelZoomRange({ min: 10, max: 10 }, dayWindow, 0.5, -100)).toBeUndefined();
+    expect(computeWheelZoomRange({ min: 0, max: 100 }, { min: 50, max: 50 }, 0.5, -100)).toBeUndefined();
+  });
+});
+

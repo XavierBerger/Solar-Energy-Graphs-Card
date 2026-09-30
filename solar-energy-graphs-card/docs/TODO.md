@@ -1,9 +1,7 @@
 # Nouvelles fonctionnalités
-- [ ] Ne pas changer le zoom quand de nouvelles données arrivent
-    - [ ] Conserver le niveau de détail (haute/basse précision) lors de mise à jour. Idéalement ajouter les nouvelles données sans tout recharger
-- [ ] zoomer sur l'axe temporelle avec le molette. 
-  - [ ] Zoom avant pas limité, zomm arrière limité à la journée. 
-  - [ ] Le zoom en se fait qu'à la molette
+- [x] zoomer sur l'axe temporelle avec la molette. 
+  - [x] Zoom avant pas limité, zoom arrière limité à la journée. 
+  - [ ] Le zoom ne se fait qu'à la molette (à finaliser avec le déplacement par press+drag)
 - [ ] En zoom, permettre de déplacer le graphe de droite à gauche avec un "press + drag" du bouton gauche de la souris
 - [ ] Créer l'interface de configuration graphique
     - [ ] Choix des 4 entrées
@@ -16,7 +14,10 @@
 - [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
 
 # Qualité
+- [ ] Corriger les 6 tests de `solar-energy-graphs-card.test.ts` qui comptent ou indexent `.day-navigation button` : ils échouent depuis l'ajout du bouton de précision (422eb81)
+- [ ] Ajouter la génération de la couverture de tests
 - [ ] Ajouter des tests de mutation pour vérifier que les tests sont de vrais tests
+- [ ] Tester le bouton haute précision : chargement de l'historique brut, retour en basse précision, masquage quand aucune donnée plus précise n'existe, désactivation pendant le chargement
 
 # Release
 - [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release

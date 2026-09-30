@@ -65,6 +65,58 @@ export function drawZeroLine(chart: ZeroLineChart, color: string): void {
   ctx.restore();
 }
 
+export interface TimeRange {
+  min: number;
+  max: number;
+}
+
+/** Computes the new horizontal time range when zooming with the mouse wheel. */
+export function computeWheelZoomRange(
+  currentRange: TimeRange,
+  dayWindow: TimeRange,
+  cursorPct: number,
+  deltaY: number,
+  zoomFactor = 0.8,
+): TimeRange | undefined {
+  if (deltaY === 0) {
+    return undefined;
+  }
+
+  const { min: currentMin, max: currentMax } = currentRange;
+  const { min: dayStart, max: dayEnd } = dayWindow;
+  const dayDuration = dayEnd - dayStart;
+  const currentDuration = currentMax - currentMin;
+
+  if (dayDuration <= 0 || currentDuration <= 0) {
+    return undefined;
+  }
+
+  const clampedPct = Math.max(0, Math.min(1, cursorPct));
+  const pivot = currentMin + clampedPct * currentDuration;
+
+  const newDuration = deltaY < 0 ? currentDuration * zoomFactor : currentDuration / zoomFactor;
+
+  if (newDuration >= dayDuration) {
+    if (currentMin === dayStart && currentMax === dayEnd) {
+      return undefined;
+    }
+    return { min: dayStart, max: dayEnd };
+  }
+
+  let newMin = pivot - clampedPct * newDuration;
+  let newMax = newMin + newDuration;
+
+  if (newMin < dayStart) {
+    newMin = dayStart;
+    newMax = dayStart + newDuration;
+  } else if (newMax > dayEnd) {
+    newMax = dayEnd;
+    newMin = dayEnd - newDuration;
+  }
+
+  return { min: newMin, max: newMax };
+}
+
 interface ChartTheme {
   text: string;
   grid: string;
@@ -81,6 +133,10 @@ export class EnergyChartsRenderer {
   private readonly charts: ChartTarget[];
   private readonly resizeObserver: ResizeObserver;
   private readonly syncGroup: ReturnType<typeof uPlot.sync>;
+  private readonly wheelListeners: Array<{
+    element: HTMLElement;
+    listener: (event: WheelEvent) => void;
+  }> = [];
   private destroyed = false;
   private theme: ChartTheme;
 
@@ -108,6 +164,11 @@ export class EnergyChartsRenderer {
         element,
       );
       this.resizeObserver.observe(element);
+      const onWheel = (event: WheelEvent) => {
+        this.handleWheel(event, index);
+      };
+      element.addEventListener("wheel", onWheel, { passive: false });
+      this.wheelListeners.push({ element, listener: onWheel });
       return { element, legendElement, chart };
     });
   }
@@ -119,6 +180,10 @@ export class EnergyChartsRenderer {
 
     this.destroyed = true;
     this.resizeObserver.disconnect();
+    this.wheelListeners.forEach(({ element, listener }) => {
+      element.removeEventListener("wheel", listener);
+    });
+    this.wheelListeners.length = 0;
     this.charts.forEach(({ chart, legendElement }) => {
       chart.destroy();
       legendElement.replaceChildren();
@@ -153,6 +218,53 @@ export class EnergyChartsRenderer {
     return min > x[0] || max < x[x.length - 1]
       ? { min, max, dayStart: x[0] }
       : undefined;
+  }
+
+  private handleWheel(event: WheelEvent, targetIndex: number): void {
+    if (this.destroyed || event.deltaY === 0) {
+      return;
+    }
+
+    const target = this.charts[targetIndex];
+    if (!target) {
+      return;
+    }
+
+    const { data, scales } = target.chart;
+    const xData = data[0];
+    if (!xData || xData.length < 2) {
+      return;
+    }
+
+    const dayStart = xData[0];
+    const dayEnd = xData[xData.length - 1];
+    const currentMin = scales.x?.min ?? dayStart;
+    const currentMax = scales.x?.max ?? dayEnd;
+
+    const overlay = target.chart.over ?? target.element;
+    const rect = overlay.getBoundingClientRect?.() ?? { left: 0, width: 0 };
+    const clientX =
+      typeof event.clientX === "number" && Number.isFinite(event.clientX)
+        ? event.clientX
+        : (rect.left ?? 0) + (rect.width ?? 0) / 2;
+    const cursorPct =
+      rect.width && rect.width > 0
+        ? (clientX - (rect.left ?? 0)) / rect.width
+        : 0.5;
+
+    const newRange = computeWheelZoomRange(
+      { min: currentMin, max: currentMax },
+      { min: dayStart, max: dayEnd },
+      cursorPct,
+      event.deltaY,
+    );
+
+    event.preventDefault();
+    if (newRange) {
+      this.charts.forEach(({ chart }) => {
+        chart.setScale("x", newRange);
+      });
+    }
   }
 
   refreshTheme(darkMode: boolean): void {
