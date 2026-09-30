@@ -129,8 +129,30 @@ export class EnergyChartsRenderer {
     if (this.destroyed) {
       return;
     }
+    const zoom = this.currentZoom();
     this.charts[0].chart.setData(data.mainData);
     this.charts[1].chart.setData(data.gridData);
+    // Both x axes start at the day window start: another start means another day.
+    if (zoom && data.mainData[0][0] === zoom.dayStart) {
+      this.charts.forEach(({ chart }) => {
+        chart.setScale("x", { min: zoom.min, max: zoom.max });
+      });
+    }
+  }
+
+  /** Returns the x range when it is narrower than the displayed day. */
+  private currentZoom():
+    | { min: number; max: number; dayStart: number }
+    | undefined {
+    const { data, scales } = this.charts[0].chart;
+    const x = data[0];
+    const { min, max } = scales.x ?? {};
+    if (x.length === 0 || min === undefined || max === undefined) {
+      return undefined;
+    }
+    return min > x[0] || max < x[x.length - 1]
+      ? { min, max, dayStart: x[0] }
+      : undefined;
   }
 
   refreshTheme(darkMode: boolean): void {

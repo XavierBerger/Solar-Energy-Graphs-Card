@@ -101,6 +101,9 @@ describe("EnergyChartsRenderer", () => {
     setData: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     redraw: ReturnType<typeof vi.fn>;
+    setScale: ReturnType<typeof vi.fn>;
+    data: [Float64Array];
+    scales: { x: { min?: number; max?: number } };
     axes: Array<{
       grid?: { width?: number };
       ticks?: Record<string, never>;
@@ -118,6 +121,9 @@ describe("EnergyChartsRenderer", () => {
         setData: vi.fn(),
         destroy: vi.fn(),
         redraw: vi.fn(),
+        setScale: vi.fn(),
+        data: [Float64Array.from([0, 300])],
+        scales: { x: { min: 0, max: 300 } },
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
       {
@@ -125,6 +131,9 @@ describe("EnergyChartsRenderer", () => {
         setData: vi.fn(),
         destroy: vi.fn(),
         redraw: vi.fn(),
+        setScale: vi.fn(),
+        data: [Float64Array.from([0, 300])],
+        scales: { x: { min: 0, max: 300 } },
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
     ];
@@ -264,6 +273,43 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setData).toHaveBeenCalledWith(updatedData.mainData);
     expect(charts[1].setData).toHaveBeenCalledWith(updatedData.gridData);
+  });
+
+  // Keeps a horizontal zoom on both charts when data of the same day arrives.
+  it("restores the x zoom after a same-day data update", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 120 };
+
+    renderer.updateData(TEST_HISTORY_DATA);
+
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 60, max: 120 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 60, max: 120 });
+  });
+
+  // Lets setData fit the whole day when the user has not zoomed.
+  it("does not set the x scale after an update without zoom", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+
+    renderer.updateData(TEST_HISTORY_DATA);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Drops the zoom when the new data starts another day.
+  it("resets the x zoom when another day is shown", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 120 };
+    const nextDay: EnergyHistoryResponse = {
+      ...TEST_HISTORY_DATA,
+      mainData: [Float64Array.from([86400, 86700]), [null, 2400]],
+      gridData: [Float64Array.from([86400, 86700]), [null, 300]],
+    };
+
+    renderer.updateData(nextDay);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
   // Mounts both legend tables into their own layout rows outside the plot.
