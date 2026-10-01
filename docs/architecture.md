@@ -229,7 +229,9 @@ Worth knowing:
   another day window start, or on a double-click.
 - Colors are hard-coded in `energy-charts-renderer.ts`; axes and grid follow
   the Home Assistant theme (`--primary-text-color`, `--divider-color`, or
-  fixed values in dark mode), refreshed by `refreshTheme`.
+  fixed values in dark mode), refreshed by `refreshTheme`. In dark mode the
+  zoom selection is also tinted gray, since uPlot's default `.u-select`
+  (7% black) is invisible on a dark card.
 
 ## Robustness rules
 

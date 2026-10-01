@@ -164,6 +164,8 @@ interface ChartTheme {
   text: string;
   grid: string;
   gridWidth: number;
+  // Zoom selection background; empty keeps uPlot's `.u-select` CSS.
+  selection: string;
 }
 
 type ChartTarget = {
@@ -218,6 +220,7 @@ export class EnergyChartsRenderer {
         mainChart ? data.mainData : data.gridData,
         element,
       );
+      this.applySelectionColor(chart);
       this.resizeObserver.observe(element);
       const onWheel = (event: WheelEvent) => {
         this.handleWheel(event, index);
@@ -434,7 +437,8 @@ export class EnergyChartsRenderer {
     if (
       theme.text === this.theme.text &&
       theme.grid === this.theme.grid &&
-      theme.gridWidth === this.theme.gridWidth
+      theme.gridWidth === this.theme.gridWidth &&
+      theme.selection === this.theme.selection
     ) {
       return;
     }
@@ -446,8 +450,14 @@ export class EnergyChartsRenderer {
           axis.grid.width = theme.gridWidth;
         }
       });
+      this.applySelectionColor(chart);
       chart.redraw(true, true);
     });
+  }
+
+  private applySelectionColor(chart: UPlotInstance): void {
+    chart.root.querySelector<HTMLElement>(".u-select")!.style.backgroundColor =
+      this.theme.selection;
   }
 
   private createOptions(
@@ -599,6 +609,8 @@ export class EnergyChartsRenderer {
         text: "#ffffff",
         grid: "#9e9e9e",
         gridWidth: 0.5,
+        // uPlot's 7% black selection is invisible on a dark card.
+        selection: "rgba(158, 158, 158, 0.25)",
       };
     }
 
@@ -608,6 +620,7 @@ export class EnergyChartsRenderer {
         styles.getPropertyValue("--primary-text-color").trim() || "#212121",
       grid: styles.getPropertyValue("--divider-color").trim() || "#bdbdbd",
       gridWidth: 1,
+      selection: "",
     };
   }
 

@@ -107,12 +107,24 @@ describe("EnergyChartsRenderer", () => {
     data: [Float64Array];
     scales: { x: { min?: number; max?: number } };
     cursor: { drag: { x: boolean; y: boolean } };
+    root: HTMLElement;
     axes: Array<{
       grid?: { width?: number };
       ticks?: Record<string, never>;
       border?: Record<string, never>;
     }>;
   }>;
+
+  // uPlot root holding the zoom selection element.
+  const createRoot = () => {
+    const root = document.createElement("div");
+    const select = document.createElement("div");
+    select.className = "u-select";
+    root.append(select);
+    return root;
+  };
+  const selectionColor = (index: number) =>
+    charts[index].root.querySelector<HTMLElement>(".u-select")!.style.backgroundColor;
 
   beforeEach(() => {
     containers = [document.createElement("div"), document.createElement("div")];
@@ -128,6 +140,7 @@ describe("EnergyChartsRenderer", () => {
         data: [Float64Array.from([0, 300])],
         scales: { x: { min: 0, max: 300 } },
         cursor: { drag: { x: true, y: false } },
+        root: createRoot(),
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
       {
@@ -139,6 +152,7 @@ describe("EnergyChartsRenderer", () => {
         data: [Float64Array.from([0, 300])],
         scales: { x: { min: 0, max: 300 } },
         cursor: { drag: { x: true, y: false } },
+        root: createRoot(),
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
     ];
@@ -355,6 +369,7 @@ describe("EnergyChartsRenderer", () => {
       document.createElement("div"),
       document.createElement("div"),
     ];
+    createChartMock.mockImplementation(() => ({ root: createRoot() }));
     new EnergyChartsRenderer(containers, legendContainers);
     const secondSyncKey = createChartMock.mock.calls[2][0].cursor.sync.key;
 
@@ -464,6 +479,36 @@ describe("EnergyChartsRenderer", () => {
     expect(axes[0].grid.stroke()).toBe("#9e9e9e");
     expect(charts[0].redraw).toHaveBeenCalledTimes(3);
     expect(charts[1].redraw).toHaveBeenCalledTimes(3);
+  });
+
+  // Leaves uPlot's own selection color, visible on a light card.
+  it("keeps uPlot's zoom selection color in light mode", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+
+    expect(selectionColor(0)).toBe("");
+    expect(selectionColor(1)).toBe("");
+  });
+
+  // Draws the zoom selection in translucent gray on both charts in dark mode,
+  // where uPlot's 7% black is invisible.
+  it("shows a gray zoom selection on both charts in dark mode", () => {
+    new EnergyChartsRenderer(containers, legendContainers, true);
+
+    expect(selectionColor(0)).toBe("rgba(158, 158, 158, 0.25)");
+    expect(selectionColor(1)).toBe("rgba(158, 158, 158, 0.25)");
+  });
+
+  // Switches the zoom selection color with the Home Assistant theme.
+  it("updates the zoom selection color when the theme changes", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+
+    renderer.refreshTheme(true);
+    const darkColors = [selectionColor(0), selectionColor(1)];
+    renderer.refreshTheme(false);
+
+    expect(darkColors).toEqual(Array(2).fill("rgba(158, 158, 158, 0.25)"));
+    expect(selectionColor(0)).toBe("");
+    expect(selectionColor(1)).toBe("");
   });
 
   // Avoids redrawing canvas charts when the selected theme did not change.
