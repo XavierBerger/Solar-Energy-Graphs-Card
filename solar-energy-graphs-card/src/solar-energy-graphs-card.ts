@@ -481,10 +481,10 @@ export class SolarEnergyGraphsCard extends LitElement {
     let unitScales: EnergyUnitScales;
     try {
       unitScales = getEnergyUnitScales([
-        entityIds[0] ? hass.states?.[entityIds[0]]?.attributes : undefined,
-        entityIds[1] ? hass.states?.[entityIds[1]]?.attributes : undefined,
-        entityIds[2] ? hass.states?.[entityIds[2]]?.attributes : undefined,
-        entityIds[3] ? hass.states?.[entityIds[3]]?.attributes : undefined,
+        entityIds[0] ? hass.states?.[entityIds[0]]?.attributes : null,
+        entityIds[1] ? hass.states?.[entityIds[1]]?.attributes : null,
+        entityIds[2] ? hass.states?.[entityIds[2]]?.attributes : null,
+        entityIds[3] ? hass.states?.[entityIds[3]]?.attributes : null,
       ]);
     } catch (error) {
       this.mainStatus = `Sensor configuration error: ${errorMessage(error)}`;

@@ -838,12 +838,20 @@ describe("computeDragPanRange", () => {
 
   // Clamps the panned range so it does not go past the end of the day.
   it("clamps at the day end boundary", () => {
-    const current = { min: 46400, max: 86400 };
+    const current = { min: 41400, max: 81400 };
     const result = computeDragPanRange(current, dayWindow, -100, 200);
 
     // deltaTime = -(-100/200)*40000 = 20000
-    // newMax = 86400 + 20000 = 106400 → clamped to 86400
+    // newMax = 81400 + 20000 = 101400 → clamped to 86400
     expect(result).toEqual({ min: 46400, max: 86400 });
+  });
+
+  // Returns undefined when the range already touches the day end, as nothing moves.
+  it("returns undefined when already clamped at the day end", () => {
+    const current = { min: 46400, max: 86400 };
+    const result = computeDragPanRange(current, dayWindow, -100, 200);
+
+    expect(result).toBeUndefined();
   });
 
   // Returns undefined when not zoomed in (no panning at full day).

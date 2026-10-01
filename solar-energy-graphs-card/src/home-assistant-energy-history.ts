@@ -264,12 +264,13 @@ function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/** Validates sensor units; null marks an unconfigured sensor, which is not validated. */
 export function getEnergyUnitScales(
   metadata: readonly [
-    EnergySensorMetadata | undefined,
-    EnergySensorMetadata | undefined,
-    EnergySensorMetadata | undefined,
-    EnergySensorMetadata | undefined,
+    EnergySensorMetadata | null | undefined,
+    EnergySensorMetadata | null | undefined,
+    EnergySensorMetadata | null | undefined,
+    EnergySensorMetadata | null | undefined,
   ],
 ): EnergyUnitScales {
   const [production, consumption, gridImport, gridExport] = metadata;
@@ -554,9 +555,12 @@ function getLocalMidnightTimestamp(
 }
 
 function powerUnitScale(
-  metadata: EnergySensorMetadata | undefined,
+  metadata: EnergySensorMetadata | null | undefined,
   entityName: string,
 ): number {
+  if (metadata === null) {
+    return 1;
+  }
   if (
     metadata?.device_class !== "power" ||
     metadata.state_class !== "measurement"

@@ -243,6 +243,7 @@ describe("SolarEnergyGraphsCard", () => {
     ).toThrow('Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".');
   });
 
+  // Renders without an unconfigured sensor and leaves it out of every Home Assistant request.
   it("accepts null entities and omits them from Home Assistant requests", async () => {
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();

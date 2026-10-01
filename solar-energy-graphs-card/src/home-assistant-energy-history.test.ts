@@ -73,6 +73,35 @@ describe("Home Assistant energy history", () => {
     });
   });
 
+  // Skips validation of unconfigured (null) sensors instead of rejecting them.
+  it("accepts unconfigured sensors without metadata", () => {
+    const power = {
+      unit_of_measurement: "kW",
+      device_class: "power",
+      state_class: "measurement",
+    };
+    const scales = getEnergyUnitScales([power, power, null, power]);
+
+    expect(scales).toEqual({
+      productionToW: 1000,
+      consumptionToW: 1000,
+      gridImportToW: 1,
+      gridExportToW: 1000,
+    });
+  });
+
+  // Still rejects a configured sensor whose state is missing from Home Assistant.
+  it("rejects a configured sensor without metadata", () => {
+    const power = {
+      unit_of_measurement: "W",
+      device_class: "power",
+      state_class: "measurement",
+    };
+
+    expect(() => getEnergyUnitScales([power, power, undefined, power]))
+      .toThrow("grid import sensor must have device_class=power");
+  });
+
   // Rejects sensors that are not instantaneous power measurements.
   it("rejects incompatible sensor classes and units", () => {
     expect(() =>
