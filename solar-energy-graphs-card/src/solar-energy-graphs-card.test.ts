@@ -187,6 +187,15 @@ describe("SolarEnergyGraphsCard", () => {
     expect(hasHigherPrecisionSamples([[], [], [], []], [[{ start: 0, end: 60, mean: 1, min: 1, max: 1 }], [], [], []])).toBe(false);
   });
 
+  // Checks the zero-interval boundary: raw samples sharing one timestamp are not
+  // finer than statistics, whatever the statistics period.
+  it("does not treat a zero raw sampling interval as higher precision", () => {
+    expect(hasHigherPrecisionSamples(
+      [[{ timestamp: 1, value: 1 }, { timestamp: 1, value: 2 }], [], [], []],
+      [[{ start: 0, end: 60, mean: 1, min: 1, max: 1 }], [], [], []],
+    )).toBe(false);
+  });
+
   let card: SolarEnergyGraphsCard;
 
   async function mountConfiguredCard(target: SolarEnergyGraphsCard): Promise<void> {
