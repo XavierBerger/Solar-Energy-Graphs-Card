@@ -257,6 +257,7 @@ Chromium for the documentation diagrams). Everything goes through `dev.sh`:
 | `./dev.sh test` | Vitest with happy-dom (`src/**/*.test.ts`) |
 | `./dev.sh build` (default) | Typecheck + Vite library build, copies `dist/solar-energy-graphs-card.js` to the host |
 | `./dev.sh deploy` | `build`, then copies the bundle to `../docker/ha-config/www/` for the repository's `ha-dev` Home Assistant |
+| `./dev.sh mutation` | Stryker mutation tests, copies the HTML report to `reports/mutation/` |
 | `./dev.sh diagrams` | Renders `docs/diagrams/*.mmd` to SVG with mermaid-cli, copies the SVGs to the host |
 
 How it works:
@@ -303,3 +304,4 @@ never assumed without confirmation.
 
 - [README](../README.md) -- installation and configuration (French)
 - [TODO](TODO.md) -- open work (French)
+- [Killing a surviving mutant](mutation-testing-walkthrough.md) -- mutation testing, step by step on a real case
