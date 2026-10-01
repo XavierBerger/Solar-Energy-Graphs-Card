@@ -1,5 +1,6 @@
 import { css, html, LitElement, unsafeCSS } from "lit";
 import { EnergyChartsRenderer } from "./energy-charts-renderer";
+import type { SolarEnergyGraphsCardConfig } from "./solar-energy-graphs-card-config";
 import {
   buildHistoryRequest,
   buildStatisticsRequest,
@@ -42,16 +43,6 @@ const STATISTICS_REFRESH_DELAY_SECONDS = 30;
 const RAW_TAIL_SECONDS = 15 * 60;
 
 type HistoryPrecision = "statistics" | "raw";
-
-interface SolarEnergyGraphsCardConfig {
-  type: string;
-  entities: {
-    production: string | null;
-    consumption: string | null;
-    grid_import: string | null;
-    grid_export: string | null;
-  };
-}
 
 interface HomeAssistantThemeContext {
   themes?: {
@@ -311,6 +302,22 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.cancelStatisticsRefresh();
     this.loadHistoryWhenNeeded(this.hassContext);
     this.requestUpdate();
+  }
+
+  static getConfigElement(): HTMLElement {
+    return document.createElement("solar-energy-graphs-card-editor");
+  }
+
+  static getStubConfig(): SolarEnergyGraphsCardConfig {
+    return {
+      type: CARD_TYPE,
+      entities: {
+        production: null,
+        consumption: null,
+        grid_import: null,
+        grid_export: null,
+      },
+    };
   }
 
   getCardSize(): number {

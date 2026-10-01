@@ -143,7 +143,17 @@ nouveau :
    champs sont proposés.
 5. Terminez la création et ouvrez le nouveau tableau de bord. Choisissez
    **Modifier le tableau de bord**.
-6. Ajoutez une carte **Manuelle** et remplacez son contenu par :
+6. Ajoutez la carte **Solar Energy Graphs Card** depuis l'éditeur visuel.
+   Choisissez une entité pour chacun des champs **Solar production**,
+   **Consumption**, **Grid import** et **Grid export**.
+
+   Les champs de l'éditeur sélectionnent les entités `sensor` de Home
+   Assistant. Les rôles restent fixes : l'éditeur ne déduit ni le sens des
+   valeurs ni leur unité, et les contrôles de compatibilité actuels de la carte
+   continuent de s'appliquer.
+
+   La configuration YAML manuelle reste disponible. Elle utilise la même
+   structure :
 
    ```yaml
    type: custom:solar-energy-graphs-card
@@ -154,7 +164,16 @@ nouveau :
      grid_export: sensor.solarnet_puissance_exportee_vers_le_reseau
    ```
 
+   En mode YAML, remplacez les quatre identifiants d'exemple par les entités de
+   votre installation, chacune dans son rôle correspondant.
+
 7. Enregistrez la carte, puis le tableau de bord si Home Assistant le demande.
+
+Pour modifier ces entités plus tard, passez le tableau de bord en mode édition
+et cliquez sur **Modifier** dans la barre d'action située sous la carte.
+Home Assistant rouvre le même éditeur visuel. Selon la version, cette action
+peut être présentée différemment ; dans Home Assistant 2026.9.1, elle apparaît
+sous la carte plutôt que sous forme d'un crayon sur le graphique.
 
 La carte attend :
 

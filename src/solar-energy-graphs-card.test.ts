@@ -17,6 +17,7 @@ import {
   type StatisticsDuringPeriodMessage,
   type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
+import { SolarEnergyGraphsCardEditor } from "./solar-energy-graphs-card-editor";
 
 const { rendererInstances } = vi.hoisted(() => ({
   rendererInstances: [] as Array<{
@@ -230,6 +231,22 @@ describe("SolarEnergyGraphsCard", () => {
     card = new SolarEnergyGraphsCard();
 
     expect(() => card.setConfig(CARD_CONFIG)).not.toThrow();
+  });
+
+  // Exposes the graphical editor and an empty, role-preserving card stub to Lovelace.
+  it("provides its configuration editor and four empty entity defaults", () => {
+    expect(SolarEnergyGraphsCard.getConfigElement()).toBeInstanceOf(
+      SolarEnergyGraphsCardEditor,
+    );
+    expect(SolarEnergyGraphsCard.getStubConfig()).toEqual({
+      type: CARD_CONFIG.type,
+      entities: {
+        production: null,
+        consumption: null,
+        grid_import: null,
+        grid_export: null,
+      },
+    });
   });
 
   // Prevents unrelated Lovelace card configurations from being accepted.

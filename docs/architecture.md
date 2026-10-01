@@ -61,8 +61,10 @@ All sources live in `src/`. Each module has a test file next to it.
 
 | File | Role | Side effects | Tests |
 | --- | --- | --- | --- |
-| `index.ts` | Bundle entry point: registers the element | yes (import) | -- |
+| `index.ts` | Bundle entry point: registers the card and lists it in Home Assistant's visual card picker | yes (import) | `index.test.ts` |
 | `solar-energy-graphs-card.ts` | Lit element: config, lifecycle, WebSocket calls, timers, day navigation, status texts | yes | `solar-energy-graphs-card.test.ts` |
+| `solar-energy-graphs-card-editor.ts` | Lovelace editor: four fixed Home Assistant sensor selectors and config changes | yes | `solar-energy-graphs-card-editor.test.ts` |
+| `solar-energy-graphs-card-config.ts` | Shared TypeScript shape for the four configured entities | no | via card and editor tests |
 | `home-assistant-energy-history.ts` | Request builders, parsing, unit scaling, local-day windows, merging, projection to uPlot columns | **none** | `home-assistant-energy-history.test.ts` |
 | `energy-charts-renderer.ts` | Creates, syncs, updates, themes, resizes and destroys the two uPlot charts | yes (DOM) | `energy-charts-renderer.test.ts` |
 | `uplot-adapter.ts` | Single import point for uPlot and its CSS (inlined in the shadow DOM) | no | via the renderer tests |
@@ -77,7 +79,9 @@ most bugs would hide (time zones, units, missing data).
 
 What the diagram shows, in words:
 
-1. **`setConfig`** validates the four entity IDs and resets everything.
+1. **`setConfig`** validates the four entity IDs and resets everything. The
+   Lovelace editor saves the same fixed roles under `entities`; manual YAML
+   remains supported.
 2. **`set hass`** is called by Home Assistant on *every* state change of *any*
    entity. It must stay cheap: it only picks the day, refreshes the theme,
    calls `loadHistoryWhenNeeded` and schedules a live merge.
@@ -297,7 +301,7 @@ A typical loop:
 | Accept another unit | `powerUnitScale` in `home-assistant-energy-history.ts` |
 | Tune live or refresh timing | Constants at the top of `solar-energy-graphs-card.ts` |
 | Change the layout, titles or status texts | `render`, `styles` and `updateHistoryStatus` in `solar-energy-graphs-card.ts` |
-| Change the configuration keys | `SolarEnergyGraphsCardConfig` and `setConfig`, then the README |
+| Change the configuration keys | `solar-energy-graphs-card-config.ts`, the editor schema, and `setConfig`, then the README |
 
 Before you start, read the scope and workflow rules in
 [`AGENTS.md`](../../AGENTS.md): the card shows two graphs and what is needed to

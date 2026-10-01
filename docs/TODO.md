@@ -1,6 +1,6 @@
 # Nouvelles fonctionnalités
 - [ ] Créer l'interface de configuration graphique
-    - [ ] Choix des 4 entrées
+    - [x] Choix des 4 entrées (production, consommation, import et export) par sélecteurs Lovelace natifs
     - [ ] Choix des couleurs des courbes et coloriages
     - [ ] Choix du rapport de taille entre les graphs
 - [ ] Traduction en Français (Anglais pas défaut - Français si c'est la langue de HA)
@@ -23,7 +23,7 @@
 - [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release
 
 # Les évolutions futures après publication de la v1.0
-- [ ] Définir dans l'interface de configuration toute les entité qui font partie de la consommation (les `consommateurs`)
+- [ ] Définir dans l'interface de configuration toute les entités qui font partie de la consommation (les `consommateurs`)
   - [ ] Ces consommateurs sont dans une liste ordonnée
   - [ ] On peut ajouter autant de consommateurs dans la liste que nécessaire
   - [ ] Chaque element de la lists peut être modifié ou supprimer 
