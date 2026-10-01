@@ -495,6 +495,25 @@ describe("SolarEnergyGraphsCard", () => {
     )).toEqual([SENSOR_IDS, SENSOR_IDS, SENSOR_IDS]);
   });
 
+  // Requests today's raw history tail over the last 15 minutes, ending now.
+  it("requests the last 15 minutes of raw history for today", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const tail = hass.callWS.mock.calls
+      .map(([request]) => request)
+      .find((request) => requestKind(request) === "history");
+    expect(tail).toMatchObject({
+      start_time: "2026-09-27T09:55:00.000Z",
+      end_time: "2026-09-27T10:10:00.000Z",
+    });
+  });
+
   // Draws each statistics interval at its midpoint with its min-max range.
   it("draws statistics as a mean line with a min-max band", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
