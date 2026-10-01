@@ -264,6 +264,24 @@ describe("SolarEnergyGraphsCard", () => {
     expect(rendererInstances[0].data.hasGridImport).toBe(false);
   });
 
+  // Trims spaces around configured entity IDs before querying Home Assistant.
+  it("trims configured entity IDs", async () => {
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig({
+      ...CARD_CONFIG,
+      entities: { ...CARD_CONFIG.entities, production: "  sensor.solar  " },
+    });
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const requests = hass.callWS.mock.calls.map(([request]) => request);
+    expect(requests.map((request) =>
+      "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
+    )).toEqual([SENSOR_IDS, SENSOR_IDS, SENSOR_IDS]);
+  });
+
   // Keeps Home Assistant's layout estimate aligned with the viewport-height card.
   it("reports a card size of twelve rows", () => {
     card = new SolarEnergyGraphsCard();
