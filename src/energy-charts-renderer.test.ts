@@ -106,6 +106,7 @@ describe("EnergyChartsRenderer", () => {
     setScale: ReturnType<typeof vi.fn>;
     data: [Float64Array];
     scales: { x: { min?: number; max?: number } };
+    cursor: { drag: { x: boolean; y: boolean } };
     axes: Array<{
       grid?: { width?: number };
       ticks?: Record<string, never>;
@@ -126,6 +127,7 @@ describe("EnergyChartsRenderer", () => {
         setScale: vi.fn(),
         data: [Float64Array.from([0, 300])],
         scales: { x: { min: 0, max: 300 } },
+        cursor: { drag: { x: true, y: false } },
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
       {
@@ -136,6 +138,7 @@ describe("EnergyChartsRenderer", () => {
         setScale: vi.fn(),
         data: [Float64Array.from([0, 300])],
         scales: { x: { min: 0, max: 300 } },
+        cursor: { drag: { x: true, y: false } },
         axes: [{ grid: {}, ticks: {}, border: {} }, { grid: {}, ticks: {}, border: {} }],
       },
     ];
@@ -251,8 +254,8 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.cursor.sync.key).toBe(secondOptions.cursor.sync.key);
     expect(firstOptions.cursor.sync.scales).toEqual(["x", null]);
     expect(secondOptions.cursor.sync.scales).toEqual(["x", null]);
-    expect(firstOptions.cursor.drag).toEqual({ x: false, y: false });
-    expect(secondOptions.cursor.drag).toEqual({ x: false, y: false });
+    expect(firstOptions.cursor.drag).toEqual({ x: true, y: false });
+    expect(secondOptions.cursor.drag).toEqual({ x: true, y: false });
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.legend.mount).toBeTypeOf("function");
     expect(firstOptions.hooks).toBeUndefined();
@@ -649,6 +652,40 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Hands press+drag back to uPlot's x selection zoom on both charts when the
+  // full day is shown, e.g. after a zoom out.
+  it("enables x selection zoom on both charts at full day bounds", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].cursor.drag.x = false;
+    charts[1].cursor.drag.x = false;
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
+    );
+
+    expect(charts[0].cursor.drag.x).toBe(true);
+    expect(charts[1].cursor.drag.x).toBe(true);
+  });
+
+  // Disables uPlot's x selection on both charts while zoomed in, so that
+  // press+drag on either chart only pans.
+  it("disables x selection zoom on both charts when zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[1].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[1].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
+    );
+
+    expect(charts[0].cursor.drag.x).toBe(false);
+    expect(charts[1].cursor.drag.x).toBe(false);
   });
 
   // Stops panning on mouseup and removes document-level move/up listeners.

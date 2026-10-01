@@ -359,8 +359,13 @@ export class EnergyChartsRenderer {
     const currentDuration = currentMax - currentMin;
     const dayDuration = dayEnd - dayStart;
 
-    // Not zoomed: let normal cursor behavior through.
-    if (currentDuration >= dayDuration) {
+    const zoomed = currentDuration < dayDuration;
+    // uPlot reads drag.x on each mousemove: select-to-zoom on the full day,
+    // pan once zoomed in.
+    this.charts.forEach(({ chart }) => {
+      chart.cursor.drag!.x = !zoomed;
+    });
+    if (!zoomed) {
       return;
     }
 
@@ -564,7 +569,7 @@ export class EnergyChartsRenderer {
         uPlot.tzDate(new Date(timestamp * 1000), timeZone),
       cursor: {
         sync: { key: this.syncGroup.key, scales: ["x", null] },
-        drag: { x: false, y: false },
+        drag: { x: true, y: false },
       },
       legend: {
         mount: (_chart, legend) => {

@@ -221,7 +221,9 @@ Worth knowing:
 - The zero line of the grid chart is drawn by a uPlot `draw` hook,
   `drawZeroLine`.
 - Both charts join the same `uPlot.sync` group: the cursor and the x zoom
-  (drag horizontally) follow each other. The y axis stays independent.
+  follow each other. The y axis stays independent. On the full day,
+  press+drag selects the range to zoom on (uPlot `cursor.drag.x`); once
+  zoomed, press+drag pans instead, and the wheel zooms in either state.
 - `updateData` keeps the x zoom across data updates (live states, statistics
   refresh, precision toggle). The zoom resets when the new data starts at
   another day window start, or on a double-click.
