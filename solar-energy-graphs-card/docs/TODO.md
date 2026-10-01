@@ -7,8 +7,9 @@
 - [ ] Traduction en Français
 
 # Qualité
-- [ ] Corriger les tests qui ne passent pas (`./dev.sh test`)
 - [ ] Corriger les tests qui ne resistent pas à la mutation
+- [ ] CI: faire tourner les tests à chaque push et mettre à disposition les rapport de coverage dans les artifacts
+- [ ] CI: Faire tourner les tests de mutatin à chaque PR et exiger un succès
 - [ ] Déplacer le résultat de la couverture de tests dans `reports/coverage`
 
 # Corrections
@@ -16,6 +17,11 @@
 - [ ] Clarifier le contrat de signe des quatre capteurs : import/export sont forcés positifs (`Math.max(value, 0)`), production et consommation ne sont pas vérifiées. Documenter la précondition (>= 0) ou représenter les valeurs hors contrat par `null`, sans rectifier silencieusement un capteur
 - [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
 
-
 # Release
 - [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release
+
+# Les évolutions futures après publication de la v1.0
+- [ ] Empiler les consommateurs sour forme d'arc en ciel
+- [ ] Ajouter un bouton pour afficher/masquer l'arc en ciel
+- [ ] Définir l'affichage par défaut, simple/arc en ciel
+- [ ] Définit si l'arc en ciel ne doit être affiché par défaut qu'en mode détaillé
