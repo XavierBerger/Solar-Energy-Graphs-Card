@@ -1,9 +1,8 @@
-# Nouvelles fonctionnalités
-- [ ] Créer l'interface de configuration graphique
-    - [x] Choix des 4 entrées (production, consommation, import et export) par sélecteurs Lovelace natifs
-    - [ ] Choix des couleurs des courbes et coloriages
-    - [ ] Choix du rapport de taille entre les graphs
-- [ ] Traduction en Français (Anglais pas défaut - Français si c'est la langue de HA)
+# Corrections
+- [ ] Le champ date doit avoir une taille fixe pour évité de voir les boutons de gauche bouger
+- [ ] Faire disparaitre le bouton de précision au chargement d'un nouveau jour sans haure définition
+- [ ] Clarifier le contrat de signe des quatre capteurs : import/export sont forcés positifs (`Math.max(value, 0)`), production et consommation ne sont pas vérifiées. Documenter la précondition (>= 0) ou représenter les valeurs hors contrat par `null`, sans rectifier silencieusement un capteur
+- [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
 
 # Qualité
 - [ ] Corriger les tests qui ne resistent pas à la mutation
@@ -13,16 +12,16 @@
 - [ ] CI: faire tourner les tests à chaque push et mettre à disposition les rapport de coverage dans les artifacts
 - [ ] CI: Faire tourner les tests de mutatin à chaque PR et exiger un succès (> 90%)
 
-# Corrections
-- [ ] Le champ date doit avoir une taille fixe pour évité de voir les boutons de gauche bouger
-- [ ] Faire disparaitre le bouton de précision au chargement d'un nouveau jour sans haure définition
-- [ ] Clarifier le contrat de signe des quatre capteurs : import/export sont forcés positifs (`Math.max(value, 0)`), production et consommation ne sont pas vérifiées. Documenter la précondition (>= 0) ou représenter les valeurs hors contrat par `null`, sans rectifier silencieusement un capteur
-- [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
+# Nouvelles fonctionnalités
+- [ ] Traduction en Français (Anglais pas défaut - Français si c'est la langue de HA)
 
 # Release
 - [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release
 
 # Les évolutions futures après publication de la v1.0
+- [ ] Dans l'interface de configuration graphique
+    - [ ] Choix des couleurs des courbes et coloriages
+    - [ ] Choix du rapport de taille entre les graphs
 - [ ] Définir dans l'interface de configuration toute les entités qui font partie de la consommation (les `consommateurs`)
   - [ ] Ces consommateurs sont dans une liste ordonnée
   - [ ] On peut ajouter autant de consommateurs dans la liste que nécessaire
