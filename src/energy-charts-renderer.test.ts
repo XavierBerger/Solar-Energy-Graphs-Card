@@ -382,33 +382,39 @@ describe("EnergyChartsRenderer", () => {
     expect(secondSyncKey).not.toBe(firstSyncKey);
   });
 
-  // Draws the zero reference across the network chart plotting area.
+  // Draws the zero reference across the network chart plotting area, including exact boundary values.
   it("draws a theme-colored zero line when zero is in the y range", () => {
-    const ctx = {
-      save: vi.fn(),
-      restore: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      stroke: vi.fn(),
-      strokeStyle: "",
-      lineWidth: 0,
-    };
-    const chart = {
-      scales: { y: { min: -200, max: 700 } },
-      valToPos: vi.fn(() => 10),
-      ctx,
-      bbox: { left: 5, width: 120 },
+    const draw = (yRange: { min: number; max: number }) => {
+      const ctx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        stroke: vi.fn(),
+        strokeStyle: "",
+        lineWidth: 0,
+      };
+      const chart = {
+        scales: { y: yRange },
+        valToPos: vi.fn(() => 10),
+        ctx,
+        bbox: { left: 5, width: 120 },
+      };
+
+      drawZeroLine(chart, "#9e9e9e");
+
+      expect(chart.valToPos).toHaveBeenCalledWith(0, "y", true);
+      expect(ctx.strokeStyle).toBe("#9e9e9e");
+      expect(ctx.lineWidth).toBe(1.5);
+      expect(ctx.moveTo).toHaveBeenCalledWith(5, 10.5);
+      expect(ctx.lineTo).toHaveBeenCalledWith(125, 10.5);
+      expect(ctx.stroke).toHaveBeenCalledOnce();
     };
 
-    drawZeroLine(chart, "#9e9e9e");
-
-    expect(chart.valToPos).toHaveBeenCalledWith(0, "y", true);
-    expect(ctx.strokeStyle).toBe("#9e9e9e");
-    expect(ctx.lineWidth).toBe(1.5);
-    expect(ctx.moveTo).toHaveBeenCalledWith(5, 10.5);
-    expect(ctx.lineTo).toHaveBeenCalledWith(125, 10.5);
-    expect(ctx.stroke).toHaveBeenCalledOnce();
+    draw({ min: -200, max: 700 });
+    draw({ min: 0, max: 700 });
+    draw({ min: -200, max: 0 });
   });
 
   // Skips the reference line when the visible network range excludes zero.

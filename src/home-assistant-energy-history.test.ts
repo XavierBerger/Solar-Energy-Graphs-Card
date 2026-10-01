@@ -154,6 +154,12 @@ describe("Home Assistant energy history", () => {
     expect(() => shiftLocalDate("2026-02-30", 1)).toThrow(
       'Invalid local date "2026-02-30".',
     );
+    expect(() => shiftLocalDate("prefix-2026-01-01", 1)).toThrow(
+      'Invalid local date "prefix-2026-01-01".',
+    );
+    expect(() => shiftLocalDate("2026-01-01-suffix", 1)).toThrow(
+      'Invalid local date "2026-01-01-suffix".',
+    );
   });
 
   // Calculates day boundaries from a selected civil date in the HA time zone.
@@ -265,16 +271,26 @@ describe("Home Assistant energy history", () => {
     expect(request.end_time).toBe(new Date(window.end * 1000).toISOString());
   });
 
-  // Converts millisecond bounds to seconds and missing values to gaps.
+  // Converts valid bounds to seconds, rejects non-finite bounds and sorts chronologically.
   it("parses statistic rows in chronological order", () => {
     const samples = parseStatisticRows([
       { start: 600_000, end: 900_000, mean: 2, min: 1, max: 3 },
       { start: 300_000, end: 600_000, mean: null, min: 1 },
+      {
+        start: 900_000,
+        end: 1_200_000,
+        mean: Number.POSITIVE_INFINITY,
+        min: Number.NaN,
+        max: Number.NEGATIVE_INFINITY,
+      },
+      { start: Number.NaN, end: 900_000, mean: 4, min: 3, max: 5 },
+      { start: 900_000, end: Number.POSITIVE_INFINITY, mean: 6, min: 5, max: 7 },
     ]);
 
     expect(samples).toEqual([
       { start: 300, end: 600, mean: null, min: 1, max: null },
       { start: 600, end: 900, mean: 2, min: 1, max: 3 },
+      { start: 900, end: 1200, mean: null, min: null, max: null },
     ]);
   });
 
@@ -349,6 +365,7 @@ describe("Home Assistant energy history", () => {
       window.end,
     ]);
     expect(data.mainData[1]).toEqual([500, 500, 700, null, null]);
+    expect(data.mainData[3]).toEqual([null, null, null, null, null]);
   });
 
   // Continues with raw samples, without range, after the last compiled interval.
@@ -399,6 +416,9 @@ describe("Home Assistant energy history", () => {
     expect(() =>
       entityRowsOf(null as unknown as HistoryDuringPeriodResponse, "sensor.solar"),
     ).toThrow("Home Assistant returned an invalid history response.");
+    expect(() => parseEnergyHistory([[]])).toThrow(
+      "Home Assistant returned an invalid history response.",
+    );
   });
 
   // Parses compressed states into sorted watt samples, one per timestamp.
@@ -429,15 +449,20 @@ describe("Home Assistant energy history", () => {
     expect(samples).toEqual([{ timestamp: 20, value: 5 }]);
   });
 
-  // Keeps sub-millisecond precision from live ISO timestamps.
+  // Keeps sub-millisecond precision and rejects live states without a valid timestamp.
   it("parses live states with sub-millisecond timestamps", () => {
     const sample = parsePowerState(
       { state: "0.5", last_updated: "1970-01-12T13:47:05.123456Z" },
       1000,
     );
+    const invalidTimestamp = parsePowerState(
+      { state: "0.5", last_updated: "not-a-timestamp" },
+      1000,
+    );
 
     expect(sample?.timestamp).toBeCloseTo(1_000_025.123456, 6);
     expect(sample?.value).toBe(500);
+    expect(invalidTimestamp).toBeUndefined();
   });
 
   // Keeps live samples merged during loading only when newer than the history.
@@ -446,6 +471,7 @@ describe("Home Assistant energy history", () => {
       [[], [], [], []],
       [
         { sensor: 1, timestamp: 20, value: 100 },
+        { sensor: 1, timestamp: 25, value: 150 },
         { sensor: 1, timestamp: 40, value: 200 },
       ],
     );
@@ -453,11 +479,13 @@ describe("Home Assistant energy history", () => {
     const samples = replaceSensorHistory(loading, 1, [
       { timestamp: 10, value: 50 },
       { timestamp: 20, value: 100 },
+      { timestamp: 30, value: 150 },
     ]);
 
     expect(samples[1]).toEqual([
       { timestamp: 10, value: 50 },
       { timestamp: 20, value: 100 },
+      { timestamp: 30, value: 150 },
       { timestamp: 40, value: 200 },
     ]);
     expect(samples[0]).toBe(loading[0]);
