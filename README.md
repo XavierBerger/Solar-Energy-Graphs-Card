@@ -1,260 +1,93 @@
 # Solar Energy Graphs Card
 
-> **Carte en cours de développement.** La carte lit les capteurs configurés et
-> affiche leur historique pour le jour sélectionné (aujourd'hui par défaut).
-> Elle doit encore être validée sur plusieurs installations et ne signifie pas
-> qu'elle est prête pour un usage quotidien.
+A Home Assistant Lovelace card for exploring daily solar production,
+consumption, and grid exchange in two synchronized graphs.
 
-La date affichée se trouve en haut à droite. Les flèches permettent de passer
-au jour précédent ou suivant ; il n'y a pas de calendrier ni de sélection
-directe d'une date dans cette version. La flèche vers le futur est désactivée
-pour la journée actuelle.
+![Solar Energy Graphs Card in the light theme](docs/images/Solar-Energy-Graph-Card_light.png)
 
-La carte utilise presque toute la hauteur visible de l'écran, sous l'en-tête
-Home Assistant. Les deux zones de graphique se partagent cet espace selon un
-ratio de 70 % en haut et 30 % en bas. Les axes, graduations et grilles suivent
-les couleurs du thème Home Assistant actif, y compris en thème sombre.
+<details>
+<summary>Dark theme</summary>
 
-## Ce qu'il vous faut
+![Solar Energy Graphs Card in the dark theme](docs/images/Solar-Energy-Graph-Card_dark.png)
 
-- Un Home Assistant où vous pouvez modifier un tableau de bord.
-- Un moyen d'ajouter un fichier dans le dossier `www` de la configuration
-  Home Assistant (par exemple File editor, Samba ou SSH).
-- Si vous construisez vous-même le fichier depuis le code source : **Podman**.
-  Node.js et npm ne doivent pas être installés sur votre ordinateur.
+</details>
 
-Il n'y a pas encore de paquet HACS ni de fichier de release à télécharger. Le
-fichier JavaScript doit donc être construit depuis le dépôt.
+## Features
 
-## 1. Construire le fichier de la carte
+- Compare solar production and consumption, with an estimate of direct
+  self-consumption.
+- View grid export above zero and grid import below zero in a separate graph.
+- Synchronize the cursor and horizontal zoom across both graphs.
+- Navigate between days using the arrows in the top-right corner. The selected
+  day follows the Home Assistant time zone; direct date selection is not
+  available.
+- View recent and live updates for the current day.
+- Follow the active Home Assistant theme.
 
-Récupérez le dépôt du projet sur une machine où Podman est disponible, puis
-ouvrez un terminal dans le dossier `solar-energy-graphs-card/` :
+## Requirements
 
-```sh
-./dev.sh build
+Configure four separate Home Assistant power sensors:
+
+| Setting | Sensor |
+| --- | --- |
+| Solar production | Power produced by the solar panels |
+| Consumption | Power consumed by the load you want to compare with solar production |
+| Grid import | Power imported from the grid |
+| Grid export | Power exported to the grid |
+
+Each sensor must have `device_class: power`, `state_class: measurement`, and a
+unit of `W` or `kW`. The card does not infer sensor roles or derive grid import
+from export, or vice versa. Check that each sensor's meaning and direction
+match the role you assign to it.
+
+Home Assistant must have history and statistics available for the selected
+sensors. The card uses five-minute statistics when available and hourly
+statistics for older periods. For the current day, recent recorded states and
+live updates extend the graphs.
+
+## Installation
+
+Install the card from HACS, then add **Solar Energy Graphs Card** to a Lovelace
+dashboard using the visual card picker.
+
+The visual editor lets you select the four required power sensors:
+
+![Solar Energy Graphs Card visual configuration editor](docs/images/Solar-Energy-Graphs-Card_configuration.png)
+
+If you configure the dashboard manually, use:
+
+```yaml
+type: custom:solar-energy-graphs-card
+entities:
+  production: sensor.your_solar_production
+  consumption: sensor.your_consumption
+  grid_import: sensor.your_grid_import
+  grid_export: sensor.your_grid_export
 ```
 
-Cette commande télécharge/utilise l'image de développement et construit la
-carte dans un conteneur Podman. Les dépendances sont gardées dans un volume
-Podman persistant : elles ne sont pas installées sur l'hôte et ne sont pas
-retéléchargées à chaque compilation, sauf si le fichier de dépendances change.
+Replace the example entity IDs with the matching sensors from your Home
+Assistant installation.
 
-Le fichier à installer est créé ici :
+## Using the graphs
 
-```text
-solar-energy-graphs-card/dist/solar-energy-graphs-card.js
-```
+The upper graph compares solar production with consumption. Direct
+self-consumption is estimated as the lower of the two values; this estimate
+assumes there is no battery and is not a direct measurement of energy flows.
+The lower graph shows export above zero and import below zero.
 
-Si vous utilisez l'environnement de développement fourni avec ce dépôt et son
-Home Assistant `ha-dev`, vous pouvez plutôt exécuter :
+Drag across a range to zoom in horizontally. Once zoomed in, drag to pan. The
+cursor and horizontal zoom stay synchronized between the graphs.
 
-```sh
-./dev.sh deploy
-```
+Use the day arrows in the top-right corner to move to the previous or next day.
+The next-day arrow is unavailable for today.
 
-Cela construit la carte et copie le fichier dans
-`docker/ha-config/www/solar-energy-graphs-card.js`. Ce raccourci est destiné à
-l'instance `ha-dev` de ce dépôt. Pour une autre installation Home Assistant,
-copiez le fichier `dist/solar-energy-graphs-card.js` vous-même.
+## Troubleshooting
 
-Pour exécuter les tests unitaires du projet dans le même environnement Podman :
-
-```sh
-./dev.sh test
-```
-
-Pour mesurer la couverture des tests, avec un résumé dans le terminal et un
-rapport HTML dans `coverage/index.html` :
-
-```sh
-./dev.sh coverage
-```
-
-Pour évaluer la pertinence des tests par des tests de mutation avec Stryker,
-avec un résumé dans le terminal et un rapport HTML dans
-`reports/mutation/mutation.html` :
-
-```sh
-./dev.sh mutation
-```
-
-
-## 2. Copier le fichier dans Home Assistant
-
-Dans le dossier de configuration de Home Assistant, créez le dossier `www` s'il
-n'existe pas. Copiez-y le fichier JavaScript en conservant son nom :
-
-```text
-<configuration Home Assistant>/www/solar-energy-graphs-card.js
-```
-
-Par exemple, si votre dossier de configuration est `/config`, le chemin est :
-
-```text
-/config/www/solar-energy-graphs-card.js
-```
-
-Home Assistant expose les fichiers de ce dossier sous `/local/`. Vous pouvez
-vérifier dans un navigateur que cette adresse ouvre ou télécharge le JavaScript :
-
-```text
-http://<adresse-de-votre-home-assistant>:8123/local/solar-energy-graphs-card.js
-```
-
-Remplacez `<adresse-de-votre-home-assistant>` par le nom ou l'adresse IP de
-votre Home Assistant. Si vous obtenez une erreur 404, vérifiez le nom et
-l'emplacement du fichier.
-
-## 3. Déclarer la ressource Lovelace
-
-Dans Home Assistant :
-
-1. Ouvrez **Paramètres → Tableaux de bord**.
-2. Ouvrez le menu de gestion des ressources (selon la version, il se trouve
-   dans le menu `⋮` ou dans la page des tableaux de bord).
-3. Choisissez **Ajouter une ressource**.
-4. Dans le champ URL, saisissez ce chemin **sans `/` au début** :
-
-   ```text
-   local/solar-energy-graphs-card.js
-   ```
-
-5. Choisissez le type **JavaScript module**, puis enregistrez.
-
-   Home Assistant demande ici un chemin de ressource relatif. Dans la barre
-   d'adresse du navigateur, le même fichier reste accessible avec une barre
-   oblique initiale : `http://<adresse-de-votre-home-assistant>:8123/local/solar-energy-graphs-card.js`.
-
-## 4. Créer un tableau de bord dédié et y ajouter la carte
-
-Pour garder cette carte séparée de votre tableau de bord principal, créez-en un
-nouveau :
-
-1. Ouvrez **Paramètres → Tableaux de bord**.
-2. Choisissez **Ajouter un tableau de bord**.
-3. Parmi les choix proposés, sélectionnez **Nouveau tableau de bord vide**.
-   C'est le bon choix pour créer un tableau de bord que vous pourrez configurer
-   dans l'interface. Ne choisissez pas **Aperçu (ancienne version)**, **Carte**
-   ou **Page web** : ces options ne créent pas un tableau de bord Lovelace vide
-   destiné à recevoir vos cartes.
-4. Donnez au tableau de bord un titre, par exemple **Énergie solaire**, puis
-   choisissez une URL (chemin) dédiée, par exemple `energie-solaire`, si ces
-   champs sont proposés.
-5. Terminez la création et ouvrez le nouveau tableau de bord. Choisissez
-   **Modifier le tableau de bord**.
-6. Ajoutez la carte **Solar Energy Graphs Card** depuis l'éditeur visuel.
-   Choisissez une entité pour chacun des champs **Solar production**,
-   **Consumption**, **Grid import** et **Grid export**.
-
-   Les champs de l'éditeur sélectionnent les entités `sensor` de Home
-   Assistant. Les rôles restent fixes : l'éditeur ne déduit ni le sens des
-   valeurs ni leur unité, et les contrôles de compatibilité actuels de la carte
-   continuent de s'appliquer.
-
-   La configuration YAML manuelle reste disponible. Elle utilise la même
-   structure :
-
-   ```yaml
-   type: custom:solar-energy-graphs-card
-   entities:
-     production: sensor.solarnet_puissance_photovoltaique
-     consumption: sensor.solarnet_puissance_consommee_par_la_charge
-     grid_import: sensor.solarnet_puissance_importee_du_reseau
-     grid_export: sensor.solarnet_puissance_exportee_vers_le_reseau
-   ```
-
-   En mode YAML, remplacez les quatre identifiants d'exemple par les entités de
-   votre installation, chacune dans son rôle correspondant.
-
-7. Enregistrez la carte, puis le tableau de bord si Home Assistant le demande.
-
-Pour modifier ces entités plus tard, passez le tableau de bord en mode édition
-et cliquez sur **Modifier** dans la barre d'action située sous la carte.
-Home Assistant rouvre le même éditeur visuel. Selon la version, cette action
-peut être présentée différemment ; dans Home Assistant 2026.9.1, elle apparaît
-sous la carte plutôt que sous forme d'un crayon sur le graphique.
-
-La carte attend :
-
-- `production` : puissance instantanée produite par les panneaux ;
-- `consumption` : puissance instantanée consommée par la charge ;
-- `grid_import` : puissance importée du réseau ;
-- `grid_export` : puissance exportée vers le réseau.
-
-Les quatre capteurs doivent mesurer une puissance avec `device_class: power`,
-`state_class: measurement` et une unité `W` ou `kW`. Import et export utilisent
-des capteurs séparés ; la carte ne déduit pas l'un à partir de l'autre.
-
-La carte affiche les statistiques Home Assistant de la journée, dans le fuseau
-configuré : pour chaque capteur, la puissance moyenne (`mean`) de chaque
-intervalle de 5 minutes est tracée en ligne, et une bande pâle couvre sa plage
-`min`–`max`. Chaque point est placé au milieu de son intervalle ; un intervalle
-manquant laisse un trou. Les statistiques sont lues par le WebSocket
-`recorder/statistics_during_period`, converties en W par Home Assistant
-(`units: { power: "W" }`) : environ 288 intervalles par capteur et par jour au
-lieu de milliers d'états bruts.
-
-Home Assistant ne conserve les statistiques 5 minutes que `purge_keep_days`
-jours (10 par défaut). Pour la partie d'un jour plus ancien, la carte utilise
-les statistiques horaires, conservées indéfiniment, avec le même rendu.
-
-Pour le jour courant, la ligne est prolongée après le dernier intervalle
-compilé par les états bruts des 15 dernières minutes, puis par les nouveaux
-états des capteurs (regroupés par fenêtres de 250 ms), sans bande. Entre deux
-états bruts, la dernière valeur connue est maintenue dix minutes au maximum.
-Les statistiques sont rechargées 30 s après chaque frontière de 5 minutes, le
-temps que Home Assistant les compile. Un jour passé reste figé.
-L'autoconsommation directe est estimée comme le minimum entre la production PV
-et la puissance consommée par la charge ; cette formule suppose l'absence de
-batterie. La légende supérieure affiche **Production solaire**,
-**Consommation**, **Autoconsommation**, **Grid import** et **Grid export**.
-Les deux mesures réseau sont indiquées dans la légende supérieure sans ajouter
-de courbes au graphique solaire. Sur ce graphe, la zone verte indique
-l'autoconsommation depuis zéro ; la zone rouge représente le complément de la
-consommation totale et est empilée au-dessus de la zone verte, ou part de zéro
-en l'absence de production solaire. Le graphe
-inférieur montre l'export au-dessus de zéro et l'import au-dessous. Le curseur
-et le zoom horizontal sont synchronisés.
-
-La carte signale dans chaque graphe si son historique est indisponible. Les
-capteurs doivent avoir un historique enregistré par Home Assistant pour le jour
-affiché. Le tableau de bord principal n'est pas modifié.
-
-## Dépannage
-
-- **« Custom element doesn't exist »** : vérifiez que la ressource est ajoutée
-  avec le type **JavaScript module**, que le champ URL contient
-  `local/solar-energy-graphs-card.js` sans barre oblique initiale, puis
-  actualisez la page.
-- **« Erreur de configuration »** : vérifiez dans
-  **Paramètres → Tableaux de bord → Ressources** qu'une ressource utilisant
-  exactement `local/solar-energy-graphs-card.js` (sans `/` au début) est
-  enregistrée avec le type **JavaScript module**. Une autre carte ou un ancien
-  nom de fichier ne charge pas cet élément personnalisé. Supprimez l'ancienne
-  ressource si nécessaire, ajoutez le bon chemin, puis rechargez le tableau de
-  bord en forçant l'actualisation du navigateur.
-- **Erreur 404 sur l'URL `/local/...`** : vérifiez que le fichier se trouve dans
-  le dossier `www` de la configuration Home Assistant et que son nom est
-  exactement `solar-energy-graphs-card.js`.
-- **Vous voyez une ancienne version** : forcez le rechargement du navigateur
-  (par exemple `Ctrl+F5` ou `Cmd+Maj+R`), puis vérifiez que la ressource a été
-  enregistrée.
-- **« Configure entities… »** : vérifiez que les quatre clés `production`,
-  `consumption`, `grid_import` et `grid_export` sont présentes dans le YAML.
-- **Aucun historique affiché** : vérifiez que les identifiants sont corrects,
-  que les capteurs ont les unités et classes d'état attendues, et que Home
-  Assistant a conservé leur historique pour le jour sélectionné.
-- **Les puissances ne semblent pas cohérentes** : vérifiez les quatre entités,
-  leur unité (`W` ou `kW`) et que la consommation correspond à la charge de la
-  maison. L'autoconsommation estimée ne prend pas en compte une batterie.
-
-Pour retirer le prototype, supprimez la carte du tableau de bord, retirez sa
-ressource Lovelace et, si vous le souhaitez, supprimez le fichier
-`www/solar-energy-graphs-card.js`.
-
-## Développement
-
-L'architecture de la carte et l'environnement de développement sont décrits
-dans [`docs/architecture.md`](docs/architecture.md)
-(en anglais).
+- **“Custom element doesn't exist”**: confirm the card is installed and the
+  dashboard has loaded its JavaScript resource; then refresh the browser.
+- **No history is shown**: check the selected entities, their units and sensor
+  classes, and whether Home Assistant has recorded history for the selected
+  day.
+- **Values look incorrect**: verify that each sensor is assigned to the right
+  role and reports power in `W` or `kW`. The self-consumption estimate does
+  not account for a battery.
