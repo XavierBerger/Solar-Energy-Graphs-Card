@@ -297,12 +297,18 @@ describe("EnergyChartsRenderer", () => {
   // Keeps a horizontal zoom on both charts when data of the same day arrives.
   it("restores the x zoom after a same-day data update", () => {
     const renderer = new EnergyChartsRenderer(containers, legendContainers);
-    charts[0].scales.x = { min: 60, max: 120 };
+    charts[0].scales.x = { min: 60, max: 300 };
 
     renderer.updateData(TEST_HISTORY_DATA);
 
-    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 60, max: 120 });
-    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 60, max: 120 });
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 60, max: 300 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 60, max: 300 });
+
+    charts[0].scales.x = { min: 0, max: 120 };
+    renderer.updateData(TEST_HISTORY_DATA);
+
+    expect(charts[0].setScale).toHaveBeenLastCalledWith("x", { min: 0, max: 120 });
+    expect(charts[1].setScale).toHaveBeenLastCalledWith("x", { min: 0, max: 120 });
   });
 
   // Lets setData fit the whole day when the user has not zoomed.
@@ -566,21 +572,36 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].destroy).toHaveBeenCalledOnce();
   });
 
-  // Zooms both energy charts synchronously when the mouse wheel scrolls on the first chart.
+  // Zooms both charts synchronously and falls back to the center for invalid cursor coordinates.
   it("zooms both charts synchronously when scrolling over the solar chart", () => {
     new EnergyChartsRenderer(containers, legendContainers);
     containers[0].getBoundingClientRect = () =>
-      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+      ({ left: 50, right: 250, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
     const event = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
-      clientX: 100,
       deltaY: -100,
     });
+    Object.defineProperty(event, "clientX", { value: 100 });
     containers[0].dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 15, max: 255 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 15, max: 255 });
+
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    const invalidCursorEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    Object.defineProperty(invalidCursorEvent, "clientX", {
+      value: Number.POSITIVE_INFINITY,
+    });
+    containers[0].dispatchEvent(invalidCursorEvent);
+
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
     expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
   });

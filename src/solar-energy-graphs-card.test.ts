@@ -257,7 +257,7 @@ describe("SolarEnergyGraphsCard", () => {
       .toThrow('Expected card type "custom:solar-energy-graphs-card".');
   });
 
-  // Requires production, consumption, import and export power entities.
+  // Requires every configured entity to have a real ID after trimming whitespace.
   it("rejects a configuration with a missing sensor entity", () => {
     card = new SolarEnergyGraphsCard();
 
@@ -265,6 +265,12 @@ describe("SolarEnergyGraphsCard", () => {
       card.setConfig({
         ...CARD_CONFIG,
         entities: { ...CARD_CONFIG.entities, grid_export: "" },
+      }),
+    ).toThrow('Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".');
+    expect(() =>
+      card.setConfig({
+        ...CARD_CONFIG,
+        entities: { ...CARD_CONFIG.entities, production: "   " },
       }),
     ).toThrow('Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".');
   });

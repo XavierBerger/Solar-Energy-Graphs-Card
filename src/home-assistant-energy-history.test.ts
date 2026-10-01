@@ -736,21 +736,33 @@ describe("Home Assistant energy history", () => {
     expect(data.hasGridExport).toBe(false);
   });
 
-  // Stops carrying a sensor value once a source point exceeds ten-minute freshness.
+  // Keeps values right at the ten-minute freshness limit and drops only later stale ones.
   it("leaves a gap when the last power reading exceeds ten minutes", () => {
     const start = 1_000_020;
-    const data = normalizeEnergyHistory(
+    const threshold = normalizeEnergyHistory(
+      [[state(start, 500), state(start + 10 * 60, 100)], [state(start + 11 * 60, 200)], [], []],
+      { start, end: start + 11 * 60 },
+      start + 11 * 60,
+    );
+    const stale = normalizeEnergyHistory(
       [[state(start, 500)], [state(start + 11 * 60, 100)], [], []],
       { start, end: start + 12 * 60 },
       start + 12 * 60,
     );
-    const production = data.mainData[1]!;
+    const thresholdProduction = threshold.mainData[1]!;
+    const staleProduction = stale.mainData[1]!;
 
-    expect(Array.from(data.mainData[0])).toEqual([
+    expect(Array.from(threshold.mainData[0])).toEqual([
+      start,
+      start + 10 * 60,
+      start + 11 * 60,
+    ]);
+    expect(thresholdProduction).toEqual([500, 100, null]);
+    expect(Array.from(stale.mainData[0])).toEqual([
       start,
       start + 11 * 60,
       start + 12 * 60,
     ]);
-    expect(production).toEqual([500, null, null]);
+    expect(staleProduction).toEqual([500, null, null]);
   });
 });
