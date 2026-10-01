@@ -1,1 +1,5 @@
-docker/ha-config
+node_modules/
+dist/
+coverage/
+reports/
+.stryker-tmp/
