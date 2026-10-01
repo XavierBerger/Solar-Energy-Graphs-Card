@@ -1,6 +1,14 @@
+import { realpathSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  server: {
+    fs: {
+      // Stryker sandboxes symlink node_modules outside their root; allow its
+      // real path so `?inline` CSS imports are not denied during mutation runs.
+      allow: [".", realpathSync("node_modules")],
+    },
+  },
   build: {
     lib: {
       entry: "src/index.ts",
