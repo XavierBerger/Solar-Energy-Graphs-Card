@@ -11,7 +11,7 @@ mutation testing. Read [the Stryker plan](PLAN_tests_de_mutation_avec_Stryker.md
 - [Step 1 -- Run the mutation tests](#step-1----run-the-mutation-tests)
 - [Step 2 -- Pick one survivor](#step-2----pick-one-survivor)
 - [Step 3 -- Understand why it survived](#step-3----understand-why-it-survived)
-- [Step 4 -- Write the test](#step-4----write-the-test)
+- [Step 4 -- Strengthen an existing test](#step-4----strengthen-an-existing-test)
 - [Step 5 -- Prove that the test kills the mutant](#step-5----prove-that-the-test-kills-the-mutant)
 - [Step 6 -- Commit](#step-6----commit)
 - [Pitfalls met along the way](#pitfalls-met-along-the-way)
@@ -120,42 +120,58 @@ matter. This is the most common reason for a survivor.
 Is the mutant equivalent? No: with spaces in the configuration, removing
 `.trim()` breaks the card. So the fix is a test, not a code change.
 
-## Step 4 -- Write the test
+## Step 4 -- Strengthen an existing test
 
-The test goes in `src/solar-energy-graphs-card.test.ts`, next to the one that
-checks `null` entities, which already has the same shape:
+**Project rule: never add a new `it` or `test` block to fix a surviving
+mutant.** Find the existing test for the behavior and strengthen its inputs
+and assertions so that the mutant becomes observable. Keep the test count
+unchanged. If no test appears related, trace the behavior to the closest
+existing behavior-level test and extend that test; do not create another one.
+
+For this mutant, modify the existing test in
+`src/solar-energy-graphs-card.test.ts` that checks the entity IDs sent to Home
+Assistant. Give the production entity an intentionally padded ID, while
+keeping the existing null-entity case and exact request assertions:
 
 ```ts
-// Trims spaces around configured entity IDs before querying Home Assistant.
-it("trims configured entity IDs", async () => {
+// Renders without an unconfigured sensor and omits null or padded IDs from requests.
+it("accepts null entities and omits them from Home Assistant requests", async () => {
   card = new SolarEnergyGraphsCard();
   const hass = createHassContext();
-  card.setConfig({
+  const config = {
     ...CARD_CONFIG,
-    entities: { ...CARD_CONFIG.entities, production: "  sensor.solar  " },
-  });
+    entities: {
+      ...CARD_CONFIG.entities,
+      production: "  sensor.solar  ",
+      grid_import: null,
+    },
+  };
+  card.setConfig(config);
   document.body.append(card);
   card.hass = hass;
   await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
 
+  const expectedIds = SENSOR_IDS.filter((id) => id !== "sensor.grid_import");
   const requests = hass.callWS.mock.calls.map(([request]) => request);
   expect(requests.map((request) =>
     "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
-  )).toEqual([SENSOR_IDS, SENSOR_IDS, SENSOR_IDS]);
+  )).toEqual([expectedIds, expectedIds, expectedIds, expectedIds]);
 });
 ```
 
 Design choices:
 
 - **Test the behavior, not the implementation.** `normalizeEntityId` is not
-  exported and the test does not call it. It goes through the real entry point,
-  `setConfig`, and checks what the outside world sees: the entity IDs sent to
-  Home Assistant (`hass.callWS` is a mock).
+  exported and the test does not call it. It strengthens the existing
+  `setConfig` behavior test and checks what the outside world sees: the entity
+  IDs sent to Home Assistant (`hass.callWS` is a mock).
 - **One dirty input.** Only `production` has spaces, so a failure points at
   one cause.
 - **Assert the result, not just "no crash".** `toEqual(...)` checks the exact
   IDs in the two statistics requests and the history request. A test that only
   checks that the card renders would be weaker.
+- **No new test block.** The existing test now covers both its original null
+  entity behavior and normalization of a configured entity ID.
 
 ## Step 5 -- Prove that the test kills the mutant
 
@@ -168,11 +184,12 @@ order.
 ./dev.sh test
 ```
 
-Result: 114 tests passed, one more than before.
+Result: all 114 tests passed; strengthening the existing test keeps the test
+count unchanged.
 
 **2. It fails with the mutant applied by hand.** Apply the mutation in a copy
 of the project inside the container, so the working tree is never touched, and
-run only the new test (`-t` filters tests by name):
+run only the strengthened existing test (`-t` filters tests by name):
 
 ```sh
 podman run --rm \
@@ -183,14 +200,14 @@ podman run --rm \
     cp -R /source/. .
     sed -i "s/return entityId === null ? null : entityId.trim();/return entityId === null ? null : entityId;/" \
       src/solar-energy-graphs-card.ts
-    npx vitest run src/solar-energy-graphs-card.test.ts -t "trims"
+    npx vitest run src/solar-energy-graphs-card.test.ts -t "accepts null entities"
   '
 ```
 
 Result:
 
 ```
-× trims configured entity IDs
+× accepts null entities and omits them from Home Assistant requests
 AssertionError: expected [] to have a length of 1 but got +0
 ```
 
@@ -221,19 +238,20 @@ Instrumented 1 source file(s) with 4 mutant(s)
  solar-energy-graphs-card.ts | 100.00 | 100.00 | 4 | 0 | 0 | 0 | 0 |
 ```
 
-Stryker generates four mutants on line 909, and the new test kills all of
-them, including the removed `.trim()`.
+Stryker generates four mutants on line 909, and the strengthened existing
+test kills all of them, including the removed `.trim()`.
 
 ## Step 6 -- Commit
 
-Commit the test alone, with a message that says which mutant it kills and why
-it survived:
+Commit the test change alone, with a message that says which mutant it kills,
+why it survived, and that an existing test was strengthened:
 
 ```
-test(card): kill trim mutant in entity ID normalization
+test(card): cover padded IDs in entity request test
 
-No test configured an entity ID with surrounding spaces, so removing
-`.trim()` from normalizeEntityId survived mutation testing.
+The existing request test used only clean entity IDs, so removing `.trim()`
+from normalizeEntityId survived mutation testing. Extend that test to cover a
+padded ID without adding a new test block.
 ```
 
 Then go back to Step 2 with the next survivor.
