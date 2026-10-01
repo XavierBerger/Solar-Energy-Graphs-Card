@@ -406,6 +406,7 @@ describe("Home Assistant energy history", () => {
     const history: HomeAssistantCompressedState[] = [
       { s: "2", lu: 30 },
       { s: "unavailable", lu: 20 },
+      { s: "   ", lu: 25 },
       { s: "1.5", lc: 10 },
       { s: "3", lu: 30 },
       { s: "4" },
@@ -416,6 +417,7 @@ describe("Home Assistant energy history", () => {
     expect(samples).toEqual([
       { timestamp: 10, value: 1500 },
       { timestamp: 20, value: null },
+      { timestamp: 25, value: null },
       { timestamp: 30, value: 2000 },
     ]);
   });
