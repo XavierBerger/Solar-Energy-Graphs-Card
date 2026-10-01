@@ -149,7 +149,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       color: inherit;
       font: inherit;
       padding: 0.5rem;
-      width: 75%
+      width: 150px
     }
 
     .day-navigation .selected-day:focus-visible {

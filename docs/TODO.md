@@ -1,5 +1,4 @@
 # Corrections
-- [ ] Le champ date doit avoir une taille fixe pour évité de voir les boutons de gauche bouger
 - [ ] Faire disparaitre le bouton de précision au chargement d'un nouveau jour sans haure définition
 - [ ] Clarifier le contrat de signe des quatre capteurs : import/export sont forcés positifs (`Math.max(value, 0)`), production et consommation ne sont pas vérifiées. Documenter la précondition (>= 0) ou représenter les valeurs hors contrat par `null`, sans rectifier silencieusement un capteur
 - [ ] Traiter les historiques incomplets ou absents avec un état vide/erreur local au graphique
