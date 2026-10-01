@@ -41,6 +41,7 @@ const STATISTICS_PERIOD_SECONDS = 5 * 60;
 const STATISTICS_REFRESH_DELAY_SECONDS = 30;
 // Raw states cover the current day after its last compiled interval.
 const RAW_TAIL_SECONDS = 15 * 60;
+const PRECISION_PROBE_SECONDS = 60;
 
 type HistoryPrecision = "statistics" | "raw";
 
@@ -82,6 +83,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     loadError?: string;
     precision: HistoryPrecision;
     highPrecisionAvailable?: boolean;
+    highPrecisionCheckError?: string;
   };
   private historyLoadKey = "";
   private historyRequestId = 0;
@@ -512,6 +514,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       loading: true,
       precision: "statistics",
       highPrecisionAvailable: undefined,
+      highPrecisionCheckError: undefined,
     };
     void this.fetchHistory(hass, entityIds, requestId);
   }
@@ -527,11 +530,20 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
     const now = Date.now() / 1000;
     const today = this.isTodaySelected();
-    const [statistics, tail] = await Promise.allSettled([
+    const activeIds = activeEntityIds(entityIds);
+    const probeEnd = model.window.start + PRECISION_PROBE_SECONDS;
+    const hasProbeEntities = activeIds.length > 0;
+    const probeAvailable = hasProbeEntities && now >= probeEnd;
+    const [statistics, tail, precisionProbe] = await Promise.allSettled([
       fetchStatistics(hass, entityIds, model.window, now),
-      today && activeEntityIds(entityIds).length > 0
+      today && activeIds.length > 0
         ? hass.callWS(
-          buildHistoryRequest(activeEntityIds(entityIds), now - RAW_TAIL_SECONDS, now),
+          buildHistoryRequest(activeIds, now - RAW_TAIL_SECONDS, now),
+        )
+        : Promise.resolve<HistoryDuringPeriodResponse>({}),
+      probeAvailable
+        ? hass.callWS(
+          buildHistoryRequest(activeIds, model.window.start, probeEnd),
         )
         : Promise.resolve<HistoryDuringPeriodResponse>({}),
     ]);
@@ -541,8 +553,11 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
 
     let samples = current.samples;
+    let precisionSamples: EnergyPowerSamples = [[], [], [], []];
     let loadError =
       statistics.status === "rejected" ? errorMessage(statistics.reason) : undefined;
+    let highPrecisionAvailable = false;
+    let highPrecisionCheckError: string | undefined;
     try {
       if (tail.status === "rejected") {
         throw tail.reason;
@@ -564,6 +579,44 @@ export class SolarEnergyGraphsCard extends LitElement {
     } catch (error) {
       loadError ??= errorMessage(error);
     }
+    if (!hasProbeEntities) {
+      highPrecisionAvailable = false;
+    } else if (!probeAvailable) {
+      // Fail open when the selected day has no complete first-minute window yet.
+      highPrecisionAvailable = true;
+      highPrecisionCheckError =
+        "The first minute of this day has not elapsed; availability could not be checked.";
+    } else if (precisionProbe.status === "rejected") {
+      // Keep the manual full-day action available when a probe fails.
+      highPrecisionAvailable = true;
+      highPrecisionCheckError = errorMessage(precisionProbe.reason);
+    } else {
+      try {
+        const scales = sensorUnitScales(current.unitScales);
+        entityIds.forEach((entityId, sensor) => {
+          if (!entityId) {
+            return;
+          }
+          precisionSamples = replaceSensorHistory(
+            precisionSamples,
+            sensor as LivePowerSample["sensor"],
+            parseCompressedPowerSamples(
+              entityRowsOf(precisionProbe.value, entityId),
+              scales[sensor],
+            ),
+          );
+        });
+        highPrecisionAvailable = hasHigherPrecisionSamples(
+          precisionSamples,
+          statistics.status === "fulfilled"
+            ? statistics.value
+            : current.statistics,
+        );
+      } catch (error) {
+        highPrecisionAvailable = true;
+        highPrecisionCheckError = errorMessage(error);
+      }
+    }
     this.historyModel = {
       ...current,
       statistics:
@@ -572,9 +625,8 @@ export class SolarEnergyGraphsCard extends LitElement {
       loading: false,
       loadError,
       precision: current.precision,
-      // Availability is confirmed when the user requests the raw history.
-      highPrecisionAvailable:
-        current.highPrecisionAvailable ?? true,
+      highPrecisionAvailable,
+      highPrecisionCheckError,
     };
     this.showCurrentModel();
     if (today) {
@@ -660,15 +712,27 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private renderPrecisionButton() {
     const model = this.historyModel;
+    if (!model || model.highPrecisionAvailable === undefined) {
+      return html``;
+    }
     if (model?.highPrecisionAvailable === false) {
       return html``;
     }
     const highPrecision = model?.precision === "raw";
+    const checkFailed = model.highPrecisionCheckError !== undefined;
     return html`
       <button
         type="button"
-        aria-label=${highPrecision ? "Use standard precision" : "Load high precision"}
-        title=${highPrecision ? "Standard precision" : "High precision"}
+        aria-label=${highPrecision
+          ? "Use standard precision"
+          : checkFailed
+          ? "Load high precision (availability check failed)"
+          : "Load high precision"}
+        title=${highPrecision
+          ? "Standard precision"
+          : checkFailed
+          ? `High precision availability check failed: ${model.highPrecisionCheckError}`
+          : "High precision"}
         ?disabled=${model?.loading === true}
         @click=${this.togglePrecision}
       >
@@ -699,7 +763,12 @@ export class SolarEnergyGraphsCard extends LitElement {
   ): Promise<void> {
     // Keep the load's id: a new one would stop its statistics refresh chain.
     const requestId = this.historyRequestId;
-    this.historyModel = { ...model, loading: true, loadError: undefined };
+    this.historyModel = {
+      ...model,
+      loading: true,
+      loadError: undefined,
+      highPrecisionCheckError: undefined,
+    };
     this.mainStatus = LOADING_STATUS;
     this.gridStatus = LOADING_STATUS;
     this.requestUpdate();

@@ -113,12 +113,13 @@ the recorder purges 5-minute statistics after `purge_keep_days` (10 by
 default) but keeps hourly ones. `combineStatistics` keeps the 5-minute rows and
 uses hourly rows only *before* the first 5-minute one.
 
-**Raw branch.** Only for today. Raw states are not converted by Home Assistant,
-so each value is multiplied by the factor from `getEnergyUnitScales` (`W` = 1,
-`kW` = 1000). `replaceSensorHistory` installs the recorded states while keeping
-live states that arrived during the request; `mergeLiveEnergySamples` appends
-live states and returns the *same* object when nothing changed, which lets the
-card skip a redraw.
+**Raw branch.** Today initially loads a 15-minute tail; the precision toggle
+loads raw states for the selected day. Raw states are not converted by Home
+Assistant, so each value is multiplied by the factor from
+`getEnergyUnitScales` (`W` = 1, `kW` = 1000). `replaceSensorHistory` installs
+the recorded states while keeping live states that arrived during the request;
+`mergeLiveEnergySamples` appends live states and returns the *same* object when
+nothing changed, which lets the card skip a redraw.
 
 **Projection.** `projectEnergyHistory` builds one shared time axis (`x`) for
 all series -- the day start, every statistics midpoint, every raw timestamp,
@@ -170,6 +171,11 @@ part: it is statistics only.
   time zone (`hass.config.time_zone`), never the browser's.
 - Day boundaries come from `getLocalDayWindowForDate`, which handles 23-hour
   and 25-hour days at DST changes.
+- Each day load probes raw history for the first complete local minute. The
+  precision toggle stays hidden until the probe confirms a sampling interval
+  finer than the statistics; a failed probe leaves the action available with
+  an error in its title. This is only a one-minute indicator: fine samples
+  elsewhere in the day can be missed, causing a false negative.
 - Changing the day changes the load key, which triggers a new load; a
   response for the previous day is ignored when it arrives (see
   [Robustness rules](#robustness-rules)).
