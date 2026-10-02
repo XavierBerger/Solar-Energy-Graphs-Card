@@ -922,6 +922,164 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
+
+  // Uses dark mode defaults even if the card has no custom theme values.
+  it("falls back to dark-mode defaults when CSS variables are missing", () => {
+    new EnergyChartsRenderer(containers, legendContainers, true);
+
+    const axes = createChartMock.mock.calls[0][0].axes;
+    expect(axes[0].stroke()).toBe("#ffffff");
+    expect(axes[0].grid.stroke()).toBe("#9e9e9e");
+    expect(charts[0].root.querySelector(".u-select")!.style.backgroundColor).toBe(
+      "rgba(158, 158, 158, 0.25)",
+    );
+    expect(charts[1].root.querySelector(".u-select")!.style.backgroundColor).toBe(
+      "rgba(158, 158, 158, 0.25)",
+    );
+  });
+
+  // Falls back to Home Assistant defaults when the computed CSS values are blank.
+  it("falls back to default light theme colors when CSS values are empty", () => {
+    containers[0].style.setProperty("--primary-text-color", "");
+    containers[0].style.setProperty("--divider-color", "");
+
+    new EnergyChartsRenderer(containers, legendContainers);
+
+    const axes = createChartMock.mock.calls[0][0].axes;
+    expect(axes[0].stroke()).toBe("#212121");
+    expect(axes[0].grid.stroke()).toBe("#bdbdbd");
+  });
+
+  // Keeps a destroyed renderer from mutating chart state on later updates.
+  it("ignores updates after destroy", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    renderer.destroy();
+
+    renderer.updateData({
+      ...TEST_HISTORY_DATA,
+      mainData: [Float64Array.from([600, 900]), [null, 2400]],
+      gridData: [Float64Array.from([600, 900]), [null, 300]],
+    });
+
+    expect(charts[0].setData).not.toHaveBeenCalled();
+    expect(charts[1].setData).not.toHaveBeenCalled();
+  });
+
+  // Ignores wheel zoom requests when the visible chart has only one x sample.
+  it("does not zoom with a single-sample x axis", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].data = [Float64Array.from([0])];
+    charts[1].data = [Float64Array.from([0])];
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: -100,
+    });
+    containers[0].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Right-click drags should never trigger a pan while the user is zoomed in.
+  it("ignores right-button drag starts when zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 2 }),
+    );
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150 }));
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // A drag already in progress should silently ignore a second mousedown.
+  it("ignores a second drag start while panning", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
+    );
+    containers[0].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 110, button: 0 }),
+    );
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150 }));
+
+    expect(charts[0].setScale).toHaveBeenCalledTimes(1);
+    expect(charts[1].setScale).toHaveBeenCalledTimes(1);
+  });
+
+  // Zero-width plots should not start a drag or recenter the time scale.
+  it("ignores drag starts when the plot width is zero", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 50, max: 200 };
+    charts[1].scales.x = { min: 50, max: 200 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 0, width: 0, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
+    );
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150 }));
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Resize callbacks should ignore unrelated container changes.
+  it("ignores resize notifications for unrelated elements", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    const unrelated = document.createElement("div");
+    document.body.append(unrelated);
+
+    MockResizeObserver.instances[0].trigger(unrelated, 420, 180);
+
+    expect(charts[0].setSize).not.toHaveBeenCalled();
+    expect(charts[1].setSize).not.toHaveBeenCalled();
+  });
+
+  // Clamps wheel cursor fractions so near-edge scrolls stay inside the day bounds.
+  it("clamps the cursor fraction before zooming near the day edges", () => {
+    expect(computeWheelZoomRange({ min: 0, max: 300 }, { min: 0, max: 300 }, -10, -100, 0.8)).toEqual({
+      min: 0,
+      max: 240,
+    });
+    expect(computeWheelZoomRange({ min: 0, max: 300 }, { min: 0, max: 300 }, 10, -100, 0.8)).toEqual({
+      min: 60,
+      max: 300,
+    });
+  });
+
+  // A zoomed-in view should not react to drag moves once the last update is no-op.
+  it("does not keep panning when the drag is already clamped at the boundary", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 0, max: 40000 };
+    charts[1].scales.x = { min: 0, max: 40000 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    containers[0].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
+    );
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 150 }));
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
 });
 
 describe("computeWheelZoomRange", () => {
