@@ -7,7 +7,7 @@
     "build": "npm run typecheck && vite build",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "mutation": "stryker run",
+    "mutation": "stryker run --incremental",
     "typecheck": "tsc --noEmit",
     "diagrams": "for f in docs/diagrams/*.mmd; do mmdc --quiet -i \"$f\" -o \"${f%.mmd}.svg\" -c docs/diagrams/mermaid.json -p docs/diagrams/puppeteer.json -b white || exit 1; done"
   },

@@ -76,6 +76,7 @@ podman run --rm \
       rm -rf /source/reports/mutation
       mkdir -p /source/reports
       cp -R reports/mutation /source/reports/mutation
+      cp reports/stryker-incremental.json /source/reports/stryker-incremental.json
     fi
     if [ "$1" = diagrams ]; then
       cp docs/diagrams/*.svg /source/docs/diagrams/
