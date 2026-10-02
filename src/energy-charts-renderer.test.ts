@@ -232,6 +232,19 @@ describe("EnergyChartsRenderer", () => {
       "legend-values-only",
       ...Array(4).fill("hide-helper-legend"),
     ]);
+    expect(
+      firstOptions.series
+        .slice(10)
+        .every((series: { label?: string }) => series.label === ""),
+    ).toBe(true);
+    expect(
+      firstOptions.series
+        .slice(10)
+        .every(
+          (series: { stroke?: string }) =>
+            series.stroke === "rgba(0, 0, 0, 0)",
+        ),
+    ).toBe(true);
     expect(firstOptions.bands).toEqual([
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
@@ -407,9 +420,12 @@ describe("EnergyChartsRenderer", () => {
       expect(chart.valToPos).toHaveBeenCalledWith(0, "y", true);
       expect(ctx.strokeStyle).toBe("#9e9e9e");
       expect(ctx.lineWidth).toBe(1.5);
+      expect(ctx.save).toHaveBeenCalledOnce();
+      expect(ctx.beginPath).toHaveBeenCalledOnce();
       expect(ctx.moveTo).toHaveBeenCalledWith(5, 10.5);
       expect(ctx.lineTo).toHaveBeenCalledWith(125, 10.5);
       expect(ctx.stroke).toHaveBeenCalledOnce();
+      expect(ctx.restore).toHaveBeenCalledOnce();
     };
 
     draw({ min: -200, max: 700 });
@@ -429,17 +445,27 @@ describe("EnergyChartsRenderer", () => {
       strokeStyle: "",
       lineWidth: 0,
     };
-    const chart = {
-      scales: { y: { min: 10, max: 700 } },
-      valToPos: vi.fn(() => 10),
-      ctx,
-      bbox: { left: 5, width: 120 },
+    const checkSkipped = (
+      scales: Record<string, { min?: number; max?: number }>,
+    ) => {
+      const chart = {
+        scales,
+        valToPos: vi.fn(() => 10),
+        ctx,
+        bbox: { left: 5, width: 120 },
+      };
+
+      drawZeroLine(chart, "#9e9e9e");
+
+      expect(chart.valToPos).not.toHaveBeenCalled();
+      expect(ctx.stroke).not.toHaveBeenCalled();
     };
 
-    drawZeroLine(chart, "#9e9e9e");
-
-    expect(chart.valToPos).not.toHaveBeenCalled();
-    expect(ctx.stroke).not.toHaveBeenCalled();
+    checkSkipped({ y: { min: 10, max: 700 } });
+    checkSkipped({});
+    checkSkipped({ y: { max: 700 } });
+    checkSkipped({ y: { min: -700 } });
+    checkSkipped({ y: { min: -700, max: -10 } });
   });
 
   // Preserves the existing light-theme colors and grid width.
@@ -648,6 +674,31 @@ describe("EnergyChartsRenderer", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+
+    const zeroDeltaEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: 0,
+    });
+    containers[0].dispatchEvent(zeroDeltaEvent);
+
+    expect(zeroDeltaEvent.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+
+    charts[0].data = [Float64Array.from([0])];
+    const oneSampleEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      deltaY: -100,
+    });
+    containers[0].dispatchEvent(oneSampleEvent);
+
+    expect(oneSampleEvent.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
   // Stops responding to wheel events after the renderer is destroyed.
@@ -699,6 +750,25 @@ describe("EnergyChartsRenderer", () => {
     // newMin = 50 - 37.5 = 12.5, newMax = 200 - 37.5 = 162.5
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 12.5, max: 162.5 });
     expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 12.5, max: 162.5 });
+
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    charts[0].scales.x = { min: 200, max: 250 };
+    charts[1].scales.x = { min: 200, max: 250 };
+
+    containers[0].dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      clientX: 100,
+      button: 0,
+    }));
+    document.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      clientX: 150,
+    }));
+
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 187.5, max: 237.5 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 187.5, max: 237.5 });
   });
 
   // Does not start panning when the view shows the full day (not zoomed).
@@ -753,6 +823,24 @@ describe("EnergyChartsRenderer", () => {
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
     containers[1].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 2 }),
+    );
+
+    expect(charts[0].cursor.drag.x).toBe(true);
+    expect(charts[1].cursor.drag.x).toBe(true);
+
+    containers[1].dispatchEvent(
+      new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
+    );
+
+    expect(charts[0].cursor.drag.x).toBe(false);
+    expect(charts[1].cursor.drag.x).toBe(false);
+
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    charts[0].cursor.drag.x = false;
+    charts[1].cursor.drag.x = false;
+    charts[0].data = [Float64Array.from([0])];
+    containers[0].dispatchEvent(
       new MouseEvent("mousedown", { bubbles: true, clientX: 100, button: 0 }),
     );
 
@@ -870,6 +958,18 @@ describe("computeWheelZoomRange", () => {
     const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, 100, 0.8);
 
     expect(zoomed).toEqual({ min: 0, max: 86400 });
+    expect(
+      computeWheelZoomRange({ min: 0, max: 70000 }, dayWindow, 0.5, 100, 0.8),
+    ).toEqual(dayWindow);
+    expect(
+      computeWheelZoomRange(
+        { min: 16400, max: 86400 },
+        dayWindow,
+        0.5,
+        100,
+        0.8,
+      ),
+    ).toEqual(dayWindow);
   });
 
   // Avoids unnecessary scale updates when zooming out while already showing the full day.
@@ -892,16 +992,20 @@ describe("computeWheelZoomRange", () => {
   it("shifts the zoomed range when the cursor is near the day start", () => {
     const current = { min: 0, max: 50000 };
     const zoomed = computeWheelZoomRange(current, dayWindow, 0, -100, 0.8);
+    const zoomedOut = computeWheelZoomRange(current, dayWindow, 1, 100, 0.8);
 
     expect(zoomed).toEqual({ min: 0, max: 40000 });
+    expect(zoomedOut).toEqual({ min: 0, max: 62500 });
   });
 
   // Shifts the zoom window to avoid extending beyond the end of the day.
   it("shifts the zoomed range when the cursor is near the day end", () => {
     const current = { min: 36400, max: 86400 };
     const zoomed = computeWheelZoomRange(current, dayWindow, 1, -100, 0.8);
+    const zoomedOut = computeWheelZoomRange(current, dayWindow, 0, 100, 0.8);
 
     expect(zoomed).toEqual({ min: 46400, max: 86400 });
+    expect(zoomedOut).toEqual({ min: 23900, max: 86400 });
   });
 
   // Rejects invalid non-positive day or range durations safely.
@@ -969,6 +1073,14 @@ describe("computeDragPanRange", () => {
     const result = computeDragPanRange(current, dayWindow, 50, 200);
 
     expect(result).toBeUndefined();
+    expect(
+      computeDragPanRange(
+        { min: 100000, max: 186400 },
+        { min: 100000, max: 186400 },
+        50,
+        200,
+      ),
+    ).toBeUndefined();
   });
 
   // Returns undefined when pixel displacement is zero.
