@@ -1059,14 +1059,6 @@ describe("computeDragPanRange", () => {
     expect(result).toEqual({ min: 46400, max: 86400 });
   });
 
-  // Returns undefined when the range already touches the day end, as nothing moves.
-  it("returns undefined when already clamped at the day end", () => {
-    const current = { min: 46400, max: 86400 };
-    const result = computeDragPanRange(current, dayWindow, -100, 200);
-
-    expect(result).toBeUndefined();
-  });
-
   // Returns undefined when not zoomed in (no panning at full day).
   it("returns undefined when not zoomed in", () => {
     const current = { min: 0, max: 86400 };

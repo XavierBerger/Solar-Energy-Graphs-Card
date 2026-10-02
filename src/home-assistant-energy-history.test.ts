@@ -162,40 +162,31 @@ describe("Home Assistant energy history", () => {
     ).toThrow("The production sensor must use W or kW.");
   });
 
-  // Identifies production in errors for invalid production sensor metadata.
-  it("names the production sensor when its metadata is invalid", () => {
-    expect(() =>
-      getEnergyUnitScales([
-        { unit_of_measurement: "W", device_class: "energy", state_class: "measurement" },
-        null,
-        null,
-        null,
-      ]),
-    ).toThrow("The production sensor must have device_class=power");
-  });
+  // Reports the correct role when any configured sensor has invalid metadata.
+  it("names each sensor role when its metadata is invalid", () => {
+    const invalidSensor = {
+      unit_of_measurement: "W",
+      device_class: "energy",
+      state_class: "measurement",
+    };
+    const invalidRoles = [
+      {
+        sensors: [invalidSensor, null, null, null],
+        message: "The production sensor must have device_class=power",
+      },
+      {
+        sensors: [null, invalidSensor, null, null],
+        message: "The consumption sensor must have device_class=power",
+      },
+      {
+        sensors: [null, null, null, invalidSensor],
+        message: "The grid export sensor must have device_class=power",
+      },
+    ] as const;
 
-  // Identifies consumption in errors for invalid consumption sensor metadata.
-  it("names the consumption sensor when its metadata is invalid", () => {
-    expect(() =>
-      getEnergyUnitScales([
-        null,
-        { unit_of_measurement: "W", device_class: "energy", state_class: "measurement" },
-        null,
-        null,
-      ]),
-    ).toThrow("The consumption sensor must have device_class=power");
-  });
-
-  // Identifies grid export in errors for invalid grid export sensor metadata.
-  it("names the grid export sensor when its metadata is invalid", () => {
-    expect(() =>
-      getEnergyUnitScales([
-        null,
-        null,
-        null,
-        { unit_of_measurement: "W", device_class: "energy", state_class: "measurement" },
-      ]),
-    ).toThrow("The grid export sensor must have device_class=power");
+    for (const { sensors, message } of invalidRoles) {
+      expect(() => getEnergyUnitScales(sensors)).toThrow(message);
+    }
   });
 
   // Resolves midnight and the next midnight in the configured HA time zone.
@@ -219,43 +210,25 @@ describe("Home Assistant energy history", () => {
     ).toBe("2026-09-28");
     expect(shiftLocalDate("2026-01-01", -1)).toBe("2025-12-31");
     expect(shiftLocalDate("2025-12-31", 1)).toBe("2026-01-01");
-    expect(() => shiftLocalDate("2026-02-30", 1)).toThrow(
-      'Invalid local date "2026-02-30".',
-    );
-    expect(() => shiftLocalDate("prefix-2026-01-01", 1)).toThrow(
-      'Invalid local date "prefix-2026-01-01".',
-    );
-    expect(() => shiftLocalDate("2026-01-01-suffix", 1)).toThrow(
-      'Invalid local date "2026-01-01-suffix".',
-    );
   });
 
-  // Rejects a month that overflows into the following year.
-  it("rejects local dates with an overflowing month", () => {
-    expect(() => shiftLocalDate("2025-13-01", 1)).toThrow(
-      'Invalid local date "2025-13-01".',
-    );
-  });
+  // Rejects malformed dates and calendar values outside their valid ranges.
+  it("rejects invalid local dates", () => {
+    const invalidDates = [
+      "2026-02-30",
+      "prefix-2026-01-01",
+      "2026-01-01-suffix",
+      "2025-13-01",
+      "2025-00-15",
+      "2025-01-00",
+      "2025-02-29",
+    ];
 
-  // Rejects a month below the valid calendar range.
-  it("rejects local dates with month zero", () => {
-    expect(() => shiftLocalDate("2025-00-15", 1)).toThrow(
-      'Invalid local date "2025-00-15".',
-    );
-  });
-
-  // Rejects day zero rather than normalizing it into the previous month.
-  it("rejects local dates with day zero", () => {
-    expect(() => shiftLocalDate("2025-01-00", 1)).toThrow(
-      'Invalid local date "2025-01-00".',
-    );
-  });
-
-  // Rejects February 29 in a year that is not a leap year.
-  it("rejects February 29 in a non-leap year", () => {
-    expect(() => shiftLocalDate("2025-02-29", 1)).toThrow(
-      'Invalid local date "2025-02-29".',
-    );
+    for (const date of invalidDates) {
+      expect(() => shiftLocalDate(date, 1)).toThrow(
+        `Invalid local date "${date}".`,
+      );
+    }
   });
 
   // Calculates day boundaries from a selected civil date in the HA time zone.
