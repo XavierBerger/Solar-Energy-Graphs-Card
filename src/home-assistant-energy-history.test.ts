@@ -130,6 +130,74 @@ describe("Home Assistant energy history", () => {
     ).toThrow("device_class=power");
   });
 
+  // Requires measurement state_class even when the device class is power.
+  it("rejects a power sensor that is not a measurement", () => {
+    expect(() =>
+      getEnergyUnitScales([
+        {
+          unit_of_measurement: "W",
+          device_class: "power",
+          state_class: "total",
+        },
+        null,
+        null,
+        null,
+      ]),
+    ).toThrow("state_class=measurement");
+  });
+
+  // Rejects unrecognized units when the sensor classes are otherwise valid.
+  it("rejects unsupported power units", () => {
+    expect(() =>
+      getEnergyUnitScales([
+        {
+          unit_of_measurement: "mW",
+          device_class: "power",
+          state_class: "measurement",
+        },
+        null,
+        null,
+        null,
+      ]),
+    ).toThrow("The production sensor must use W or kW.");
+  });
+
+  // Identifies production in errors for invalid production sensor metadata.
+  it("names the production sensor when its metadata is invalid", () => {
+    expect(() =>
+      getEnergyUnitScales([
+        { unit_of_measurement: "W", device_class: "energy", state_class: "measurement" },
+        null,
+        null,
+        null,
+      ]),
+    ).toThrow("The production sensor must have device_class=power");
+  });
+
+  // Identifies consumption in errors for invalid consumption sensor metadata.
+  it("names the consumption sensor when its metadata is invalid", () => {
+    expect(() =>
+      getEnergyUnitScales([
+        null,
+        { unit_of_measurement: "W", device_class: "energy", state_class: "measurement" },
+        null,
+        null,
+      ]),
+    ).toThrow("The consumption sensor must have device_class=power");
+  });
+
+  // Identifies grid export in errors for invalid grid export sensor metadata.
+  it("names the grid export sensor when its metadata is invalid", () => {
+    expect(() =>
+      getEnergyUnitScales([
+        null,
+        null,
+        null,
+        { unit_of_measurement: "W", device_class: "energy", state_class: "measurement" },
+      ]),
+    ).toThrow("The grid export sensor must have device_class=power");
+  });
+
   // Resolves midnight and the next midnight in the configured HA time zone.
   it("creates a local-day window using Europe/Paris offsets", () => {
     const window = getLocalDayWindow(
@@ -159,6 +227,34 @@ describe("Home Assistant energy history", () => {
     );
     expect(() => shiftLocalDate("2026-01-01-suffix", 1)).toThrow(
       'Invalid local date "2026-01-01-suffix".',
+    );
+  });
+
+  // Rejects a month that overflows into the following year.
+  it("rejects local dates with an overflowing month", () => {
+    expect(() => shiftLocalDate("2025-13-01", 1)).toThrow(
+      'Invalid local date "2025-13-01".',
+    );
+  });
+
+  // Rejects a month below the valid calendar range.
+  it("rejects local dates with month zero", () => {
+    expect(() => shiftLocalDate("2025-00-15", 1)).toThrow(
+      'Invalid local date "2025-00-15".',
+    );
+  });
+
+  // Rejects day zero rather than normalizing it into the previous month.
+  it("rejects local dates with day zero", () => {
+    expect(() => shiftLocalDate("2025-01-00", 1)).toThrow(
+      'Invalid local date "2025-01-00".',
+    );
+  });
+
+  // Rejects February 29 in a year that is not a leap year.
+  it("rejects February 29 in a non-leap year", () => {
+    expect(() => shiftLocalDate("2025-02-29", 1)).toThrow(
+      'Invalid local date "2025-02-29".',
     );
   });
 
@@ -222,6 +318,39 @@ describe("Home Assistant energy history", () => {
       autumn.start,
       autumn.end,
     ]);
+    expect(springData.hasProduction).toBe(false);
+    expect(springData.hasConsumption).toBe(false);
+    expect(springData.hasGridImport).toBe(false);
+    expect(springData.hasGridExport).toBe(false);
+  });
+
+  // Excludes recorded samples later than now from the projected graph.
+  it("does not project history beyond the current time", () => {
+    const start = 1_000_000;
+    const now = start + 60;
+    const window = { start, end: start + 180 };
+    const data = normalizeEnergyHistory(
+      [[state(start + 90, 500)], [], [], []],
+      window,
+      now,
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([start, now, window.end]);
+    expect(data.mainData[1]).toEqual([null, null, null]);
+  });
+
+  // Clamps an earlier current time to the selected day's start.
+  it("clamps the projection when now precedes the day window", () => {
+    const start = 1_000_000;
+    const window = { start, end: start + 180 };
+    const data = normalizeEnergyHistory(
+      [[], [], [], []],
+      window,
+      start - 60,
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([start, window.end]);
+    expect(data.mainData[1]).toEqual([null, null]);
   });
 
   // Requests every recorded state of the sensors over the given period.
@@ -240,6 +369,16 @@ describe("Home Assistant energy history", () => {
     });
   });
 
+  // Keeps the history request independent from later edits to the caller's ID list.
+  it("copies the history request entity IDs", () => {
+    const entityIds = ["sensor.solar"];
+    const request = buildHistoryRequest(entityIds, 1000, 2000);
+
+    entityIds.push("sensor.load");
+
+    expect(request.entity_ids).toEqual(["sensor.solar"]);
+  });
+
   // Requests mean, min and max in watts from midnight up to the current time.
   it("builds a statistics request in watts", () => {
     const window = { start: 1000, end: 1000 + 24 * 60 * 60 };
@@ -255,6 +394,21 @@ describe("Home Assistant energy history", () => {
       types: ["mean", "min", "max"],
       units: { power: "W" },
     });
+  });
+
+  // Keeps the statistics request independent from later edits to the caller's ID list.
+  it("copies the statistics request entity IDs", () => {
+    const entityIds = ["sensor.solar"];
+    const request = buildStatisticsRequest(
+      entityIds,
+      { start: 1000, end: 2000 },
+      1500,
+      "hour",
+    );
+
+    entityIds.push("sensor.load");
+
+    expect(request.statistic_ids).toEqual(["sensor.solar"]);
   });
 
   // Stops a past-day statistics request at midnight instead of the current time.
@@ -292,6 +446,34 @@ describe("Home Assistant energy history", () => {
       { start: 600, end: 900, mean: 2, min: 1, max: 3 },
       { start: 900, end: 1200, mean: null, min: null, max: null },
     ]);
+  });
+
+  // Converts missing and non-finite statistic values to null while retaining finite negatives.
+  it("normalizes optional statistic values without clamping finite readings", () => {
+    const [sample] = parseStatisticRows([
+      {
+        start: 1000,
+        end: 2000,
+        mean: -2,
+        min: Number.NEGATIVE_INFINITY,
+        max: undefined,
+      },
+    ]);
+
+    expect(sample).toEqual({
+      start: 1,
+      end: 2,
+      mean: -2,
+      min: null,
+      max: null,
+    });
+  });
+
+  // Rejects a history response containing more sensor series than expected.
+  it("rejects a history response with extra sensor series", () => {
+    expect(() => parseEnergyHistory([[], [], [], [], []])).toThrow(
+      "Home Assistant returned an invalid history response.",
+    );
   });
 
   // Fills only the purged part of the day with hourly statistics.
@@ -346,26 +528,105 @@ describe("Home Assistant energy history", () => {
     expect(data.gridData[6]).toEqual([-150, -150, 0, null, null]);
   });
 
+  // Includes a raw sample exactly at the selected day's start.
+  it("projects a source sample at the day start", () => {
+    const start = 1_000_200;
+    const window = { start, end: start + 120 };
+    const data = projectEnergyHistory(
+      [[{ timestamp: start, value: 250 }], [], [], []],
+      window,
+      start + 60,
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 60,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([250, 250, null]);
+  });
+
   // Leaves a gap for a missing interval instead of bridging it.
   it("leaves a gap between non-contiguous statistics intervals", () => {
     const start = 1_000_200;
     const window = { start, end: start + 3600 };
-    const data = projectEnergyHistory([[], [], [], []], window, window.end, [
-      [statistic(start, 500, 400, 600), statistic(start + 600, 700, 600, 900)],
-      [],
-      [],
-      [],
-    ]);
+    const data = projectEnergyHistory(
+      [
+        [],
+        [{ timestamp: start + 300, value: 200 }],
+        [],
+        [],
+      ],
+      window,
+      window.end,
+      [
+        [statistic(start, 500, 400, 600), statistic(start + 600, 700, 600, 900)],
+        [],
+        [],
+        [],
+      ],
+    );
 
     expect(Array.from(data.mainData[0])).toEqual([
       start,
       start + 150,
+      start + 300,
       start + 750,
       start + 900,
       window.end,
     ]);
-    expect(data.mainData[1]).toEqual([500, 500, 700, null, null]);
-    expect(data.mainData[3]).toEqual([null, null, null, null, null]);
+    expect(data.mainData[1]).toEqual([500, 500, null, 700, null, null]);
+    expect(data.mainData[3]).toEqual([null, null, null, 200, null, null]);
+  });
+
+  // Uses the next statistics interval at its exact start boundary.
+  it("switches statistics values at the interval boundary", () => {
+    const start = 1_000_200;
+    const window = { start, end: start + 1200 };
+    const data = projectEnergyHistory(
+      [[], [{ timestamp: start + 300, value: 50 }], [], []],
+      window,
+      window.end,
+      [
+        [
+          statistic(start, 100, 80, 120),
+          statistic(start + 300, 200, 180, 220),
+        ],
+        [],
+        [],
+        [],
+      ],
+    );
+    const boundaryIndex = Array.from(data.mainData[0]).indexOf(start + 300);
+
+    expect(boundaryIndex).toBeGreaterThan(-1);
+    expect(data.mainData[1][boundaryIndex]).toBe(200);
+  });
+
+  // Leaves values missing before a statistics interval begins.
+  it("does not backfill before the first statistics interval", () => {
+    const start = 1_000_200;
+    const window = { start, end: start + 3600 };
+    const data = projectEnergyHistory(
+      [
+        [],
+        [{ timestamp: start + 150, value: 200 }],
+        [],
+        [],
+      ],
+      window,
+      window.end,
+      [[statistic(start + 300, 500, 400, 600)], [], [], []],
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 150,
+      start + 450,
+      start + 600,
+      window.end,
+    ]);
+    expect(data.mainData[1]).toEqual([null, null, 500, null, null]);
   });
 
   // Continues with raw samples, without range, after the last compiled interval.
@@ -394,6 +655,44 @@ describe("Home Assistant energy history", () => {
     expect(data.mainData[10]).toEqual([600, 600, null, null, null, null]);
   });
 
+  // Includes a raw reading whose timestamp is exactly now.
+  it("projects a raw sample at the current-time boundary", () => {
+    const start = 1_000_200;
+    const now = start + 60;
+    const data = projectEnergyHistory(
+      [[
+        { timestamp: start + 30, value: 100 },
+        { timestamp: now, value: 900 },
+      ], [], [], []],
+      { start, end: start + 120 },
+      now,
+    );
+
+    expect(Array.from(data.mainData[0])).toEqual([
+      start,
+      start + 30,
+      now,
+      start + 120,
+    ]);
+    expect(data.mainData[1]).toEqual([null, 100, 900, null]);
+  });
+
+  // Retains min-max bounds for an interval whose mean is unavailable.
+  it("keeps statistic ranges when the interval mean is missing", () => {
+    const start = 1_000_200;
+    const data = projectEnergyHistory(
+      [[], [], [], []],
+      { start, end: start + 1200 },
+      start + 900,
+      [[statistic(start, null, 400, 600)], [], [], []],
+    );
+
+    expect(data.mainData[1]).toEqual([null, null, null, null, null]);
+    expect(data.mainData[10]).toEqual([600, 600, null, null, null]);
+    expect(data.mainData[11]).toEqual([400, 400, null, null, null]);
+    expect(data.hasProduction).toBe(false);
+  });
+
   // Treats an entity absent from the response as a sensor without history.
   it("reads the states of one entity from a history response", () => {
     const response: HistoryDuringPeriodResponse = {
@@ -402,6 +701,14 @@ describe("Home Assistant energy history", () => {
 
     expect(entityRowsOf(response, "sensor.solar")).toEqual([state(10, 500)]);
     expect(entityRowsOf({}, "sensor.solar")).toEqual([]);
+  });
+
+  // Returns an entity's existing row list without copying or changing it.
+  it("returns the original history rows", () => {
+    const rows = [state(10, 500)];
+    const response: HistoryDuringPeriodResponse = { "sensor.solar": rows };
+
+    expect(entityRowsOf(response, "sensor.solar")).toBe(rows);
   });
 
   // Rejects a malformed response instead of drawing an empty history.
@@ -415,6 +722,9 @@ describe("Home Assistant energy history", () => {
     );
     expect(() =>
       entityRowsOf(null as unknown as HistoryDuringPeriodResponse, "sensor.solar"),
+    ).toThrow("Home Assistant returned an invalid history response.");
+    expect(() =>
+      entityRowsOf("not an object" as unknown as HistoryDuringPeriodResponse, "sensor.solar"),
     ).toThrow("Home Assistant returned an invalid history response.");
     expect(() => parseEnergyHistory([[]])).toThrow(
       "Home Assistant returned an invalid history response.",
@@ -449,6 +759,16 @@ describe("Home Assistant energy history", () => {
     expect(samples).toEqual([{ timestamp: 20, value: 5 }]);
   });
 
+  // Keeps a valid zero update timestamp instead of falling back to last_changed.
+  it("prefers a zero compressed update timestamp", () => {
+    const samples = parseCompressedPowerSamples(
+      [{ s: "5", lu: 0, lc: 10 }],
+      1,
+    );
+
+    expect(samples).toEqual([{ timestamp: 0, value: 5 }]);
+  });
+
   // Keeps sub-millisecond precision and rejects live states without a valid timestamp.
   it("parses live states with sub-millisecond timestamps", () => {
     const sample = parsePowerState(
@@ -463,6 +783,73 @@ describe("Home Assistant energy history", () => {
     expect(sample?.timestamp).toBeCloseTo(1_000_025.123456, 6);
     expect(sample?.value).toBe(500);
     expect(invalidTimestamp).toBeUndefined();
+  });
+
+  // Uses last_changed when Home Assistant omits last_updated.
+  it("falls back to last_changed for live timestamps", () => {
+    const sample = parsePowerState(
+      { state: "2.5", last_changed: "2026-06-01T10:00:00Z" },
+      1000,
+    );
+
+    expect(sample).toEqual({
+      timestamp: Date.parse("2026-06-01T10:00:00Z") / 1000,
+      value: 2500,
+    });
+  });
+
+  // Converts non-finite live states to missing values rather than charting infinity.
+  it("rejects non-finite live power values", () => {
+    const sample = parsePowerState(
+      { state: "Infinity", last_updated: "2026-06-01T10:00:00Z" },
+      1,
+    );
+
+    expect(sample).toEqual({
+      timestamp: Date.parse("2026-06-01T10:00:00Z") / 1000,
+      value: null,
+    });
+  });
+
+  // Retains fractional seconds for timestamps with colon and compact UTC offsets.
+  it("preserves sub-millisecond precision with numeric timezone offsets", () => {
+    const colonOffset = parsePowerState(
+      { state: "1", last_updated: "2026-06-01T12:00:00.123456+02:00" },
+      1,
+    );
+    const compactOffset = parsePowerState(
+      { state: "1", last_updated: "2026-06-01T12:00:00.654321+0200" },
+      1,
+    );
+
+    expect(colonOffset?.timestamp).toBeCloseTo(
+      Date.parse("2026-06-01T10:00:00.123Z") / 1000 + 0.000456,
+      6,
+    );
+    expect(compactOffset?.timestamp).toBeCloseTo(
+      Date.parse("2026-06-01T10:00:00.654Z") / 1000 + 0.000321,
+      6,
+    );
+  });
+
+  // Clears a raw sensor after an unavailable state until a usable reading returns.
+  it("keeps unavailable raw samples as gaps between valid readings", () => {
+    const start = 1_000_020;
+    const data = normalizeEnergyHistory(
+      [[state(start, 500), state(start + 30, "unavailable"), state(start + 60, 300)], [], [], []],
+      { start, end: start + 120 },
+      start + 90,
+    );
+    const timestamps = Array.from(data.mainData[0]);
+
+    expect(timestamps).toEqual([
+      start,
+      start + 30,
+      start + 60,
+      start + 90,
+      start + 120,
+    ]);
+    expect(data.mainData[1]).toEqual([500, null, 300, 300, null]);
   });
 
   // Keeps live samples merged during loading only when newer than the history.
@@ -489,6 +876,28 @@ describe("Home Assistant energy history", () => {
       { timestamp: 40, value: 200 },
     ]);
     expect(samples[0]).toBe(loading[0]);
+  });
+
+  // Uses the recorded value when a live sample shares the history boundary timestamp.
+  it("replaces a live sample at the last recorded timestamp", () => {
+    const loading = mergeLiveEnergySamples(
+      [[], [], [], []],
+      [
+        { sensor: 1, timestamp: 30, value: 175 },
+        { sensor: 1, timestamp: 40, value: 200 },
+      ],
+    );
+
+    const samples = replaceSensorHistory(loading, 1, [
+      { timestamp: 10, value: 50 },
+      { timestamp: 30, value: 150 },
+    ]);
+
+    expect(samples[1]).toEqual([
+      { timestamp: 10, value: 50 },
+      { timestamp: 30, value: 150 },
+      { timestamp: 40, value: 200 },
+    ]);
   });
 
   // Adds a live sample at its own timestamp and keeps the other sensors' last values.
@@ -565,6 +974,36 @@ describe("Home Assistant energy history", () => {
     expect(samples[0]).toEqual([{ timestamp: start + 5, value: 1000 }]);
   });
 
+  // Ignores non-finite live timestamps without replacing the existing samples.
+  it("ignores non-finite live sample timestamps", () => {
+    const samples = parseEnergyHistory([[state(20, 100)], [], [], []]);
+    const merged = mergeLiveEnergySamples(samples, [
+      { sensor: 0, timestamp: Number.NaN, value: 200 },
+      { sensor: 0, timestamp: Number.POSITIVE_INFINITY, value: 300 },
+    ]);
+
+    expect(merged).toBe(samples);
+    expect(merged[0]).toEqual([{ timestamp: 20, value: 100 }]);
+  });
+
+  // Retains all live samples when the replacement history has no rows.
+  it("preserves live samples when replacing with empty history", () => {
+    const samples = mergeLiveEnergySamples(
+      [[], [], [], []],
+      [
+        { sensor: 2, timestamp: 10, value: 50 },
+        { sensor: 2, timestamp: 20, value: 75 },
+      ],
+    );
+
+    const replaced = replaceSensorHistory(samples, 2, []);
+
+    expect(replaced[2]).toEqual([
+      { timestamp: 10, value: 50 },
+      { timestamp: 20, value: 75 },
+    ]);
+  });
+
   // Applies the ten-minute freshness limit and unavailable gaps to live samples.
   it("applies freshness and unavailable states to live samples", () => {
     const start = 1_000_020;
@@ -613,6 +1052,82 @@ describe("Home Assistant energy history", () => {
     expect(night.gridData[2]).toEqual([null, -400, -400, null]);
   });
 
+  // Caps direct solar use at consumption when solar production is greater.
+  it("does not count surplus production as direct solar consumption", () => {
+    const start = 1_000_020;
+    const data = normalizeEnergyHistory(
+      [[state(start + 5, 2000)], [state(start + 5, 700)], [], []],
+      { start, end: start + 60 },
+      start + 30,
+    );
+
+    expect(data.mainData[1]).toEqual([null, 2000, 2000, null]);
+    expect(data.mainData[3]).toEqual([null, 700, 700, null]);
+    expect(data.mainData[4]).toEqual([null, 700, 700, null]);
+  });
+
+  // Keeps duplicated production and consumption plot series independently mutable.
+  it("does not alias stacked area series to their mean lines", () => {
+    const start = 1_000_020;
+    const data = normalizeEnergyHistory(
+      [[state(start + 5, 500)], [state(start + 5, 300)], [], []],
+      { start, end: start + 60 },
+      start + 30,
+    );
+    const productionMean = data.mainData[1]!;
+    const productionArea = data.mainData[6]!;
+    const consumptionMean = data.mainData[5]!;
+    const consumptionArea = data.mainData[7]!;
+
+    expect(productionArea).not.toBe(productionMean);
+    expect(consumptionArea).not.toBe(consumptionMean);
+    productionArea[1] = 999;
+    consumptionArea[1] = 888;
+    expect(productionMean[1]).toBe(500);
+    expect(consumptionMean[1]).toBe(300);
+  });
+
+  // Treats a zero-valued reading as present data rather than an empty series.
+  it("reports sensors with zero-valued readings as available", () => {
+    const start = 1_000_020;
+    const data = normalizeEnergyHistory(
+      [[state(start + 5, 0)], [state(start + 5, 0)], [], []],
+      { start, end: start + 60 },
+      start + 30,
+    );
+
+    expect(data.mainData[1]).toEqual([null, 0, 0, null]);
+    expect(data.mainData[7]).toEqual([null, 0, 0, null]);
+    expect(data.hasProduction).toBe(true);
+    expect(data.hasConsumption).toBe(true);
+  });
+
+  // Prevents negative grid statistics from creating reversed import/export bands.
+  it("clamps negative grid means and ranges to zero", () => {
+    const start = 1_000_020;
+    const window = { start, end: start + 60 };
+    const data = projectEnergyHistory(
+      [[], [], [], []],
+      window,
+      start + 30,
+      [
+        [],
+        [],
+        [statistic(start, -20, -30, -10)],
+        [statistic(start, -40, -50, -30)],
+      ],
+    );
+
+    expect(data.mainData[8]).toEqual([0, 0, null]);
+    expect(data.mainData[9]).toEqual([0, 0, null]);
+    expect(data.gridData[1]).toEqual([0, 0, null]);
+    expect(data.gridData[2]).toEqual([0, 0, null]);
+    expect(data.gridData[3]).toEqual([0, 0, null]);
+    expect(data.gridData[4]).toEqual([0, 0, null]);
+    expect(data.gridData[5]).toEqual([0, 0, null]);
+    expect(data.gridData[6]).toEqual([0, 0, null]);
+  });
+
   // Preserves source timestamps and calculates direct power and separate grid flows.
   it("aligns direct power, autoconsumption and separate grid flows", () => {
     const start = 1_000_020;
@@ -649,12 +1164,14 @@ describe("Home Assistant energy history", () => {
     );
 
     const production = data.mainData[1]!;
+    const zero = data.mainData[2]!;
     const directSolar = data.mainData[3]!;
     const stackedConsumption = data.mainData[5]!;
     const exported = data.gridData[1]!;
     const imported = data.gridData[2]!;
 
     expect(production).toEqual([null, 1000, 1200, 2000, 1800, 1800, null]);
+    expect(zero).toEqual([null, 0, 0, 0, 0, 0, null]);
     expect(directSolar).toEqual([null, 1000, 1200, 2000, 1800, 1800, null]);
     expect(stackedConsumption).toEqual([
       null, 1500, 1600, 2200, 2500, 2500, null,
@@ -768,7 +1285,7 @@ describe("Home Assistant energy history", () => {
   it("leaves a gap when the last power reading exceeds ten minutes", () => {
     const start = 1_000_020;
     const threshold = normalizeEnergyHistory(
-      [[state(start, 500), state(start + 10 * 60, 100)], [state(start + 11 * 60, 200)], [], []],
+      [[state(start, 500)], [state(start + 10 * 60, 200)], [], []],
       { start, end: start + 11 * 60 },
       start + 11 * 60,
     );
@@ -785,7 +1302,7 @@ describe("Home Assistant energy history", () => {
       start + 10 * 60,
       start + 11 * 60,
     ]);
-    expect(thresholdProduction).toEqual([500, 100, null]);
+    expect(thresholdProduction).toEqual([500, 500, null]);
     expect(Array.from(stale.mainData[0])).toEqual([
       start,
       start + 11 * 60,
