@@ -270,7 +270,7 @@ Chromium for the documentation diagrams). Everything goes through `dev.sh`:
 | `./dev.sh typecheck` | `tsc --noEmit` |
 | `./dev.sh test` | Vitest with happy-dom (`src/**/*.test.ts`) |
 | `./dev.sh build` (default) | Typecheck + Vite library build, copies `dist/solar-energy-graphs-card.js` to the host |
-| `./dev.sh deploy` | `build`, then copies the bundle to `../docker/ha-config/www/` for the repository's `ha-dev` Home Assistant |
+| `./dev.sh deploy` | `build`, then copies the bundle to `../docker/ha-config/www/`; this deployment target is currently outside this standalone repository and needs to be defined |
 | `./dev.sh mutation` | Stryker mutation tests, copies the HTML report to `reports/mutation/` |
 | `./dev.sh diagrams` | Renders `docs/diagrams/*.mmd` to SVG with mermaid-cli, copies the SVGs to the host |
 
@@ -310,12 +310,12 @@ A typical loop:
 | Change the configuration keys | `solar-energy-graphs-card-config.ts`, the editor schema, and `setConfig`, then the README |
 
 Before you start, read the scope and workflow rules in
-[`AGENTS.md`](../../AGENTS.md): the card shows two graphs and what is needed to
+[`AGENTS.md`](../AGENTS.md): the card shows two graphs and what is needed to
 read them -- no KPIs, toolbars or extra panels -- and sensor semantics are
 never assumed without confirmation.
 
 ## Further reading
 
-- [README](../README.md) -- installation and configuration (French)
+- [README](../README.md) -- user manual: installation, configuration, and usage
 - [TODO](TODO.md) -- open work (French)
 - [Killing a surviving mutant](mutation-testing-walkthrough.md) -- mutation testing, step by step on a real case

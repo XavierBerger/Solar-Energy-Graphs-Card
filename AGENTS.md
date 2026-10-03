@@ -2,11 +2,9 @@
 
 ## Scope
 
-Work only on **`solar-energy-graphs-card/`**. The card is functional; the work
-to do is listed in
-[`docs/TODO.md`](solar-energy-graphs-card/docs/TODO.md), and its current design
-is described in
-[`docs/architecture.md`](solar-energy-graphs-card/docs/architecture.md).
+Work only on this repository, which contains the standalone card. The card is
+functional; the work to do is listed in [`docs/TODO.md`](docs/TODO.md), and its
+current design is described in [`docs/architecture.md`](docs/architecture.md).
 
 The goal is a Home Assistant Lovelace card containing two synchronized solar
 energy graphs. Do not work on or introduce dependencies on the Fronius
@@ -52,6 +50,7 @@ components. The simulator viewer remains the visual reference only.
 - Manual Home Assistant checks cover visual parity with the viewer, unit
   readability, touch interactions, responsive layout, themes, and behavior with
   the real entities.
-- Keep source code, code comments, commit messages and developer documentation
-  in English; the card README and `docs/TODO.md` stay in French. Follow the
-  card's existing conventions and Home Assistant Lovelace practices.
+- Keep source code, code comments, commit messages, and developer
+  documentation in English. The user-facing README is in English for HACS;
+  `docs/TODO.md` stays in French. Follow existing conventions and Home
+  Assistant Lovelace practices.
