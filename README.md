@@ -8,7 +8,7 @@
 See your solar production, household consumption, and grid exchange across a
 day in two synchronized Home Assistant graphs.
 
-![Solar Energy Graphs Card in the light theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graph-Card_light.png)
+![Solar Energy Graphs Card in the light theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graphs-Card_light.png)
 
 ## Highlights
 
@@ -174,7 +174,7 @@ grid. The graph colors and series fills are part of the card design.
 <details>
 <summary>Dark theme</summary>
 
-![Solar Energy Graphs Card in the dark theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graph-Card_dark.png)
+![Solar Energy Graphs Card in the dark theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graphs-Card_dark.png)
 
 </details>
 
