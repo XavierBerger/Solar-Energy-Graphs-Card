@@ -497,8 +497,9 @@ describe("SolarEnergyGraphsCard", () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  // Keeps a user-selected day when Home Assistant sends unrelated state updates.
-  it("does not reset the selected day on ordinary Home Assistant updates", async () => {
+  // Preserves the selected day for ordinary updates and resets it when HA's time zone changes.
+  it("preserves the selected day on ordinary updates and resets it when the Home Assistant time zone changes", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:30:00Z") });
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();
     card.setConfig(CARD_CONFIG);
@@ -515,6 +516,15 @@ describe("SolarEnergyGraphsCard", () => {
 
     expect(card.shadowRoot?.querySelector("time")?.dateTime).toBe(selectedDay);
     expect(hass.callWS).toHaveBeenCalledTimes(7);
+
+    card.hass = {
+      ...hass,
+      config: { time_zone: "Pacific/Kiritimati" },
+    };
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(11));
+    await card.updateComplete;
+
+    expect(card.shadowRoot?.querySelector("time")?.dateTime).toBe("2026-09-28");
   });
 
   // Ignores an earlier day's response when a later navigation request finishes first.
@@ -1290,6 +1300,8 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = { ...hass, themes: { darkMode: true } };
 
     expect(rendererInstances[0].refreshTheme).toHaveBeenCalledWith(true);
+    card.hass = { ...hass, themes: { darkMode: false } };
+    expect(rendererInstances[0].refreshTheme).toHaveBeenLastCalledWith(false);
     expect(hass.callWS).toHaveBeenCalledTimes(4);
   });
 

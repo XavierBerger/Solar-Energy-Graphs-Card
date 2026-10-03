@@ -375,6 +375,13 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+
+    charts[0].scales.x = { max: 200 };
+    charts[1].scales.x = { min: 50 };
+    renderer.updateData(TEST_HISTORY_DATA);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
   // Drops the zoom when the new data starts another day.
@@ -529,13 +536,14 @@ describe("EnergyChartsRenderer", () => {
   // Uses readable text and a thinner gray grid for Home Assistant dark mode.
   it("uses a white axis and a thin gray grid in dark mode", () => {
     const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].axes[0].grid = undefined;
     renderer.refreshTheme(true);
     const axes = createChartMock.mock.calls[0][0].axes;
 
     expect(axes[0].stroke()).toBe("#ffffff");
     expect(axes[0].ticks.stroke()).toBe("#ffffff");
     expect(axes[0].grid.stroke()).toBe("#9e9e9e");
-    expect(charts[0].axes[0].grid?.width).toBe(0.5);
+    expect(charts[0].axes[1].grid?.width).toBe(0.5);
     expect(charts[0].redraw).toHaveBeenCalledWith(true, true);
     expect(charts[1].redraw).toHaveBeenCalledWith(true, true);
   });
@@ -595,11 +603,14 @@ describe("EnergyChartsRenderer", () => {
 
     renderer.refreshTheme(true);
     const darkColors = [selectionColor(0), selectionColor(1)];
+    containers[0].style.setProperty("--primary-text-color", "#ffffff");
+    containers[0].style.setProperty("--divider-color", "#9e9e9e");
     renderer.refreshTheme(false);
 
     expect(darkColors).toEqual(Array(2).fill("rgba(158, 158, 158, 0.25)"));
     expect(selectionColor(0)).toBe("");
     expect(selectionColor(1)).toBe("");
+    expect(charts[0].axes[0].grid?.width).toBe(1);
   });
 
   // Avoids redrawing canvas charts when the selected theme did not change.
@@ -699,6 +710,21 @@ describe("EnergyChartsRenderer", () => {
       value: Number.POSITIVE_INFINITY,
     });
     containers[0].dispatchEvent(invalidCursorEvent);
+
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    const notANumberCursorEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    Object.defineProperty(notANumberCursorEvent, "clientX", {
+      value: Number.NaN,
+    });
+    containers[0].dispatchEvent(notANumberCursorEvent);
 
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
     expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });

@@ -423,7 +423,7 @@ describe("Home Assistant energy history", () => {
 
   // Converts missing and non-finite statistic values to null while retaining finite negatives.
   it("normalizes optional statistic values without clamping finite readings", () => {
-    const [sample] = parseStatisticRows([
+    const samples = parseStatisticRows([
       {
         start: 1000,
         end: 2000,
@@ -431,15 +431,31 @@ describe("Home Assistant energy history", () => {
         min: Number.NEGATIVE_INFINITY,
         max: undefined,
       },
+      {
+        start: 2000,
+        end: 3000,
+        mean: Number.NaN,
+        min: 0,
+        max: 0,
+      },
     ]);
 
-    expect(sample).toEqual({
-      start: 1,
-      end: 2,
-      mean: -2,
-      min: null,
-      max: null,
-    });
+    expect(samples).toEqual([
+      {
+        start: 1,
+        end: 2,
+        mean: -2,
+        min: null,
+        max: null,
+      },
+      {
+        start: 2,
+        end: 3,
+        mean: null,
+        min: 0,
+        max: 0,
+      },
+    ]);
   });
 
   // Rejects a history response containing more sensor series than expected.
@@ -712,6 +728,8 @@ describe("Home Assistant energy history", () => {
       { s: "   ", lu: 25 },
       { s: "1.5", lc: 10 },
       { s: "3", lu: 30 },
+      { s: "6", lu: Number.NaN },
+      { s: "7", lu: Number.POSITIVE_INFINITY },
       { s: "4" },
     ];
 
