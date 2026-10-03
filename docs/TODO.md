@@ -8,12 +8,13 @@
 
 # Nouvelles fonctionnalités
 - [ ] Traduction en Français (Anglais pas défaut - Français si c'est la langue de HA)
+- [ ] Ajouter la prise en charge tactile du zoom et du déplacement des graphes sur téléphone
 
 # Release
 - [ ] Publier la carte dans HACS
     - [ ] Ajouter `hacs.json` et la validation continue avec `hacs/action`
     - [ ] Ajouter le workflow de release et publier le bundle aux tags de version
-    - [ ] Réécrire le README anglais comme manuel utilisateur complet
+    - [x] Réécrire le README anglais comme manuel utilisateur complet
     - [ ] Publier et tester `v0.1.0` via HACS
     - [ ] Ajouter les médias de démonstration et publier/tester `v0.2.0`
     - [ ] Publier/tester `v1.0.0`, puis proposer l'inclusion dans `hacs/default`

@@ -131,6 +131,9 @@ available for the statistics portion, not the raw-state portion.
 The zoom is preserved while live values and statistics update. Changing days
 resets the time range to the selected day.
 
+On touchscreens, the card layout and day navigation work, but touch gestures
+for zooming and panning are not currently supported.
+
 Use the arrows at the top right to move to the previous or next day. The date
 is interpreted in Home Assistant's time zone, not the browser's. The next-day
 arrow is disabled for today; select the displayed date to return to today.
