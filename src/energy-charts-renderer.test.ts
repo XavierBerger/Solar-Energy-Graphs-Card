@@ -7,14 +7,15 @@ import {
   vi,
 } from "vitest";
 
-const { createChartMock, syncMock } = vi.hoisted(() => ({
+const { createChartMock, syncMock, tzDateMock } = vi.hoisted(() => ({
   createChartMock: vi.fn(),
   syncMock: vi.fn((key: string) => ({ key })),
+  tzDateMock: vi.fn((date: Date) => date),
 }));
 
 vi.mock("./uplot-adapter", () => ({
   createChart: createChartMock,
-  uPlot: { sync: syncMock },
+  uPlot: { sync: syncMock, tzDate: tzDateMock },
 }));
 
 import {
@@ -163,6 +164,8 @@ describe("EnergyChartsRenderer", () => {
     );
     syncMock.mockReset();
     syncMock.mockImplementation((key) => ({ key }));
+    tzDateMock.mockReset();
+    tzDateMock.mockImplementation((date) => date);
     vi.stubGlobal("ResizeObserver", MockResizeObserver);
   });
 
@@ -292,6 +295,46 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.height).toBe(100);
   });
 
+  // Wires timezone, axis color and zero-line callbacks to their chart options.
+  it("provides callable timezone, axis, and zero-line options", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    const firstOptions = createChartMock.mock.calls[0][0];
+    const secondOptions = createChartMock.mock.calls[1][0];
+
+    expect(firstOptions.tzDate(300)).toEqual(new Date(300_000));
+    expect(tzDateMock).toHaveBeenCalledWith(new Date(300_000), "Europe/Paris");
+    for (const options of [firstOptions, secondOptions]) {
+      for (const axis of options.axes) {
+        expect(axis.stroke()).toBe("#212121");
+        expect(axis.grid.stroke()).toBe("#bdbdbd");
+        expect(axis.ticks.stroke()).toBe("#212121");
+        expect(axis.border.stroke()).toBe("#bdbdbd");
+      }
+    }
+
+    const context = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+    };
+    const chart = {
+      scales: { y: { min: -10, max: 10 } },
+      valToPos: vi.fn(() => 50),
+      ctx: context,
+      bbox: { left: 10, width: 100 },
+    };
+    secondOptions.hooks.draw[0](chart);
+
+    expect(context.moveTo).toHaveBeenCalledWith(10, 50.5);
+    expect(context.lineTo).toHaveBeenCalledWith(110, 50.5);
+    expect(context.stroke).toHaveBeenCalledOnce();
+  });
+
   // Replaces both plot datasets after Home Assistant history is refreshed.
   it("updates both charts with normalized history data", () => {
     const renderer = new EnergyChartsRenderer(containers, legendContainers);
@@ -328,6 +371,13 @@ describe("EnergyChartsRenderer", () => {
   it("does not set the x scale after an update without zoom", () => {
     const renderer = new EnergyChartsRenderer(containers, legendContainers);
 
+    renderer.updateData(TEST_HISTORY_DATA);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+
+    charts[0].scales.x = { max: 200 };
+    charts[1].scales.x = { min: 50 };
     renderer.updateData(TEST_HISTORY_DATA);
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
@@ -486,13 +536,14 @@ describe("EnergyChartsRenderer", () => {
   // Uses readable text and a thinner gray grid for Home Assistant dark mode.
   it("uses a white axis and a thin gray grid in dark mode", () => {
     const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].axes[0].grid = undefined;
     renderer.refreshTheme(true);
     const axes = createChartMock.mock.calls[0][0].axes;
 
     expect(axes[0].stroke()).toBe("#ffffff");
     expect(axes[0].ticks.stroke()).toBe("#ffffff");
     expect(axes[0].grid.stroke()).toBe("#9e9e9e");
-    expect(charts[0].axes[0].grid?.width).toBe(0.5);
+    expect(charts[0].axes[1].grid?.width).toBe(0.5);
     expect(charts[0].redraw).toHaveBeenCalledWith(true, true);
     expect(charts[1].redraw).toHaveBeenCalledWith(true, true);
   });
@@ -504,19 +555,29 @@ describe("EnergyChartsRenderer", () => {
     const stroke = axes[0].stroke;
     const gridStroke = axes[0].grid.stroke;
 
+    containers[0].style.setProperty("--primary-text-color", "#123456");
+    renderer.refreshTheme(false);
+    expect(axes[0].stroke()).toBe("#123456");
+    expect(axes[0].grid.stroke()).toBe("#bdbdbd");
+
+    containers[0].style.setProperty("--divider-color", "#654321");
+    renderer.refreshTheme(false);
+    expect(axes[0].stroke()).toBe("#123456");
+    expect(axes[0].grid.stroke()).toBe("#654321");
+
     renderer.refreshTheme(true);
     expect(axes[0].stroke()).toBe("#ffffff");
     renderer.refreshTheme(false);
-    expect(axes[0].stroke()).toBe("#212121");
-    expect(axes[0].grid.stroke()).toBe("#bdbdbd");
+    expect(axes[0].stroke()).toBe("#123456");
+    expect(axes[0].grid.stroke()).toBe("#654321");
     renderer.refreshTheme(true);
 
     expect(axes[0].stroke).toBe(stroke);
     expect(axes[0].grid.stroke).toBe(gridStroke);
     expect(axes[0].stroke()).toBe("#ffffff");
     expect(axes[0].grid.stroke()).toBe("#9e9e9e");
-    expect(charts[0].redraw).toHaveBeenCalledTimes(3);
-    expect(charts[1].redraw).toHaveBeenCalledTimes(3);
+    expect(charts[0].redraw).toHaveBeenCalledTimes(5);
+    expect(charts[1].redraw).toHaveBeenCalledTimes(5);
   });
 
   // Leaves uPlot's own selection color, visible on a light card.
@@ -542,11 +603,14 @@ describe("EnergyChartsRenderer", () => {
 
     renderer.refreshTheme(true);
     const darkColors = [selectionColor(0), selectionColor(1)];
+    containers[0].style.setProperty("--primary-text-color", "#ffffff");
+    containers[0].style.setProperty("--divider-color", "#9e9e9e");
     renderer.refreshTheme(false);
 
     expect(darkColors).toEqual(Array(2).fill("rgba(158, 158, 158, 0.25)"));
     expect(selectionColor(0)).toBe("");
     expect(selectionColor(1)).toBe("");
+    expect(charts[0].axes[0].grid?.width).toBe(1);
   });
 
   // Avoids redrawing canvas charts when the selected theme did not change.
@@ -554,6 +618,17 @@ describe("EnergyChartsRenderer", () => {
     const renderer = new EnergyChartsRenderer(containers, legendContainers);
 
     renderer.refreshTheme(false);
+
+    expect(charts[0].redraw).not.toHaveBeenCalled();
+    expect(charts[1].redraw).not.toHaveBeenCalled();
+  });
+
+  // Ignores Home Assistant theme updates after chart resources have been released.
+  it("does not refresh the theme after destroy", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    renderer.destroy();
+
+    renderer.refreshTheme(true);
 
     expect(charts[0].redraw).not.toHaveBeenCalled();
     expect(charts[1].redraw).not.toHaveBeenCalled();
@@ -587,6 +662,8 @@ describe("EnergyChartsRenderer", () => {
     new EnergyChartsRenderer(containers, legendContainers);
 
     MockResizeObserver.instances[0].trigger(containers[0], 0, 0);
+    MockResizeObserver.instances[0].trigger(containers[0], 420, 0);
+    MockResizeObserver.instances[0].trigger(containers[0], 0, 160);
 
     expect(charts[0].setSize).not.toHaveBeenCalled();
     expect(charts[1].setSize).not.toHaveBeenCalled();
@@ -636,6 +713,38 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
     expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 50, right: 50, width: 0, top: 0, bottom: 100, height: 100 }) as DOMRect;
+    const zeroWidthEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    Object.defineProperty(zeroWidthEvent, "clientX", { value: 50 });
+    containers[0].dispatchEvent(zeroWidthEvent);
+
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 50, right: 250, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+    const notANumberCursorEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    Object.defineProperty(notANumberCursorEvent, "clientX", {
+      value: Number.NaN,
+    });
+    containers[0].dispatchEvent(notANumberCursorEvent);
+
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
   });
 
   // Zooms both energy charts synchronously when the mouse wheel scrolls on the second chart.
@@ -651,6 +760,26 @@ describe("EnergyChartsRenderer", () => {
       deltaY: -100,
     });
     containers[1].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+  });
+
+  // Uses full-day bounds and a centered cursor when uPlot has no x-scale limits.
+  it("uses day bounds when wheel zoom has no x-scale limits", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = {};
+    charts[1].scales.x = {};
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 0, width: 0, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    containers[0].dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
@@ -1223,6 +1352,9 @@ describe("computeDragPanRange", () => {
     const result = computeDragPanRange(current, dayWindow, 50, 200);
 
     expect(result).toBeUndefined();
+    expect(
+      computeDragPanRange({ min: -100, max: 86500 }, dayWindow, 50, 200),
+    ).toBeUndefined();
     expect(
       computeDragPanRange(
         { min: 100000, max: 186400 },

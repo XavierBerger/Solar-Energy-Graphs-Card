@@ -261,7 +261,7 @@ export function combineStatistics(
 }
 
 function finiteOrNull(value: number | null | undefined): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  return Number.isFinite(value) ? value ?? null : null;
 }
 
 /** Validates sensor units; null marks an unconfigured sensor, which is not validated. */
@@ -516,9 +516,11 @@ function parseLocalDate(date: string): {
   const day = Number(match[3]);
   const parsed = new Date(Date.UTC(year, month - 1, day));
   if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() + 1 !== month ||
-    parsed.getUTCDate() !== day
+    formatDateParts(
+      parsed.getUTCFullYear(),
+      parsed.getUTCMonth() + 1,
+      parsed.getUTCDate(),
+    ) !== date
   ) {
     throw new Error(`Invalid local date "${date}".`);
   }
@@ -595,9 +597,10 @@ export function parseCompressedPowerSamples(
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
     const timestamp = state.lu ?? state.lc;
-    return typeof timestamp === "number" && Number.isFinite(timestamp)
-      ? [{ timestamp, value: parsePowerValue(state.s, unitScale) }]
-      : [];
+    if (timestamp === undefined || !Number.isFinite(timestamp)) {
+      return [];
+    }
+    return [{ timestamp, value: parsePowerValue(state.s, unitScale) }];
   });
 
   samples.sort((first, second) => first.timestamp - second.timestamp);
@@ -672,7 +675,6 @@ function alignPowerSamples(
       }
     } else if (
       !latest ||
-      latest.value === null ||
       timestamp - latest.timestamp > MAX_POWER_STALENESS_SECONDS
     ) {
       push(null, null, null);

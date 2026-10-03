@@ -8,7 +8,7 @@
 See your solar production, household consumption, and grid exchange across a
 day in two synchronized Home Assistant graphs.
 
-![Solar Energy Graphs Card in the light theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graph-Card_light.png)
+![Solar Energy Graphs Card in the light theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graphs-Card_light.png)
 
 ## Highlights
 
@@ -174,7 +174,7 @@ grid. The graph colors and series fills are part of the card design.
 <details>
 <summary>Dark theme</summary>
 
-![Solar Energy Graphs Card in the dark theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graph-Card_dark.png)
+![Solar Energy Graphs Card in the dark theme](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graphs-Card_dark.png)
 
 </details>
 
@@ -211,6 +211,20 @@ No. Import and export are configured as separate sensors.
 ## Contributing
 
 See the [contribution guide](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/blob/main/CONTRIBUTION.md).
+
+## AI-assisted development transparency
+
+This integration was the opportunity for me, as an experienced developer to explore AI-assisted software development in a language that was new to me. AI was used as a pair programmer, not as an autonomous developer: architectural and implementation decisions remained under human direction and review.
+
+The development process focused on three areas:
+
+* **Design and Software architecture** — The implementation follows established software engineering best practices, with a focus on clean, maintainable, well-structured and testable code, clear separation of responsibilities, and avoiding unnecessary complexity.
+* **Testing** — In addition to unit tests and coverage, mutation testing was used to verify that the test suite could actually detect meaningful regressions.
+* **Real-world validation** — Features were tested not only in isolation, but also on a running Home Assistant installation with real devices before being considered ready.
+
+AI assistance was a development tool, not a substitute for maintainer review. As with any software, this does not guarantee that every change is free of issues.
+
+Issues, feedback, and suggestions are welcome through the project's usual contribution channels.
 
 ## License
 
