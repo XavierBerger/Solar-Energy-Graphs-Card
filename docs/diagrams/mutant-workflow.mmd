@@ -1,0 +1,13 @@
+flowchart TB
+  report["Open reports/mutation/mutation.html"] --> pick["Pick ONE survived mutant"]
+  pick --> read["Read the diff: which behavior does the original code produce?"]
+  read --> why["Find why no test sees it: which input is never given?"]
+  why --> equivalent{"Does the mutant change observable behavior?"}
+  equivalent -- "no: equivalent mutant" --> simplify["Remove the useless code, or mark the mutant ignored with a reason"]
+  equivalent -- "yes" --> write["Write a test through the public entry point"]
+  write --> green{"Passes on the real code?"}
+  green -- "no" --> write
+  green -- "yes" --> red{"Fails with the mutant applied by hand?"}
+  red -- "no" --> write
+  red -- "yes" --> confirm["Stryker on that line only: --mutate file.ts:N-N"]
+  confirm --> commit["Commit the test"]

@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # dev.sh runs Node inside the Podman image pinned in Containerfile.
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Check tag version
+        run: |
+          package_version=$(jq -r .version package.json)
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$tag_version" != "$package_version" ]; then
+            printf 'Tag version %s does not match package.json version %s\n' \
+              "$tag_version" "$package_version" >&2
+            exit 1
+          fi
+
+      - name: Build solar energy graphs card
+        run: ./dev.sh build
+
+      - name: Test solar energy graphs card
+        run: ./dev.sh test
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_flags=(--verify-tag --generate-notes)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            dist/solar-energy-graphs-card.js \
+            "${release_flags[@]}"
+
+  validate-hacs:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: plugin

@@ -1,0 +1,24 @@
+sequenceDiagram
+  participant H as hass pushes
+  participant C as SolarEnergyGraphsCard
+  participant WS as HA WebSocket
+  participant R as EnergyChartsRenderer
+
+  Note over H,R: Clock 1 -- live states, coalesced over 250 ms
+  H->>C: set hass (production changed)
+  C->>C: scheduleLiveMerge() starts a 250 ms timer
+  H->>C: set hass (consumption changed)
+  H->>C: set hass (grid export changed)
+  Note over C: timer fires, reads the latest hass
+  C->>C: mergeLiveEnergySamples()
+  C->>R: updateData(projectEnergyHistory(...))
+
+  Note over H,R: Clock 2 -- statistics, 30 s after each 5-minute boundary
+  C->>C: scheduleStatisticsRefresh() e.g. 10:05:30
+  C->>WS: statistics 5minute + hour
+  WS-->>C: one more compiled interval
+  C->>R: updateData(...)
+  Note over C: raw samples now start after the new interval
+
+  Note over H,R: Clock 3 -- the wall clock
+  Note over C: every projection uses Date.now():<br/>the lines stop at now, not at midnight
