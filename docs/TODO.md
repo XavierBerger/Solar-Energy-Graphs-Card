@@ -12,6 +12,7 @@
 # Release
 - [ ] Publier la carte dans HACS
     - [ ] Ajouter `hacs.json` et la validation continue avec `hacs/action`
+    - [ ] Corriger le typecheck bloquant du build : `Element.style` dans `src/energy-charts-renderer.test.ts:933,936`
     - [ ] Ajouter le workflow de release et publier le bundle aux tags de version
     - [ ] Réécrire le README anglais comme manuel utilisateur complet
     - [ ] Publier et tester `v0.1.0` via HACS
