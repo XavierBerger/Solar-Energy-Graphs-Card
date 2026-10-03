@@ -212,6 +212,20 @@ No. Import and export are configured as separate sensors.
 
 See the [contribution guide](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/blob/main/CONTRIBUTION.md).
 
+## AI-assisted development transparency
+
+This integration was the opportunity for me, as an experienced developer to explore AI-assisted software development in a language that was new to me. AI was used as a pair programmer, not as an autonomous developer: architectural and implementation decisions remained under human direction and review.
+
+The development process focused on three areas:
+
+* **Design and Software architecture** — The implementation follows established software engineering best practices, with a focus on clean, maintainable, well-structured and testable code, clear separation of responsibilities, and avoiding unnecessary complexity.
+* **Testing** — In addition to unit tests and coverage, mutation testing was used to verify that the test suite could actually detect meaningful regressions.
+* **Real-world validation** — Features were tested not only in isolation, but also on a running Home Assistant installation with real devices before being considered ready.
+
+AI assistance was a development tool, not a substitute for maintainer review. As with any software, this does not guarantee that every change is free of issues.
+
+Issues, feedback, and suggestions are welcome through the project's usual contribution channels.
+
 ## License
 
 This project is distributed under the [GNU General Public License v3.0](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/blob/main/LICENSE).
