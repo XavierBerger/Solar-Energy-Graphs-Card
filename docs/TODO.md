@@ -10,7 +10,14 @@
 - [ ] Traduction en Français (Anglais pas défaut - Français si c'est la langue de HA)
 
 # Release
-- [ ] Finaliser documentation, build de distribution et installation HACS/manuelle de test ; obtenir la validation avant release
+- [ ] Publier la carte dans HACS
+    - [ ] Ajouter `hacs.json` et la validation continue avec `hacs/action`
+    - [ ] Ajouter le workflow de release et publier le bundle aux tags de version
+    - [ ] Réécrire le README anglais comme manuel utilisateur complet
+    - [ ] Publier et tester `v0.1.0` via HACS
+    - [ ] Ajouter les médias de démonstration et publier/tester `v0.2.0`
+    - [ ] Publier/tester `v1.0.0`, puis proposer l'inclusion dans `hacs/default`
+- [ ] Définir la cible de `./dev.sh deploy` : elle vise `../docker/ha-config/www`, hors du dépôt depuis `756212b`
 
 # Les évolutions futures après publication de la v1.0
 - [ ] Dans l'interface de configuration graphique
