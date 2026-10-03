@@ -930,10 +930,10 @@ describe("EnergyChartsRenderer", () => {
     const axes = createChartMock.mock.calls[0][0].axes;
     expect(axes[0].stroke()).toBe("#ffffff");
     expect(axes[0].grid.stroke()).toBe("#9e9e9e");
-    expect(charts[0].root.querySelector(".u-select")!.style.backgroundColor).toBe(
+    expect(charts[0].root.querySelector<HTMLElement>(".u-select")!.style.backgroundColor).toBe(
       "rgba(158, 158, 158, 0.25)",
     );
-    expect(charts[1].root.querySelector(".u-select")!.style.backgroundColor).toBe(
+    expect(charts[1].root.querySelector<HTMLElement>(".u-select")!.style.backgroundColor).toBe(
       "rgba(158, 158, 158, 0.25)",
     );
   });
