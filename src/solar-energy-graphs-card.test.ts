@@ -277,23 +277,42 @@ describe("SolarEnergyGraphsCard", () => {
 
   // Renders without an unconfigured sensor and leaves it out of every Home Assistant request.
   it("accepts null entities and omits them from Home Assistant requests", async () => {
-    card = new SolarEnergyGraphsCard();
-    const hass = createHassContext();
-    const config = {
-      ...CARD_CONFIG,
-      entities: { ...CARD_CONFIG.entities, grid_import: null },
-    };
-    card.setConfig(config);
-    document.body.append(card);
-    card.hass = hass;
-    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const optionalRoles = [
+      "production",
+      "consumption",
+      "grid_import",
+      "grid_export",
+    ] as const;
 
-    const expectedIds = SENSOR_IDS.filter((id) => id !== "sensor.grid_import");
-    const requests = hass.callWS.mock.calls.map(([request]) => request);
-    expect(requests.map((request) =>
-      "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
-    )).toEqual([expectedIds, expectedIds, expectedIds, expectedIds]);
-    expect(rendererInstances[0].data.hasGridImport).toBe(false);
+    for (const [index, role] of optionalRoles.entries()) {
+      card = new SolarEnergyGraphsCard();
+      const hass = createHassContext();
+      card.setConfig({
+        ...CARD_CONFIG,
+        entities: { ...CARD_CONFIG.entities, [role]: null },
+      });
+      document.body.append(card);
+      card.hass = hass;
+      await vi.waitFor(() =>
+        expect(rendererInstances).toHaveLength(index + 1),
+      );
+
+      const expectedIds = Object.entries(CARD_CONFIG.entities)
+        .filter(([configuredRole]) => configuredRole !== role)
+        .map(([, entityId]) => entityId);
+      const requests = hass.callWS.mock.calls.map(([request]) => request);
+      expect(requests.map((request) =>
+        "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
+      )).toEqual([expectedIds, expectedIds, expectedIds, expectedIds]);
+      expect({
+        production: rendererInstances[index].data.hasProduction,
+        consumption: rendererInstances[index].data.hasConsumption,
+        grid_import: rendererInstances[index].data.hasGridImport,
+        grid_export: rendererInstances[index].data.hasGridExport,
+      }[role]).toBe(false);
+
+      card.remove();
+    }
   });
 
   // Skips recorder requests and keeps the precision action hidden when no sensors are configured.
@@ -444,6 +463,11 @@ describe("SolarEnergyGraphsCard", () => {
 
     expect(date?.dateTime).toBe(today);
     expect(nextButton?.disabled).toBe(true);
+    nextButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await card.updateComplete;
+
+    expect(date?.dateTime).toBe(today);
+    expect(hass.callWS).toHaveBeenCalledTimes(11);
   });
 
   // Returns to the current local day when the displayed date is clicked.
@@ -1077,12 +1101,54 @@ describe("SolarEnergyGraphsCard", () => {
 
   // Hides the toggle when the one-minute probe finds no finer history.
   it("hides the precision button when the probe finds no finer history", async () => {
+    const rawSeries = (timestamps: readonly [number, number]) => [
+      timestamps.map((timestamp) => ({ timestamp, value: 100 })),
+      [],
+      [],
+      [],
+    ] as const;
+    const statisticsSeries = (start: number, end: number) => [
+      [{ start, end, mean: 100, min: 100, max: 100 }],
+      [],
+      [],
+      [],
+    ] as const;
+    expect(hasHigherPrecisionSamples(
+      rawSeries([10, 70]),
+      statisticsSeries(10, 70),
+    )).toBe(false);
+    expect(hasHigherPrecisionSamples(
+      rawSeries([90, 180]),
+      statisticsSeries(60, 120),
+    )).toBe(false);
+    expect(hasHigherPrecisionSamples(
+      rawSeries([70, 10]),
+      statisticsSeries(0, 60),
+    )).toBe(false);
+    expect(hasHigherPrecisionSamples(
+      [[{ timestamp: 10, value: 100 }], [], [], []],
+      statisticsSeries(0, 60),
+    )).toBe(false);
+    expect(hasHigherPrecisionSamples(
+      rawSeries([10, 20]),
+      [[], [], [], []],
+    )).toBe(true);
+
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext(
       fixedHistoryApi({
         "statistics:5minute": {
           "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+          "sensor.consumption": [statisticRow("2026-09-27T09:00:00Z", 900, 800, 1000)],
+          "sensor.grid_import": [statisticRow("2026-09-27T09:00:00Z", 100, 50, 150)],
+          "sensor.grid_export": [statisticRow("2026-09-27T09:00:00Z", 40, 20, 60)],
+        },
+        history: {
+          "sensor.solar": [{ s: "500", lu: Date.parse("2026-09-26T22:00:10Z") / 1000 }],
+          "sensor.consumption": [{ s: "900", lu: Date.parse("2026-09-26T22:00:10Z") / 1000 }],
+          "sensor.grid_import": [{ s: "100", lu: Date.parse("2026-09-26T22:00:10Z") / 1000 }],
+          "sensor.grid_export": [{ s: "40", lu: Date.parse("2026-09-26T22:00:10Z") / 1000 }],
         },
       }),
     );
@@ -1097,14 +1163,57 @@ describe("SolarEnergyGraphsCard", () => {
       type: "history/history_during_period",
       start_time: "2026-09-26T22:00:00.000Z",
       end_time: "2026-09-26T22:01:00.000Z",
+      entity_ids: SENSOR_IDS,
+    });
+    expect(hass.callWS.mock.calls[2][0]).toMatchObject({
+      type: "history/history_during_period",
+      start_time: "2026-09-27T09:55:00.000Z",
+      end_time: "2026-09-27T10:10:00.000Z",
+      entity_ids: SENSOR_IDS,
     });
     expect(navigationButton(card, "Load high precision")).toBeNull();
     expect(navigationButton(card, "Use standard precision")).toBeNull();
+    const selectedDay = card.shadowRoot?.querySelector<HTMLTimeElement>(
+      ".day-navigation time",
+    );
+    expect(selectedDay?.dateTime).toBe("2026-09-27");
+    expect(selectedDay?.textContent?.trim()).toBe("September 27, 2026");
+    const statuses = Array.from(
+      card.shadowRoot?.querySelectorAll<HTMLElement>(".chart-status") ?? [],
+    );
+    expect(statuses.map(({ role, textContent }) => [role, textContent?.trim()]))
+      .toEqual([
+        ["status", "Power statistics: mean line with min–max range."],
+        ["status", "Grid import and export are measured separately."],
+      ]);
+    expect(statuses.map((status) => status.getAttribute("aria-live")))
+      .toEqual(["polite", "polite"]);
     const data: EnergyHistoryResponse =
       rendererInstances[0].updateData.mock.lastCall![0];
     const x = Array.from(data.mainData[0]);
-    expect(data.mainData[1][x.indexOf(Date.parse("2026-09-27T09:02:30Z") / 1000)])
-      .toBe(500);
+    const midpoint = x.indexOf(Date.parse("2026-09-27T09:02:30Z") / 1000);
+    expect([
+      data.hasProduction,
+      data.hasConsumption,
+      data.hasGridImport,
+      data.hasGridExport,
+    ]).toEqual([true, true, true, true]);
+    expect([
+      data.mainData[1][midpoint],
+      data.mainData[7][midpoint],
+      data.mainData[10][midpoint],
+      data.mainData[11][midpoint],
+      data.mainData[12][midpoint],
+      data.mainData[13][midpoint],
+      data.gridData[1][midpoint],
+      data.gridData[2][midpoint],
+      data.gridData[3][midpoint],
+      data.gridData[4][midpoint],
+      data.gridData[5][midpoint],
+      data.gridData[6][midpoint],
+    ]).toEqual([500, 900, 600, 400, 1000, 800, 40, -100, 60, 20, -50, -150]);
+    expect(x).not.toContain(Date.parse("2026-09-26T22:00:10Z") / 1000);
+    expect(x).not.toContain(Date.parse("2026-09-26T22:00:20Z") / 1000);
   });
 
   // Leaves the full-day precision action available when the short probe fails.
@@ -1257,25 +1366,111 @@ describe("SolarEnergyGraphsCard", () => {
       "2026-09-27T10:05:00Z",
     );
     card.hass = firstUpdate;
-    card.hass = withSensorState(
+    await vi.advanceTimersByTimeAsync(100);
+    const secondUpdate = withSensorState(
       firstUpdate,
+      "sensor.solar",
+      "350",
+      "2026-09-27T10:05:02Z",
+    );
+    card.hass = secondUpdate;
+    await vi.advanceTimersByTimeAsync(100);
+    const thirdUpdate = withSensorState(
+      secondUpdate,
       "sensor.consumption",
       "400",
       "2026-09-27T10:05:01Z",
     );
-    await vi.advanceTimersByTimeAsync(249);
+    card.hass = thirdUpdate;
+    const fourthUpdate = withSensorState(
+      thirdUpdate,
+      "sensor.grid_import",
+      "120",
+      "2026-09-27T10:05:03Z",
+    );
+    card.hass = fourthUpdate;
+    const fifthUpdate = withSensorState(
+      fourthUpdate,
+      "sensor.grid_export",
+      "30",
+      "2026-09-27T10:05:04Z",
+    );
+    card.hass = fifthUpdate;
+
+    await vi.advanceTimersByTimeAsync(49);
     const beforeWindow = renderer.updateData.mock.calls.length;
     await vi.advanceTimersByTimeAsync(1);
 
     expect(beforeWindow).toBe(0);
     expect(renderer.updateData).toHaveBeenCalledOnce();
     const data: EnergyHistoryResponse = renderer.updateData.mock.calls[0][0];
-    const index = Array.from(data.mainData[0]).indexOf(
+    const x = Array.from(data.mainData[0]);
+    const consumptionIndex = x.indexOf(
       Date.parse("2026-09-27T10:05:01Z") / 1000,
     );
-    expect(data.mainData[1][index]).toBe(300);
-    expect(data.mainData[7][index]).toBe(400);
+    const solarLatestIndex = x.indexOf(
+      Date.parse("2026-09-27T10:05:02Z") / 1000,
+    );
+    const importIndex = x.indexOf(
+      Date.parse("2026-09-27T10:05:03Z") / 1000,
+    );
+    const exportIndex = x.indexOf(
+      Date.parse("2026-09-27T10:05:04Z") / 1000,
+    );
+    expect(x).toEqual(expect.arrayContaining([
+      Date.parse("2026-09-27T10:05:01Z") / 1000,
+      Date.parse("2026-09-27T10:05:02Z") / 1000,
+      Date.parse("2026-09-27T10:05:03Z") / 1000,
+      Date.parse("2026-09-27T10:05:04Z") / 1000,
+    ]));
+    expect([
+      data.hasProduction,
+      data.hasConsumption,
+      data.hasGridImport,
+      data.hasGridExport,
+    ]).toEqual([true, true, true, true]);
+    expect(x).not.toContain(Date.parse("2026-09-27T10:05:00Z") / 1000);
+    expect(data.mainData[1][solarLatestIndex]).toBe(350);
+    expect(data.mainData[7][consumptionIndex]).toBe(400);
+    expect(data.gridData[2][importIndex]).toBe(-120);
+    expect(data.gridData[1][exportIndex]).toBe(30);
     expect(hass.callWS).toHaveBeenCalledTimes(4);
+
+    renderer.updateData.mockClear();
+    card.hass = withSensorState(
+      fifthUpdate,
+      "sensor.solar",
+      "350",
+      "2026-09-27T10:05:02Z",
+    );
+    await vi.advanceTimersByTimeAsync(250);
+    expect(renderer.updateData).not.toHaveBeenCalled();
+
+    card.hass = {
+      ...fifthUpdate,
+      states: undefined,
+    };
+    await vi.advanceTimersByTimeAsync(250);
+    expect(renderer.updateData).not.toHaveBeenCalled();
+
+    card.hass = withSensorState(
+      fifthUpdate,
+      "sensor.solar",
+      "450",
+      "invalid timestamp",
+    );
+    await vi.advanceTimersByTimeAsync(250);
+    expect(renderer.updateData).not.toHaveBeenCalled();
+
+    card.hass = withSensorState(
+      fifthUpdate,
+      "sensor.solar",
+      "500",
+      "2026-09-27T10:06:00Z",
+    );
+    card.remove();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(renderer.updateData).not.toHaveBeenCalled();
   });
 
   // Leaves a past day untouched when the current sensor states change.

@@ -547,19 +547,29 @@ describe("EnergyChartsRenderer", () => {
     const stroke = axes[0].stroke;
     const gridStroke = axes[0].grid.stroke;
 
+    containers[0].style.setProperty("--primary-text-color", "#123456");
+    renderer.refreshTheme(false);
+    expect(axes[0].stroke()).toBe("#123456");
+    expect(axes[0].grid.stroke()).toBe("#bdbdbd");
+
+    containers[0].style.setProperty("--divider-color", "#654321");
+    renderer.refreshTheme(false);
+    expect(axes[0].stroke()).toBe("#123456");
+    expect(axes[0].grid.stroke()).toBe("#654321");
+
     renderer.refreshTheme(true);
     expect(axes[0].stroke()).toBe("#ffffff");
     renderer.refreshTheme(false);
-    expect(axes[0].stroke()).toBe("#212121");
-    expect(axes[0].grid.stroke()).toBe("#bdbdbd");
+    expect(axes[0].stroke()).toBe("#123456");
+    expect(axes[0].grid.stroke()).toBe("#654321");
     renderer.refreshTheme(true);
 
     expect(axes[0].stroke).toBe(stroke);
     expect(axes[0].grid.stroke).toBe(gridStroke);
     expect(axes[0].stroke()).toBe("#ffffff");
     expect(axes[0].grid.stroke()).toBe("#9e9e9e");
-    expect(charts[0].redraw).toHaveBeenCalledTimes(3);
-    expect(charts[1].redraw).toHaveBeenCalledTimes(3);
+    expect(charts[0].redraw).toHaveBeenCalledTimes(5);
+    expect(charts[1].redraw).toHaveBeenCalledTimes(5);
   });
 
   // Leaves uPlot's own selection color, visible on a light card.
@@ -641,6 +651,8 @@ describe("EnergyChartsRenderer", () => {
     new EnergyChartsRenderer(containers, legendContainers);
 
     MockResizeObserver.instances[0].trigger(containers[0], 0, 0);
+    MockResizeObserver.instances[0].trigger(containers[0], 420, 0);
+    MockResizeObserver.instances[0].trigger(containers[0], 0, 160);
 
     expect(charts[0].setSize).not.toHaveBeenCalled();
     expect(charts[1].setSize).not.toHaveBeenCalled();
@@ -1297,6 +1309,9 @@ describe("computeDragPanRange", () => {
     const result = computeDragPanRange(current, dayWindow, 50, 200);
 
     expect(result).toBeUndefined();
+    expect(
+      computeDragPanRange({ min: -100, max: 86500 }, dayWindow, 50, 200),
+    ).toBeUndefined();
     expect(
       computeDragPanRange(
         { min: 100000, max: 186400 },
