@@ -145,7 +145,7 @@ function deferredHistoryApi() {
   const pending: Array<{
     kind: string;
     resolve: (response: WebSocketResponse) => void;
-    reject: (error: Error) => void;
+    reject: (error: unknown) => void;
   }> = [];
   const callWS = vi.fn<HistoryApi>(
     (message) =>
@@ -294,6 +294,57 @@ describe("SolarEnergyGraphsCard", () => {
       "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
     )).toEqual([expectedIds, expectedIds, expectedIds, expectedIds]);
     expect(rendererInstances[0].data.hasGridImport).toBe(false);
+  });
+
+  // Skips recorder requests and keeps the precision action hidden when no sensors are configured.
+  it("renders graph-local empty states when all sensor roles are unconfigured", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    card.setConfig({
+      ...CARD_CONFIG,
+      entities: {
+        production: null,
+        consumption: null,
+        grid_import: null,
+        grid_export: null,
+      },
+    });
+    const hass = createHassContext();
+    document.body.append(card);
+    card.hass = hass;
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect(hass.callWS).not.toHaveBeenCalled();
+    expect(card.shadowRoot?.querySelectorAll(".chart-status")).toHaveLength(2);
+    expect(card.shadowRoot?.querySelectorAll(".chart-status")[0].textContent)
+      .toContain("production or consumption history is unavailable");
+    expect(card.shadowRoot?.querySelectorAll(".chart-status")[1].textContent)
+      .toContain("grid import or export history is unavailable");
+    expect(navigationButton(card, "Load high precision")).toBeNull();
+  });
+
+  // Reports invalid Home Assistant sensor metadata locally without requesting history.
+  it("reports invalid sensor metadata in both graph status areas", async () => {
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    const hass = createHassContext();
+    hass.states["sensor.solar"].attributes = {
+      unit_of_measurement: "kWh",
+      device_class: "energy",
+      state_class: "total_increasing",
+    };
+    card.hass = hass;
+    await card.updateComplete;
+
+    expect(hass.callWS).not.toHaveBeenCalled();
+    expect(Array.from(card.shadowRoot?.querySelectorAll(".chart-status") ?? [])
+      .map((status) => status.textContent))
+      .toEqual([
+        expect.stringContaining("Sensor configuration error: The production sensor"),
+        expect.stringContaining("Sensor configuration error: The production sensor"),
+      ]);
   });
 
   // Trims spaces around configured entity IDs before querying Home Assistant.
@@ -581,6 +632,25 @@ describe("SolarEnergyGraphsCard", () => {
     expect(navigationButton(card, "Load high precision")).not.toBeNull();
   });
 
+  // Keeps manual high-precision loading available until the selected day's first minute has elapsed.
+  it("offers high precision with an unavailable status before the first full minute", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-26T22:00:30Z") });
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    const hass = createHassContext();
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect(hass.callWS).toHaveBeenCalledTimes(3);
+    expect(navigationButton(
+      card,
+      "Load high precision (availability check failed)",
+    )?.title).toContain("first minute of this day has not elapsed");
+  });
+
   // Draws each statistics interval at its midpoint with its min-max range.
   it("draws statistics as a mean line with a min-max band", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
@@ -762,6 +832,133 @@ describe("SolarEnergyGraphsCard", () => {
       "History loading error: Connection lost",
     );
     expect(data.mainData[1][Array.from(data.mainData[0]).indexOf(recorded)]).toBe(800);
+  });
+
+  // Keeps the last successful statistics after a failed refresh and retries at the next boundary.
+  it("retains statistics and retries after a refresh failure", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    let statisticsRequests = 0;
+    const callWS = vi.fn<HistoryApi>(async (message) => {
+      if (message.type !== "recorder/statistics_during_period") {
+        return {};
+      }
+      statisticsRequests += 1;
+      if (statisticsRequests === 3 || statisticsRequests === 4) {
+        throw new Error("Refresh failed");
+      }
+      const start = statisticsRequests >= 5
+        ? "2026-09-27T10:15:00Z"
+        : "2026-09-27T09:00:00Z";
+      const value = statisticsRequests >= 5 ? 700 : 500;
+      return {
+        "sensor.solar": [statisticRow(start, value, value - 100, value + 100)],
+        "sensor.consumption": [statisticRow(start, 900, 800, 1000)],
+      };
+    });
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = createHassContext(callWS);
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await flushHistoryResponse();
+    const renderer = rendererInstances[0];
+    renderer.updateData.mockClear();
+
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:15:30Z") - Date.now(),
+    );
+    await card.updateComplete;
+    const afterFailure: EnergyHistoryResponse = renderer.updateData.mock.lastCall![0];
+    const firstMidpoint = Date.parse("2026-09-27T09:02:30Z") / 1000;
+    expect(card.shadowRoot?.querySelector(".chart-status")?.textContent)
+      .toContain("History loading error: Refresh failed");
+    expect(afterFailure.mainData[1][Array.from(afterFailure.mainData[0]).indexOf(firstMidpoint)])
+      .toBe(500);
+
+    await vi.advanceTimersByTimeAsync(
+      Date.parse("2026-09-27T10:20:30Z") - Date.now(),
+    );
+    await card.updateComplete;
+    const afterRetry: EnergyHistoryResponse = renderer.updateData.mock.lastCall![0];
+    const retryMidpoint = Date.parse("2026-09-27T10:17:30Z") / 1000;
+    expect(statisticsRequests).toBe(6);
+    expect(card.shadowRoot?.querySelector(".chart-status")?.textContent)
+      .toContain("Power statistics: mean line with min–max range.");
+    expect(afterRetry.mainData[1][Array.from(afterRetry.mainData[0]).indexOf(retryMidpoint)])
+      .toBe(700);
+  });
+
+  // Preserves standard data and exposes a rejected full-day precision request.
+  it("reports a failed full-day precision load and clears its loading state", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const probeStart = Date.parse("2026-09-26T22:00:00Z") / 1000;
+    const { callWS, pending } = deferredHistoryApi();
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = createHassContext(callWS);
+    await vi.waitFor(() => expect(pending).toHaveLength(4));
+    pending[0].resolve({
+      "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+    });
+    pending[1].resolve({});
+    pending[2].resolve({});
+    pending[3].resolve({
+      "sensor.solar": [
+        { s: "700", lu: probeStart + 10 },
+        { s: "900", lu: probeStart + 20 },
+      ],
+    });
+    await flushHistoryResponse();
+    await card.updateComplete;
+    navigationButton(card, "Load high precision")?.click();
+    await vi.waitFor(() => expect(pending).toHaveLength(5));
+    pending[4].reject("Recorder unavailable");
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect(navigationButton(card, "Load high precision")?.disabled).toBe(false);
+    expect(card.shadowRoot?.querySelector(".chart-status")?.textContent)
+      .toContain("History loading error: Recorder unavailable");
+  });
+
+  // Hides high precision again when its full-day response no longer has finer samples.
+  it("restores statistics when the full-day precision response is not finer", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const probeStart = Date.parse("2026-09-26T22:00:00Z") / 1000;
+    const { callWS, pending } = deferredHistoryApi();
+    card = new SolarEnergyGraphsCard();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = createHassContext(callWS);
+    await vi.waitFor(() => expect(pending).toHaveLength(4));
+    pending[0].resolve({
+      "sensor.solar": [statisticRow("2026-09-27T09:00:00Z", 500, 400, 600)],
+    });
+    pending[1].resolve({});
+    pending[2].resolve({});
+    pending[3].resolve({
+      "sensor.solar": [
+        { s: "700", lu: probeStart + 10 },
+        { s: "900", lu: probeStart + 20 },
+      ],
+    });
+    await flushHistoryResponse();
+    await card.updateComplete;
+    navigationButton(card, "Load high precision")?.click();
+    await vi.waitFor(() => expect(pending).toHaveLength(5));
+    pending[4].resolve({
+      "sensor.solar": [{ s: "700", lu: probeStart + 10 }],
+    });
+    await flushHistoryResponse();
+    await card.updateComplete;
+
+    expect(navigationButton(card, "Load high precision")).toBeNull();
+    expect(navigationButton(card, "Use standard precision")).toBeNull();
+    const data = rendererInstances[0].updateData.mock.lastCall?.[0];
+    const intervalMidpoint = Date.parse("2026-09-27T09:02:30Z") / 1000;
+    expect(data?.mainData[1][Array.from(data.mainData[0]).indexOf(intervalMidpoint)])
+      .toBe(500);
   });
 
   // Keeps a live state received while the recent raw history was still loading.

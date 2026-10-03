@@ -7,14 +7,15 @@ import {
   vi,
 } from "vitest";
 
-const { createChartMock, syncMock } = vi.hoisted(() => ({
+const { createChartMock, syncMock, tzDateMock } = vi.hoisted(() => ({
   createChartMock: vi.fn(),
   syncMock: vi.fn((key: string) => ({ key })),
+  tzDateMock: vi.fn((date: Date) => date),
 }));
 
 vi.mock("./uplot-adapter", () => ({
   createChart: createChartMock,
-  uPlot: { sync: syncMock },
+  uPlot: { sync: syncMock, tzDate: tzDateMock },
 }));
 
 import {
@@ -163,6 +164,8 @@ describe("EnergyChartsRenderer", () => {
     );
     syncMock.mockReset();
     syncMock.mockImplementation((key) => ({ key }));
+    tzDateMock.mockReset();
+    tzDateMock.mockImplementation((date) => date);
     vi.stubGlobal("ResizeObserver", MockResizeObserver);
   });
 
@@ -290,6 +293,46 @@ describe("EnergyChartsRenderer", () => {
     expect(syncMock).toHaveBeenCalledOnce();
     expect(firstOptions.width).toBe(600);
     expect(firstOptions.height).toBe(100);
+  });
+
+  // Wires timezone, axis color and zero-line callbacks to their chart options.
+  it("provides callable timezone, axis, and zero-line options", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    const firstOptions = createChartMock.mock.calls[0][0];
+    const secondOptions = createChartMock.mock.calls[1][0];
+
+    expect(firstOptions.tzDate(300)).toEqual(new Date(300_000));
+    expect(tzDateMock).toHaveBeenCalledWith(new Date(300_000), "Europe/Paris");
+    for (const options of [firstOptions, secondOptions]) {
+      for (const axis of options.axes) {
+        expect(axis.stroke()).toBe("#212121");
+        expect(axis.grid.stroke()).toBe("#bdbdbd");
+        expect(axis.ticks.stroke()).toBe("#212121");
+        expect(axis.border.stroke()).toBe("#bdbdbd");
+      }
+    }
+
+    const context = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      strokeStyle: "",
+      lineWidth: 0,
+    };
+    const chart = {
+      scales: { y: { min: -10, max: 10 } },
+      valToPos: vi.fn(() => 50),
+      ctx: context,
+      bbox: { left: 10, width: 100 },
+    };
+    secondOptions.hooks.draw[0](chart);
+
+    expect(context.moveTo).toHaveBeenCalledWith(10, 50.5);
+    expect(context.lineTo).toHaveBeenCalledWith(110, 50.5);
+    expect(context.stroke).toHaveBeenCalledOnce();
   });
 
   // Replaces both plot datasets after Home Assistant history is refreshed.
@@ -559,6 +602,17 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].redraw).not.toHaveBeenCalled();
   });
 
+  // Ignores Home Assistant theme updates after chart resources have been released.
+  it("does not refresh the theme after destroy", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    renderer.destroy();
+
+    renderer.refreshTheme(true);
+
+    expect(charts[0].redraw).not.toHaveBeenCalled();
+    expect(charts[1].redraw).not.toHaveBeenCalled();
+  });
+
   // Watches both graph containers so responsive layout changes reach uPlot.
   it("observes both chart containers", () => {
     new EnergyChartsRenderer(containers, legendContainers);
@@ -651,6 +705,26 @@ describe("EnergyChartsRenderer", () => {
       deltaY: -100,
     });
     containers[1].dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+  });
+
+  // Uses full-day bounds and a centered cursor when uPlot has no x-scale limits.
+  it("uses day bounds when wheel zoom has no x-scale limits", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = {};
+    charts[1].scales.x = {};
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 0, width: 0, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    containers[0].dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
