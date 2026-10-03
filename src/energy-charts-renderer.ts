@@ -316,11 +316,11 @@ export class EnergyChartsRenderer {
     const overlay = target.chart.over ?? target.element;
     const rect = overlay.getBoundingClientRect?.() ?? { left: 0, width: 0 };
     const clientX =
-      typeof event.clientX === "number" && Number.isFinite(event.clientX)
+      Number.isFinite(event.clientX)
         ? event.clientX
         : (rect.left ?? 0) + (rect.width ?? 0) / 2;
     const cursorPct =
-      rect.width && rect.width > 0
+      rect.width > 0
         ? (clientX - (rect.left ?? 0)) / rect.width
         : 0.5;
 

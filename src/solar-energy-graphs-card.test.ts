@@ -273,6 +273,14 @@ describe("SolarEnergyGraphsCard", () => {
         entities: { ...CARD_CONFIG.entities, production: "   " },
       }),
     ).toThrow('Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".');
+    const nonStringEntityConfig = {
+      ...CARD_CONFIG,
+      entities: { ...CARD_CONFIG.entities },
+    };
+    Reflect.set(nonStringEntityConfig.entities, "production", 42);
+    expect(() => card.setConfig(nonStringEntityConfig)).toThrow(
+      'Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".',
+    );
   });
 
   // Renders without an unconfigured sensor and leaves it out of every Home Assistant request.

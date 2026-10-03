@@ -716,6 +716,23 @@ describe("EnergyChartsRenderer", () => {
 
     charts[0].setScale.mockClear();
     charts[1].setScale.mockClear();
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 50, right: 50, width: 0, top: 0, bottom: 100, height: 100 }) as DOMRect;
+    const zeroWidthEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+    });
+    Object.defineProperty(zeroWidthEvent, "clientX", { value: 50 });
+    containers[0].dispatchEvent(zeroWidthEvent);
+
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 30, max: 270 });
+
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 50, right: 250, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
     const notANumberCursorEvent = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,

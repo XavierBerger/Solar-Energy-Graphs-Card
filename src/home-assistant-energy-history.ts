@@ -261,10 +261,7 @@ export function combineStatistics(
 }
 
 function finiteOrNull(value: number | null | undefined): number | null {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return null;
-  }
-  return value;
+  return Number.isFinite(value) ? value ?? null : null;
 }
 
 /** Validates sensor units; null marks an unconfigured sensor, which is not validated. */
