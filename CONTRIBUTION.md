@@ -67,6 +67,26 @@ Automated checks do not replace visual confirmation in Home Assistant. Manual
 checks should cover both themes, responsive layout, touch interactions, unit
 readability, and behavior with the real configured entities.
 
+## Releasing
+
+1. Update `version` in `package.json` and in both version fields at the start
+   of `package-lock.json`.
+2. Commit the version change as `chore(release): X.Y.Z`.
+3. Merge the change into `main`, then create and push an annotated tag:
+
+   ```sh
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+The release workflow checks that the tag matches `package.json`, builds and
+tests the card, publishes `dist/solar-energy-graphs-card.js` as the GitHub
+release asset, and validates the tagged repository with HACS. Tags containing
+`-` (for example, `v0.2.0-beta.1`) are published as prereleases; HACS can use
+one only after a complete release has been published. HACS displays the
+README from the release tag, so README updates are reflected there only by a
+subsequent release.
+
 ## Architecture
 
 Read the [architecture guide](docs/architecture.md) for the data flow, module
