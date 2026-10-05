@@ -9,10 +9,10 @@ NPM_CACHE_VOLUME=solar-energy-graphs-card-npm-cache
 ACTION=${1:-build}
 
 case "$ACTION" in
-  build|install|test|coverage|typecheck|deploy|diagrams|mutation)
+  build|install|test|coverage|typecheck|diagrams|mutation)
     ;;
   *)
-    printf 'Usage: %s [build|install|test|coverage|typecheck|deploy|diagrams|mutation]\n' "$0" >&2
+    printf 'Usage: %s [build|install|test|coverage|typecheck|diagrams|mutation]\n' "$0" >&2
     exit 2
     ;;
 esac
@@ -33,9 +33,6 @@ if ! podman volume exists "$NPM_CACHE_VOLUME"; then
 fi
 
 NPM_SCRIPT=$ACTION
-if [ "$ACTION" = deploy ]; then
-  NPM_SCRIPT=build
-fi
 
 podman run --rm \
   --volume "$SCRIPT_DIR:/source" \
@@ -82,11 +79,3 @@ podman run --rm \
       cp docs/diagrams/*.svg /source/docs/diagrams/
     fi
   ' sh "$NPM_SCRIPT"
-
-if [ "$ACTION" = deploy ]; then
-  WEB_ROOT="$REPO_ROOT/docker/ha-config/www"
-  mkdir -p "$WEB_ROOT"
-  cp "$SCRIPT_DIR/dist/solar-energy-graphs-card.js" \
-    "$WEB_ROOT/solar-energy-graphs-card.js"
-  printf 'Published bundle to %s\n' "$WEB_ROOT/solar-energy-graphs-card.js"
-fi
