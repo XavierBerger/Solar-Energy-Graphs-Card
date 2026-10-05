@@ -9,6 +9,7 @@ import {
   getEnergyUnitScales,
   getLocalDateString,
   getLocalDayWindowForDate,
+  getSameTimeOfDay,
   mergeLiveEnergySamples,
   NO_STATISTICS,
   parseCompressedPowerSamples,
@@ -41,6 +42,7 @@ const STATISTICS_PERIOD_SECONDS = 5 * 60;
 const STATISTICS_REFRESH_DELAY_SECONDS = 30;
 // Raw states cover the current day after its last compiled interval.
 const RAW_TAIL_SECONDS = 15 * 60;
+// Raw history is probed over the minute before the current time of day.
 const PRECISION_PROBE_SECONDS = 60;
 
 type HistoryPrecision = "statistics" | "raw";
@@ -531,9 +533,8 @@ export class SolarEnergyGraphsCard extends LitElement {
     const now = Date.now() / 1000;
     const today = this.isTodaySelected();
     const activeIds = activeEntityIds(entityIds);
-    const probeEnd = model.window.start + PRECISION_PROBE_SECONDS;
+    const probeEnd = getSameTimeOfDay(model.window, now, hass.config.time_zone);
     const hasProbeEntities = activeIds.length > 0;
-    const probeAvailable = hasProbeEntities && now >= probeEnd;
     const [statistics, tail, precisionProbe] = await Promise.allSettled([
       fetchStatistics(hass, entityIds, model.window, now),
       today && activeIds.length > 0
@@ -541,9 +542,13 @@ export class SolarEnergyGraphsCard extends LitElement {
           buildHistoryRequest(activeIds, now - RAW_TAIL_SECONDS, now),
         )
         : Promise.resolve<HistoryDuringPeriodResponse>({}),
-      probeAvailable
+      hasProbeEntities
         ? hass.callWS(
-          buildHistoryRequest(activeIds, model.window.start, probeEnd),
+          buildHistoryRequest(
+            activeIds,
+            probeEnd - PRECISION_PROBE_SECONDS,
+            probeEnd,
+          ),
         )
         : Promise.resolve<HistoryDuringPeriodResponse>({}),
     ]);
@@ -581,11 +586,6 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
     if (!hasProbeEntities) {
       highPrecisionAvailable = false;
-    } else if (!probeAvailable) {
-      // Fail open when the selected day has no complete first-minute window yet.
-      highPrecisionAvailable = true;
-      highPrecisionCheckError =
-        "The first minute of this day has not elapsed; availability could not be checked.";
     } else if (precisionProbe.status === "rejected") {
       // Keep the manual full-day action available when a probe fails.
       highPrecisionAvailable = true;

@@ -94,13 +94,13 @@ entities:
 Replace each example entity ID with the matching power sensor from your Home
 Assistant installation. All four options are required:
 
-| Option | Sensor role |
-| --- | --- |
-| `type` | `custom:solar-energy-graphs-card` |
-| `entities.production` | Solar production power |
-| `entities.consumption` | Consumption power |
-| `entities.grid_import` | Power imported from the grid |
-| `entities.grid_export` | Power exported to the grid |
+| Option                 | Sensor role                       |
+| ---------------------- | --------------------------------- |
+| `type`                 | `custom:solar-energy-graphs-card` |
+| `entities.production`  | Solar production power            |
+| `entities.consumption` | Consumption power                 |
+| `entities.grid_import` | Power imported from the grid      |
+| `entities.grid_export` | Power exported to the grid        |
 
 ## Read the graphs
 
@@ -142,9 +142,9 @@ long.
 
 When finer-than-statistics samples are detected, a precision button lets you
 load raw history for the selected day; select it again to return to standard
-statistics. Availability is checked using the first complete minute of the
-day, so finer samples elsewhere may go undetected. If the check fails, the
-button remains available and its tooltip reports the check error.
+statistics. Availability is checked using the minute before the current time
+of day on the selected day, so finer samples elsewhere may go undetected. If the check fails, the
+button remains available.
 
 For today, recent recorded states extend the latest statistics and incoming
 Home Assistant state updates extend the line in near real time. Statistics
@@ -182,15 +182,15 @@ The two graphs resize with the card's available width and height.
 
 ## Troubleshooting
 
-| Message or symptom | Likely cause | What to check |
-| --- | --- | --- |
-| `Custom element doesn't exist` | The JavaScript resource is not loaded, or the browser is using a stale dashboard. | Confirm installation and the resource path, then refresh the browser. |
-| `Sensor configuration error: ...` | A configured sensor has the wrong class or unit. | Use sensors with `device_class: power`, `state_class: measurement`, and unit `W` or `kW`. |
-| `History loading error: ...` | Home Assistant could not load history or statistics. | Check recorder availability, the browser/HA connection, and the selected sensors. |
-| `Error: <date> production or consumption history is unavailable.` | The selected day has no production or consumption history for one or both sensors. | Check the selected entities and their recorder history for that date. |
-| `Error: <date> grid import or export history is unavailable.` | The selected day has no import or export history for one or both sensors. | Check both grid sensors and their recorder history for that date. |
-| `Waiting for Home Assistant data.` | The card has not yet received the Home Assistant context. | Wait for the dashboard to load; if it persists, reload the dashboard. |
-| High-precision button is absent | The first complete minute did not show samples finer than statistics. | Fine samples elsewhere in the day may be missed by this availability check. |
+| Message or symptom                                                | Likely cause                                                                          | What to check                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `Custom element doesn't exist`                                    | The JavaScript resource is not loaded, or the browser is using a stale dashboard.     | Confirm installation and the resource path, then refresh the browser.                     |
+| `Sensor configuration error: ...`                                 | A configured sensor has the wrong class or unit.                                      | Use sensors with `device_class: power`, `state_class: measurement`, and unit `W` or `kW`. |
+| `History loading error: ...`                                      | Home Assistant could not load history or statistics.                                  | Check recorder availability, the browser/HA connection, and the selected sensors.         |
+| `Error: <date> production or consumption history is unavailable.` | The selected day has no production or consumption history for one or both sensors.    | Check the selected entities and their recorder history for that date.                     |
+| `Error: <date> grid import or export history is unavailable.`     | The selected day has no import or export history for one or both sensors.             | Check both grid sensors and their recorder history for that date.                         |
+| `Waiting for Home Assistant data.`                                | The card has not yet received the Home Assistant context.                             | Wait for the dashboard to load; if it persists, reload the dashboard.                     |
+| High-precision button is absent                                   | The minute before the current time of day did not show samples finer than statistics. | Fine samples elsewhere in the day may be missed by this availability check.               |
 
 ## FAQ
 
