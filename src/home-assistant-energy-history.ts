@@ -175,6 +175,19 @@ export function getLocalDayWindowForDate(
 }
 
 /**
+ * Moves `now` onto `window`'s day, keeping the time elapsed since local
+ * midnight; clamped to the day's end, so DST days shift it by up to an hour.
+ */
+export function getSameTimeOfDay(
+  window: LocalDayWindow,
+  now: number,
+  timeZone: string,
+): number {
+  const today = getLocalDayWindow(new Date(now * 1000), timeZone);
+  return Math.min(window.start + now - today.start, window.end);
+}
+
+/**
  * Builds a WebSocket request for every recorded state of the given sensors.
  * `minimal_response` would drop repeated values and the significant-changes
  * filter would drop other states.

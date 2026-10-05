@@ -424,6 +424,7 @@ describe("SolarEnergyGraphsCard", () => {
 
   // Navigates between adjacent local days and prevents navigation into the future.
   it("loads adjacent days from the top-right day navigation", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();
     card.setConfig(CARD_CONFIG);
@@ -440,9 +441,11 @@ describe("SolarEnergyGraphsCard", () => {
     expect(date?.dateTime).toBe(today);
     expect(nextButton?.disabled).toBe(true);
 
+    const clickedAt = Date.now();
     previousButton?.click();
     await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(7));
     await card.updateComplete;
+    const requestedBy = Date.now();
 
     expect(date?.dateTime).toBe(previousDay);
     expect(nextButton?.disabled).toBe(false);
@@ -458,9 +461,13 @@ describe("SolarEnergyGraphsCard", () => {
       "statistics:hour",
       "history",
     ]);
-    expect(previousDayRequests[2].end_time).toBe(
-      new Date((previousWindow.start + 60) * 1000).toISOString(),
-    );
+    // waitFor advances the fake clock: bound the probe by the clock around the
+    // request, a 24-hour day earlier since neither day is a DST change.
+    const probeEnd = Date.parse(previousDayRequests[2].end_time);
+    const day = 24 * 60 * 60 * 1000;
+    expect(Date.parse(previousDayRequests[2].start_time)).toBe(probeEnd - 60_000);
+    expect(probeEnd).toBeGreaterThanOrEqual(clickedAt - day);
+    expect(probeEnd).toBeLessThanOrEqual(requestedBy - day);
     expect(previousDayRequests[0].start_time).toBe(
       new Date(previousWindow.start * 1000).toISOString(),
     );
@@ -635,10 +642,10 @@ describe("SolarEnergyGraphsCard", () => {
     });
   });
 
-  // Checks the selected day's first local minute before showing the precision toggle.
+  // Checks the minute before the current time of day before showing the precision toggle.
   it("shows the precision button only after a positive one-minute probe", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
-    const probeStart = Date.parse("2026-09-26T22:00:00Z") / 1000;
+    const probeStart = Date.parse("2026-09-27T10:09:00Z") / 1000;
     const { callWS, pending } = deferredHistoryApi();
     card = new SolarEnergyGraphsCard();
     card.setConfig(CARD_CONFIG);
@@ -650,8 +657,8 @@ describe("SolarEnergyGraphsCard", () => {
     expect(navigationButton(card, "Load high precision")).toBeNull();
     expect(callWS.mock.calls[3][0]).toMatchObject({
       type: "history/history_during_period",
-      start_time: "2026-09-26T22:00:00.000Z",
-      end_time: "2026-09-26T22:01:00.000Z",
+      start_time: "2026-09-27T10:09:00.000Z",
+      end_time: "2026-09-27T10:10:00.000Z",
       entity_ids: SENSOR_IDS,
     });
 
@@ -674,8 +681,8 @@ describe("SolarEnergyGraphsCard", () => {
     expect(navigationButton(card, "Load high precision")).not.toBeNull();
   });
 
-  // Keeps manual high-precision loading available until the selected day's first minute has elapsed.
-  it("offers high precision with an unavailable status before the first full minute", async () => {
+  // Probes across midnight during the day's first minute instead of skipping the check.
+  it("probes the minute before the current time across midnight", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-26T22:00:30Z") });
     card = new SolarEnergyGraphsCard();
     card.setConfig(CARD_CONFIG);
@@ -686,11 +693,17 @@ describe("SolarEnergyGraphsCard", () => {
     await flushHistoryResponse();
     await card.updateComplete;
 
-    expect(hass.callWS).toHaveBeenCalledTimes(3);
+    expect(hass.callWS).toHaveBeenCalledTimes(4);
+    expect(hass.callWS.mock.calls[3][0]).toMatchObject({
+      type: "history/history_during_period",
+      start_time: "2026-09-26T21:59:30.000Z",
+      end_time: "2026-09-26T22:00:30.000Z",
+      entity_ids: SENSOR_IDS,
+    });
     expect(navigationButton(
       card,
       "Load high precision (availability check failed)",
-    )?.title).toContain("first minute of this day has not elapsed");
+    )).toBeNull();
   });
 
   // Draws each statistics interval at its midpoint with its min-max range.
@@ -933,7 +946,7 @@ describe("SolarEnergyGraphsCard", () => {
   // Preserves standard data and exposes a rejected full-day precision request.
   it("reports a failed full-day precision load and clears its loading state", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
-    const probeStart = Date.parse("2026-09-26T22:00:00Z") / 1000;
+    const probeStart = Date.parse("2026-09-27T10:09:00Z") / 1000;
     const { callWS, pending } = deferredHistoryApi();
     card = new SolarEnergyGraphsCard();
     card.setConfig(CARD_CONFIG);
@@ -967,7 +980,7 @@ describe("SolarEnergyGraphsCard", () => {
   // Hides high precision again when its full-day response no longer has finer samples.
   it("restores statistics when the full-day precision response is not finer", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
-    const probeStart = Date.parse("2026-09-26T22:00:00Z") / 1000;
+    const probeStart = Date.parse("2026-09-27T10:09:00Z") / 1000;
     const { callWS, pending } = deferredHistoryApi();
     card = new SolarEnergyGraphsCard();
     card.setConfig(CARD_CONFIG);
@@ -1179,8 +1192,8 @@ describe("SolarEnergyGraphsCard", () => {
     expect(hass.callWS).toHaveBeenCalledTimes(4);
     expect(hass.callWS.mock.calls[3][0]).toMatchObject({
       type: "history/history_during_period",
-      start_time: "2026-09-26T22:00:00.000Z",
-      end_time: "2026-09-26T22:01:00.000Z",
+      start_time: "2026-09-27T10:09:00.000Z",
+      end_time: "2026-09-27T10:10:00.000Z",
       entity_ids: SENSOR_IDS,
     });
     expect(hass.callWS.mock.calls[2][0]).toMatchObject({

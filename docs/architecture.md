@@ -171,11 +171,14 @@ part: it is statistics only.
   time zone (`hass.config.time_zone`), never the browser's.
 - Day boundaries come from `getLocalDayWindowForDate`, which handles 23-hour
   and 25-hour days at DST changes.
-- Each day load probes raw history for the first complete local minute. The
-  precision toggle stays hidden until the probe confirms a sampling interval
-  finer than the statistics; a failed probe leaves the action available with
-  an error in its title. This is only a one-minute indicator: fine samples
-  elsewhere in the day can be missed, causing a false negative.
+- Each day load probes raw history for the minute before the current time of
+  day, carried onto the selected day as the time elapsed since local midnight
+  (shifted by an hour on DST days, and spilling into the previous day during
+  the first minute after midnight). The precision toggle stays hidden until
+  the probe confirms a sampling interval finer than the statistics; a failed
+  probe leaves the action available with an error in its title. This is only
+  a one-minute indicator: fine samples elsewhere in the day can be missed,
+  causing a false negative.
 - Changing the day changes the load key, which triggers a new load; a
   response for the previous day is ignored when it arrives (see
   [Robustness rules](#robustness-rules)).

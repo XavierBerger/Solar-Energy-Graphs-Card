@@ -7,6 +7,7 @@ import {
   getLocalDateString,
   getLocalDayWindow,
   getLocalDayWindowForDate,
+  getSameTimeOfDay,
   entityRowsOf,
   mergeLiveEnergySamples,
   normalizeEnergyHistory,
@@ -244,6 +245,23 @@ describe("Home Assistant energy history", () => {
 
     expect(spring.end - spring.start).toBe(23 * 60 * 60);
     expect(autumn.end - autumn.start).toBe(25 * 60 * 60);
+  });
+
+  // Carries the time elapsed since today's midnight onto a selected day,
+  // bounded by its end when today is a longer DST day.
+  it("moves the current time of day onto a selected day", () => {
+    const now = Date.parse("2026-09-27T10:10:00Z") / 1000;
+    const today = getLocalDayWindowForDate("2026-09-27", "Europe/Paris");
+    const past = getLocalDayWindowForDate("2026-09-20", "Europe/Paris");
+    // 23:30 on the 25-hour day, 24.5 hours after its midnight.
+    const lateAutumn = Date.parse("2026-10-25T22:30:00Z") / 1000;
+    const beforeAutumn = getLocalDayWindowForDate("2026-10-24", "Europe/Paris");
+
+    expect(getSameTimeOfDay(today, now, "Europe/Paris")).toBe(now);
+    expect(getSameTimeOfDay(past, now, "Europe/Paris"))
+      .toBe(Date.parse("2026-09-20T10:10:00Z") / 1000);
+    expect(getSameTimeOfDay(beforeAutumn, lateAutumn, "Europe/Paris"))
+      .toBe(beforeAutumn.end);
   });
 
   // Keeps the queried day correct across spring and autumn daylight-saving changes.
