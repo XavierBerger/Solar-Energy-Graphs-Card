@@ -67,7 +67,7 @@ podman run --rm \
     fi
     if [ "$1" = coverage ]; then
       rm -rf /source/coverage
-      cp -R coverage /source/coverage
+      cp -R coverage /source/reports/coverage
     fi
     if [ "$1" = mutation ]; then
       rm -rf /source/reports/mutation
