@@ -80,6 +80,14 @@ describe("SolarEnergyGraphsCardEditor", () => {
     expect(form?.hass).toBe(hass);
   });
 
+  // Uses the French sensor labels of the active Home Assistant profile.
+  it("renders the French editor labels when Home Assistant is in French", () => {
+    editor = new SolarEnergyGraphsCardEditor();
+    editor.hass = { language: "fr" };
+
+    expect((editor as unknown as { computeLabel: (field: { name: string }) => string }).computeLabel({ name: "grid_import" })).toBe("Import réseau");
+  });
+
   // Emits the nested configuration expected by the existing card YAML schema.
   it("emits changed entities using the existing configuration shape", async () => {
     editor = new SolarEnergyGraphsCardEditor();

@@ -3,6 +3,7 @@ import type {
   SolarEnergyEntityRole,
   SolarEnergyGraphsCardConfig,
 } from "./solar-energy-graphs-card-config";
+import { cardLanguage, translations } from "./translations";
 
 const ENTITY_FIELDS: readonly {
   name: SolarEnergyEntityRole;
@@ -32,12 +33,6 @@ const ENTITY_FIELDS: readonly {
 ];
 
 type EditorValues = Record<SolarEnergyEntityRole, string | null>;
-const FIELD_LABELS: Record<SolarEnergyEntityRole, string> = {
-  production: "Solar production",
-  consumption: "Consumption",
-  grid_import: "Grid import",
-  grid_export: "Grid export",
-};
 
 export class SolarEnergyGraphsCardEditor extends LitElement {
   static properties = {
@@ -46,7 +41,7 @@ export class SolarEnergyGraphsCardEditor extends LitElement {
     values: { state: true },
   };
 
-  declare hass?: unknown;
+  declare hass?: { language?: string };
   declare private config?: SolarEnergyGraphsCardConfig;
   declare private values: EditorValues;
 
@@ -79,7 +74,8 @@ export class SolarEnergyGraphsCardEditor extends LitElement {
 
   private readonly computeLabel = (field: {
     name: SolarEnergyEntityRole;
-  }): string => FIELD_LABELS[field.name];
+  }): string =>
+    translations(cardLanguage(this.hass?.language)).sensorLabels[field.name];
 
   private readonly handleValueChanged = (
     event: CustomEvent<{ value: Partial<EditorValues> }>,

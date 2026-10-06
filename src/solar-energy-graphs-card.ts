@@ -1,6 +1,9 @@
 import { css, html, LitElement, unsafeCSS } from "lit";
 import { EnergyChartsRenderer } from "./energy-charts-renderer";
-import type { SolarEnergyGraphsCardConfig } from "./solar-energy-graphs-card-config";
+import type {
+  SolarEnergyEntityRole,
+  SolarEnergyGraphsCardConfig,
+} from "./solar-energy-graphs-card-config";
 import {
   buildHistoryRequest,
   buildStatisticsRequest,
@@ -30,13 +33,13 @@ import {
   type StatisticsDuringPeriodMessage,
   type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
+import { cardLanguage, translations, type CardLanguage } from "./translations";
 import { uPlotStyles } from "./uplot-adapter";
 
 const CARD_TYPE = "custom:solar-energy-graphs-card";
 const ELEMENT_NAME = "solar-energy-graphs-card";
 // Home Assistant pushes each sensor separately; merge a burst in one pass.
 const LIVE_UPDATE_COALESCE_MS = 250;
-const LOADING_STATUS = "Loading Home Assistant history…";
 const STATISTICS_PERIOD_SECONDS = 5 * 60;
 // Home Assistant compiles 5-minute statistics shortly after each boundary.
 const STATISTICS_REFRESH_DELAY_SECONDS = 30;
@@ -47,7 +50,16 @@ const PRECISION_PROBE_SECONDS = 60;
 
 type HistoryPrecision = "statistics" | "raw";
 
+type CardStatusDescriptor =
+  | { kind: "waiting" }
+  | { kind: "loading" }
+  | { kind: "ready" }
+  | { kind: "unavailable" }
+  | { kind: "sensorError"; role: SolarEnergyEntityRole; problem: "class" | "unit" }
+  | { kind: "loadError"; detail: string };
+
 interface HomeAssistantThemeContext {
+  language?: string;
   themes?: {
     darkMode?: boolean;
   };
@@ -93,10 +105,15 @@ export class SolarEnergyGraphsCard extends LitElement {
   private statisticsRefreshTimer?: ReturnType<typeof setTimeout>;
   private selectedDay?: string;
   private selectedDayTimeZone?: string;
-  private mainStatus = "Waiting for Home Assistant data.";
-  private gridStatus = "Waiting for Home Assistant data.";
+  private mainStatus: CardStatusDescriptor = { kind: "waiting" };
+  private gridStatus: CardStatusDescriptor = { kind: "waiting" };
+
+  get language(): CardLanguage {
+    return cardLanguage(this.hassContext?.language ?? document.documentElement.lang);
+  }
 
   set hass(hass: HomeAssistantThemeContext) {
+    const previousLanguage = this.language;
     const timeZoneChanged =
       this.selectedDayTimeZone !== hass.config.time_zone;
     this.hassContext = hass;
@@ -107,6 +124,11 @@ export class SolarEnergyGraphsCard extends LitElement {
         hass.config.time_zone,
       );
       this.selectedDayTimeZone = hass.config.time_zone;
+      this.requestUpdate();
+    }
+    if (previousLanguage !== this.language) {
+      this.chartRenderer?.destroy();
+      this.chartRenderer = undefined;
       this.requestUpdate();
     }
     this.chartRenderer?.refreshTheme(this.darkMode);
@@ -272,8 +294,9 @@ export class SolarEnergyGraphsCard extends LitElement {
   `;
 
   setConfig(config: SolarEnergyGraphsCardConfig): void {
+    const t = translations(this.language);
     if (config.type !== CARD_TYPE) {
-      throw new Error(`Expected card type "${CARD_TYPE}".`);
+      throw new Error(t.setConfig.expectedType);
     }
     const entities = config.entities;
     if (
@@ -285,9 +308,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         entities.grid_export,
       ].every((entityId) => entityId === null || (typeof entityId === "string" && entityId.trim().length > 0))
     ) {
-      throw new Error(
-        'Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".',
-      );
+      throw new Error(t.setConfig.missingEntities);
     }
     this.config = {
       ...config,
@@ -357,15 +378,38 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.loadHistoryWhenNeeded(this.hassContext);
   }
 
+  private statusText(status: CardStatusDescriptor, isMain: boolean): string {
+    const t = translations(this.language);
+    switch (status.kind) {
+      case "waiting":
+        return t.statuses.waiting;
+      case "loading":
+        return t.statuses.loading;
+      case "ready":
+        return isMain ? t.statuses.readyMain : t.statuses.readyGrid;
+      case "unavailable":
+        return isMain
+          ? t.statuses.unavailableMain(this.formatSelectedDay())
+          : t.statuses.unavailableGrid(this.formatSelectedDay());
+      case "sensorError":
+        return t.statuses.sensorError(status.role, status.problem);
+      case "loadError":
+        return t.statuses.loadError(status.detail);
+      default:
+        return "";
+    }
+  }
+
   render() {
+    const t = translations(this.language);
     return html`
       <ha-card>
-        <nav class="day-navigation" aria-label="Day navigation">
+        <nav class="day-navigation" aria-label=${t.dayNavigation}>
           ${this.renderPrecisionButton()}
           <button
             type="button"
-            aria-label="Previous day"
-            title="Previous day"
+            aria-label=${t.previousDay}
+            title=${t.previousDay}
             @click=${this.showAdjacentDay(-1)}
           >
             <span aria-hidden="true">←</span>
@@ -373,8 +417,8 @@ export class SolarEnergyGraphsCard extends LitElement {
           <button
             type="button"
             class="selected-day"
-            aria-label="Return to today"
-            title="Return to today"
+            aria-label=${t.returnToToday}
+            title=${t.returnToToday}
             @click=${this.showToday}
           >
             <time datetime=${this.selectedDay ?? ""} aria-live="polite">
@@ -383,8 +427,8 @@ export class SolarEnergyGraphsCard extends LitElement {
           </button>
           <button
             type="button"
-            aria-label="Next day"
-            title="Next day"
+            aria-label=${t.nextDay}
+            title=${t.nextDay}
             ?disabled=${this.isTodaySelected()}
             @click=${this.showAdjacentDay(1)}
           >
@@ -393,13 +437,13 @@ export class SolarEnergyGraphsCard extends LitElement {
         </nav>
         <div class="graphs">
           <section class="graph" aria-labelledby="graph-one-title">
-            <h2 id="graph-one-title">Solar Production and Consumption</h2>
+            <h2 id="graph-one-title">${t.graphTitles.productionConsumption}</h2>
             <p
               class="chart-status"
-              role=${this.mainStatus.startsWith("Error") ? "alert" : "status"}
+              role=${this.mainStatus.kind === "unavailable" ? "alert" : "status"}
               aria-live="polite"
             >
-              ${this.mainStatus}
+              ${this.statusText(this.mainStatus, true)}
             </p>
             <div class="chart">
               <div class="chart-plot" data-chart="one"></div>
@@ -407,13 +451,13 @@ export class SolarEnergyGraphsCard extends LitElement {
             </div>
           </section>
           <section class="graph" aria-labelledby="graph-two-title">
-            <h2 id="graph-two-title">Grid Exchange</h2>
+            <h2 id="graph-two-title">${t.graphTitles.gridExchange}</h2>
             <p
               class="chart-status"
-              role=${this.gridStatus.startsWith("Error") ? "alert" : "status"}
+              role=${this.gridStatus.kind === "unavailable" ? "alert" : "status"}
               aria-live="polite"
             >
-              ${this.gridStatus}
+              ${this.statusText(this.gridStatus, false)}
             </p>
             <div class="chart">
               <div class="chart-plot" data-chart="two"></div>
@@ -455,6 +499,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         this.historyData,
         this.hassContext.config.time_zone,
         this.darkMode,
+        this.language,
       );
     }
   }
@@ -482,8 +527,8 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.historyModel = undefined;
     this.cancelStatisticsRefresh();
     const requestId = ++this.historyRequestId;
-    this.mainStatus = LOADING_STATUS;
-    this.gridStatus = this.mainStatus;
+    this.mainStatus = { kind: "loading" };
+    this.gridStatus = { kind: "loading" };
     queueMicrotask(() => {
       if (this.isConnected && requestId === this.historyRequestId) {
         this.requestUpdate();
@@ -498,8 +543,16 @@ export class SolarEnergyGraphsCard extends LitElement {
         entityIds[3] ? hass.states?.[entityIds[3]]?.attributes : null,
       ]);
     } catch (error) {
-      this.mainStatus = `Sensor configuration error: ${errorMessage(error)}`;
-      this.gridStatus = this.mainStatus;
+      const sensorError: CardStatusDescriptor =
+        error instanceof Error && "role" in error && "problem" in error
+          ? {
+              kind: "sensorError",
+              role: error.role as SolarEnergyEntityRole,
+              problem: error.problem as "class" | "unit",
+            }
+          : { kind: "loadError", detail: errorMessage(error) };
+      this.mainStatus = sensorError;
+      this.gridStatus = sensorError;
       queueMicrotask(() => {
         if (this.isConnected && requestId === this.historyRequestId) {
           this.requestUpdate();
@@ -718,21 +771,22 @@ export class SolarEnergyGraphsCard extends LitElement {
     if (model?.highPrecisionAvailable === false) {
       return html``;
     }
+    const t = translations(this.language);
     const highPrecision = model?.precision === "raw";
     const checkFailed = model.highPrecisionCheckError !== undefined;
     return html`
       <button
         type="button"
         aria-label=${highPrecision
-          ? "Use standard precision"
+          ? t.precision.standardAria
           : checkFailed
-          ? "Load high precision (availability check failed)"
-          : "Load high precision"}
+          ? t.precision.highAriaUnavailable
+          : t.precision.highAria}
         title=${highPrecision
-          ? "Standard precision"
+          ? t.precision.standardTitle
           : checkFailed
-          ? `High precision availability check failed: ${model.highPrecisionCheckError}`
-          : "High precision"}
+          ? t.precision.highTitleUnavailable(model.highPrecisionCheckError ?? "")
+          : t.precision.highTitle}
         ?disabled=${model?.loading === true}
         @click=${this.togglePrecision}
       >
@@ -769,8 +823,8 @@ export class SolarEnergyGraphsCard extends LitElement {
       loadError: undefined,
       highPrecisionCheckError: undefined,
     };
-    this.mainStatus = LOADING_STATUS;
-    this.gridStatus = LOADING_STATUS;
+    this.mainStatus = { kind: "loading" };
+    this.gridStatus = { kind: "loading" };
     this.requestUpdate();
 
     try {
@@ -891,25 +945,26 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private updateHistoryStatus(data: EnergyHistoryResponse): void {
     const model = this.historyModel;
+    const t = translations(this.language);
     // Missing series are expected until every request has settled.
     if (model?.loading) {
-      this.mainStatus = LOADING_STATUS;
-      this.gridStatus = LOADING_STATUS;
+      this.mainStatus = { kind: "loading" };
+      this.gridStatus = { kind: "loading" };
       return;
     }
     if (model?.loadError !== undefined) {
-      this.mainStatus = `History loading error: ${model.loadError}`;
-      this.gridStatus = this.mainStatus;
+      this.mainStatus = { kind: "loadError", detail: model.loadError };
+      this.gridStatus = { kind: "loadError", detail: model.loadError };
       return;
     }
     this.mainStatus =
       data.hasProduction && data.hasConsumption
-        ? "Power statistics: mean line with min–max range."
-        : `Error: ${this.formatSelectedDay()} production or consumption history is unavailable.`;
+        ? { kind: "ready" }
+        : { kind: "unavailable" };
     this.gridStatus =
       data.hasGridImport && data.hasGridExport
-        ? "Grid import and export are measured separately."
-        : `Error: ${this.formatSelectedDay()} grid import or export history is unavailable.`;
+        ? { kind: "ready" }
+        : { kind: "unavailable" };
   }
 
   private formatSelectedDay(): string {
@@ -917,7 +972,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       return "";
     }
     const [year, month, day] = this.selectedDay.split("-").map(Number);
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat(translations(this.language).dateLocale, {
       dateStyle: "long",
       timeZone: "UTC",
     }).format(Date.UTC(year, month - 1, day, 12));

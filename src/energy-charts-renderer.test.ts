@@ -63,6 +63,7 @@ class EnergyChartsRenderer extends Renderer {
     containers: readonly [HTMLElement, HTMLElement],
     legendContainers: readonly [HTMLElement, HTMLElement],
     darkMode = false,
+    language: "en" | "fr" = "en",
   ) {
     super(
       containers,
@@ -70,6 +71,7 @@ class EnergyChartsRenderer extends Renderer {
       TEST_HISTORY_DATA,
       "Europe/Paris",
       darkMode,
+      language,
     );
   }
 }
@@ -188,6 +190,38 @@ describe("EnergyChartsRenderer", () => {
           .every((series: { points?: { show?: boolean } }) => series.points?.show === false),
       ).toBe(true);
     }
+  });
+
+  // Formats French axis ticks and cursor timestamps as local 24-hour values.
+  it("uses French chart labels and timezone-aware 24-hour time formatting", () => {
+    new EnergyChartsRenderer(containers, legendContainers, false, "fr");
+
+    const [firstOptions, secondOptions] = createChartMock.mock.calls.map(
+      ([options]) => options,
+    );
+    const axisLabels = firstOptions.axes[0].values(
+      undefined,
+      [
+        Date.parse("2026-10-06T21:30:00Z") / 1000,
+        Date.parse("2026-10-06T22:00:00Z") / 1000,
+        Date.parse("2026-10-06T22:30:00Z") / 1000,
+      ],
+      0,
+      50,
+      1800,
+    );
+    expect(axisLabels).toEqual(["06/10/26", "07/10/26", "00:30"]);
+    expect(
+      firstOptions.series[0].value(
+        undefined,
+        Date.parse("2026-10-06T22:30:00Z") / 1000,
+        0,
+        null,
+      ),
+    ).toBe("07/10/2026 00:30");
+    expect(typeof secondOptions.series[0].value).toBe("function");
+    expect(firstOptions.axes[1].label).toBe("Puissance (W)");
+    expect(firstOptions.series[3].label).toBe("Autoconsommation");
   });
 
   // Builds both energy charts with the shared time scale and sign convention.

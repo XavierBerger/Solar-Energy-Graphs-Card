@@ -1,3 +1,6 @@
+import type { SolarEnergyEntityRole } from "./solar-energy-graphs-card-config";
+import { translations } from "./translations";
+
 const MAX_POWER_STALENESS_SECONDS = 10 * 60;
 
 export interface HomeAssistantHistoryState {
@@ -277,6 +280,18 @@ function finiteOrNull(value: number | null | undefined): number | null {
   return Number.isFinite(value) ? value ?? null : null;
 }
 
+export class SensorConfigurationError extends Error {
+  readonly role: SolarEnergyEntityRole;
+  readonly problem: "class" | "unit";
+
+  constructor(role: SolarEnergyEntityRole, problem: "class" | "unit") {
+    super(translations("en").sensorProblem(role, problem));
+    this.name = "SensorConfigurationError";
+    this.role = role;
+    this.problem = problem;
+  }
+}
+
 /** Validates sensor units; null marks an unconfigured sensor, which is not validated. */
 export function getEnergyUnitScales(
   metadata: readonly [
@@ -291,8 +306,8 @@ export function getEnergyUnitScales(
   return {
     productionToW: powerUnitScale(production, "production"),
     consumptionToW: powerUnitScale(consumption, "consumption"),
-    gridImportToW: powerUnitScale(gridImport, "grid import"),
-    gridExportToW: powerUnitScale(gridExport, "grid export"),
+    gridImportToW: powerUnitScale(gridImport, "grid_import"),
+    gridExportToW: powerUnitScale(gridExport, "grid_export"),
   };
 }
 
@@ -571,7 +586,7 @@ function getLocalMidnightTimestamp(
 
 function powerUnitScale(
   metadata: EnergySensorMetadata | null | undefined,
-  entityName: string,
+  role: SolarEnergyEntityRole,
 ): number {
   if (metadata === null) {
     return 1;
@@ -580,12 +595,10 @@ function powerUnitScale(
     metadata?.device_class !== "power" ||
     metadata.state_class !== "measurement"
   ) {
-    throw new Error(
-      `The ${entityName} sensor must have device_class=power and state_class=measurement.`,
-    );
+    throw new SensorConfigurationError(role, "class");
   }
   if (metadata.unit_of_measurement !== "W" && metadata.unit_of_measurement !== "kW") {
-    throw new Error(`The ${entityName} sensor must use W or kW.`);
+    throw new SensorConfigurationError(role, "unit");
   }
   return metadata.unit_of_measurement === "kW" ? 1000 : 1;
 }
