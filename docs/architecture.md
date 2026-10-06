@@ -69,6 +69,7 @@ All sources live in `src/`. Each module has a test file next to it.
 | `solar-energy-graphs-card-editor.ts` | Lovelace editor: four fixed Home Assistant sensor selectors and config changes                          | yes          | `solar-energy-graphs-card-editor.test.ts` |
 | `solar-energy-graphs-card-config.ts` | Shared TypeScript shape for the four configured entities                                                | no           | via card and editor tests                 |
 | `home-assistant-energy-history.ts`   | Request builders, parsing, unit scaling, local-day windows, merging, projection to uPlot columns        | **none**     | `home-assistant-energy-history.test.ts`   |
+| `translations.ts`                   | Card language detection and the shared English/French strings for UI labels and status text            | no           | `translations.test.ts`                    |
 | `energy-charts-renderer.ts`          | Creates, syncs, zooms, pans, updates, themes, resizes and destroys the two uPlot charts                 | yes (DOM)    | `energy-charts-renderer.test.ts`          |
 | `uplot-adapter.ts`                   | Single import point for uPlot and its CSS (inlined in the shadow DOM)                                   | no           | via the renderer tests                    |
 
@@ -297,7 +298,7 @@ These patterns appear across the element; keep them when you add code.
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Never draw a stale answer          | Every day load increments `historyRequestId`; an async result whose id is outdated, or that arrives after disconnection, is dropped. |
 | One failure does not hide the rest | `Promise.allSettled`; the model keeps what succeeded and the error is shown.                                                         |
-| Tell the user what is wrong        | Each chart has a status line; messages starting with `Error` get `role="alert"`.                                                     |
+| Tell the user what is wrong        | Each chart has a status line; the history-unavailable statuses get `role="alert"`.                                                     |
 | Do not redraw for nothing          | Identical load key, unchanged live samples or unchanged theme return early.                                                          |
 | Fit the container                  | A `ResizeObserver` resizes each chart; zero sizes are ignored.                                                                       |
 | Leave nothing behind               | `disconnectedCallback` cancels both timers and destroys the charts.                                                                  |
@@ -362,7 +363,7 @@ A typical loop:
 | Tune live, refresh, raw tail or probe timing | Constants at the top of `solar-energy-graphs-card.ts`                                                                                                 |
 | Change the precision probe or toggle         | `getSameTimeOfDay` in `home-assistant-energy-history.ts`; `hasHigherPrecisionSamples`, `renderPrecisionButton` and `loadHighPrecision` in the element |
 | Change the wheel zoom or the drag pan        | `computeWheelZoomRange` / `computeDragPanRange` in `energy-charts-renderer.ts`                                                                        |
-| Change the layout, titles or status texts    | `render`, `styles` and `updateHistoryStatus` in `solar-energy-graphs-card.ts`                                                                         |
+| Change the layout, titles or status texts    | `render`, `styles`, `updateHistoryStatus` and `translations.ts`                                                                                       |
 | Change the configuration keys                | `solar-energy-graphs-card-config.ts`, the editor schema, and `setConfig`, then the README                                                             |
 
 Before you start, read the scope and workflow rules in

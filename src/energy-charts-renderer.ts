@@ -1,4 +1,5 @@
 import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
+import { translations, type CardLanguage } from "./translations";
 import {
   createChart,
   uPlot,
@@ -21,6 +22,49 @@ const RANGE_BOUND_SERIES = {
   stroke: "rgba(0, 0, 0, 0)",
   width: 0,
 };
+
+export function createFrenchTimeAxis(
+  timeZone: string,
+): NonNullable<NonNullable<UPlotOptions["axes"]>[number]["values"]> {
+  const dayFormatter = new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    timeZone,
+  });
+  const timeFormatter = new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  });
+
+  return (_self, splits) => {
+    let previousDay: string | undefined;
+    return splits.map((value) => {
+      const date = new Date(value * 1000);
+      const day = dayFormatter.format(date);
+      const label = day !== previousDay ? day : timeFormatter.format(date);
+      previousDay = day;
+      return label;
+    });
+  };
+}
+
+export function createFrenchTimeLegend(
+  timeZone: string,
+): NonNullable<NonNullable<UPlotOptions["series"]>[number]["value"]> {
+  const formatter = new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  });
+  return (_self, value) => formatter.format(new Date(value * 1000));
+}
 
 interface ZeroLineChart {
   scales: Record<string, { min?: number; max?: number }>;
@@ -196,6 +240,7 @@ export class EnergyChartsRenderer {
   };
   private destroyed = false;
   private theme: ChartTheme;
+  private readonly language: CardLanguage;
 
   constructor(
     containers: readonly [HTMLElement, HTMLElement],
@@ -203,7 +248,9 @@ export class EnergyChartsRenderer {
     data: EnergyHistoryResponse,
     timeZone: string,
     darkMode = false,
+    language: CardLanguage = "en",
   ) {
+    this.language = language;
     this.theme = this.readTheme(containers[0], darkMode);
     this.syncGroup = uPlot.sync(
       `solar-energy-graphs-card-${++nextSyncGroupId}`,
@@ -466,25 +513,33 @@ export class EnergyChartsRenderer {
     mainChart: boolean,
     timeZone: string,
   ): UPlotOptions {
-    const axes: UPlotOptions["axes"] = [
+    const t = translations(this.language);
+    const axes = [
       {
         stroke: () => this.theme.text,
         grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
         ticks: { stroke: () => this.theme.text, width: 1 },
         border: { stroke: () => this.theme.grid, width: 1 },
+        ...(this.language === "fr"
+          ? { values: createFrenchTimeAxis(timeZone) }
+          : {}),
       },
       {
         stroke: () => this.theme.text,
         grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
         ticks: { stroke: () => this.theme.text, width: 1 },
         border: { stroke: () => this.theme.grid, width: 1 },
-        label: "Power (W)",
+        label: t.chart.power,
       },
-    ];
+    ] as UPlotOptions["axes"];
 
-    const series: UPlotOptions["series"] = mainChart
+    const series = mainChart
       ? [
-        {},
+        {
+          value: this.language === "fr"
+            ? createFrenchTimeLegend(timeZone)
+            : undefined,
+        },
         {
           label: "",
           class: "hide-helper-legend",
@@ -499,7 +554,7 @@ export class EnergyChartsRenderer {
           width: 0,
         },
         {
-          label: "Self-consumption",
+          label: t.chart.selfConsumption,
           width: 0,
           fill: "#a2d49b",
         },
@@ -515,23 +570,23 @@ export class EnergyChartsRenderer {
           width: 0,
         },
         {
-          label: "Solar production",
+          label: t.chart.solarProduction,
           stroke: "#cc9d00",
           width: 1.25,
         },
         {
-          label: "Consumption",
+          label: t.chart.consumption,
           stroke: "#3b82f6",
           width: 1.25,
         },
         {
-          label: "Grid import",
+          label: t.chart.gridImport,
           class: "legend-values-only",
           show: false,
           fill: "#e96e7d",
         },
         {
-          label: "Grid export",
+          label: t.chart.gridExport,
           class: "legend-values-only",
           show: false,
           fill: "#fbf0a8",
@@ -540,17 +595,21 @@ export class EnergyChartsRenderer {
         { ...RANGE_BOUND_SERIES },
         { ...RANGE_BOUND_SERIES },
         { ...RANGE_BOUND_SERIES },
-      ]
+      ] as UPlotOptions["series"]
       : [
-        {},
         {
-          label: "Grid export (+W)",
+          value: this.language === "fr"
+            ? createFrenchTimeLegend(timeZone)
+            : undefined,
+        },
+        {
+          label: t.chart.gridExportPositive,
           stroke: "#cc9d00",
           width: 1.25,
           fill: "#fbf0a8",
         },
         {
-          label: "Grid import (-W)",
+          label: t.chart.gridImportNegative,
           stroke: "#ef4444",
           width: 1.25,
           fill: "#e96e7d",
@@ -559,7 +618,7 @@ export class EnergyChartsRenderer {
         { ...RANGE_BOUND_SERIES },
         { ...RANGE_BOUND_SERIES },
         { ...RANGE_BOUND_SERIES },
-      ];
+      ] as UPlotOptions["series"];
     const bands: NonNullable<UPlotOptions["bands"]> = mainChart
       ? [
         { series: [3, 2], fill: "#a2d49b" },

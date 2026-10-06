@@ -28,6 +28,7 @@ day in two synchronized Home Assistant graphs.
   to today.
 - Match the active Home Assistant theme and configure the card in the visual
   editor.
+- Automatically switch to French when Home Assistant is set to `fr` or `fr-*`.
 
 ## Requirements
 
@@ -179,6 +180,9 @@ grid. The graph colors and series fills are part of the card design.
 </details>
 
 The two graphs resize with the card's available width and height.
+
+When Home Assistant is set to French, the card uses French labels and dates;
+English remains the fallback for all other languages.
 
 ## Troubleshooting
 

@@ -1,5 +1,6 @@
 import "./solar-energy-graphs-card";
 import "./solar-energy-graphs-card-editor";
+import { cardLanguage, translations } from "./translations";
 
 interface LovelaceCustomCardMetadata {
   type: string;
@@ -19,7 +20,10 @@ if (
   customCardWindow.customCards.push({
     type: "solar-energy-graphs-card",
     name: "Solar Energy Graphs Card",
-    description: "Two synchronized solar energy graphs.",
+    get description() {
+      return translations(cardLanguage(document.documentElement.lang))
+        .cardPickerDescription;
+    },
   });
 }
 
