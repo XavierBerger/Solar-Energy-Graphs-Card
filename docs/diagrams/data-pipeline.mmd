@@ -11,11 +11,11 @@ flowchart TB
     psr --> comb --> stats
   end
 
-  subgraph RAW["Raw branch -- today only"]
+  subgraph RAW["Raw branch -- today, or any day in high precision"]
     direction TB
     attrs["Sensor attributes<br/>unit, device_class, state_class"]
     scales["getEnergyUnitScales<br/>W = 1, kW = 1000, else error"]
-    raw["Compressed raw states, last 15 min<br/>s, lu, lc in seconds"]
+    raw["Compressed raw states<br/>today's last 15 min, or the whole day<br/>s, lu, lc in seconds"]
     live["hass.states<br/>state, last_updated"]
     pcps["parseCompressedPowerSamples<br/>+ replaceSensorHistory"]
     pps["parsePowerState<br/>+ mergeLiveEnergySamples"]
@@ -29,7 +29,7 @@ flowchart TB
 
   proj["projectEnergyHistory(samples, window, now, statistics)"]
   out[/"EnergyHistoryResponse<br/>mainData: 14 columns, gridData: 7 columns<br/>hasProduction, hasConsumption, hasGridImport, hasGridExport"/]
-  stats --> proj
+  stats -- "standard precision only" --> proj
   samples --> proj
   proj --> out
 

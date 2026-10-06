@@ -1,5 +1,5 @@
 flowchart TB
-  dev(["./dev.sh ACTION<br/>install | typecheck | test | build | deploy | diagrams"])
+  dev(["./dev.sh ACTION<br/>install | typecheck | test | coverage<br/>build | mutation | diagrams"])
   img["podman build Containerfile<br/>node 24 alpine + chromium, cached"]
   src["Host: solar-energy-graphs-card/<br/>mounted at /source"]
 
@@ -8,7 +8,7 @@ flowchart TB
     copy["cp -R /source/. ."]
     lock{"package.json + lock<br/>hash changed?"}
     ci["npm ci"]
-    run["npm run ACTION<br/>tsc, vitest, vite, mmdc"]
+    run["npm run ACTION<br/>tsc, vitest, vite, stryker, mmdc"]
     copy --> lock
     lock -- yes --> ci --> run
     lock -- no --> run
@@ -16,19 +16,19 @@ flowchart TB
 
   vol[("Podman volumes<br/>node_modules, npm cache")]
   dist["Host: dist/solar-energy-graphs-card.js"]
+  rep["Host: reports/<br/>coverage, mutation"]
   svg["Host: docs/diagrams/*.svg"]
-  www["Host: docker/ha-config/www/<br/>served by ha-dev as /local/"]
 
   dev --> img --> copy
   src --> copy
   vol <--> run
-  run -- "build, deploy" --> dist
+  run -- "build" --> dist
+  run -- "coverage, mutation" --> rep
   run -- "diagrams" --> svg
-  dist -- "deploy" --> www
 
   classDef host fill:#e8f0fe,stroke:#3b82f6,color:#1f2937
   classDef ct fill:#e3f2df,stroke:#4b9a42,color:#1f2937
   classDef out fill:#fdf6d3,stroke:#cc9d00,color:#1f2937
   class dev,img,src,vol host
   class copy,lock,ci,run ct
-  class dist,svg,www out
+  class dist,rep,svg out

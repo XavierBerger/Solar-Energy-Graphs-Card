@@ -3,11 +3,11 @@ stateDiagram-v2
   [*] --> Today: first set hass, selectedDay = local date
   Today --> PastDay: previous arrow
   PastDay --> PastDay: previous arrow, or next arrow before yesterday
-  PastDay --> Today: next arrow on yesterday, or HA time zone change
+  PastDay --> Today: next arrow on yesterday, date click, or HA time zone change
 
   state "Today -- next arrow disabled" as Today {
     direction LR
-    t1: statistics + last 15 min raw
+    t1: statistics + last 15 min raw, or raw day
     t2: live merge, 250 ms
     t3: statistics refresh, 5 min
     t1 --> t2
@@ -15,7 +15,7 @@ stateDiagram-v2
   }
   state "Past day -- frozen" as PastDay {
     direction LR
-    p1: statistics only
+    p1: statistics, or raw day
     p2: live states ignored, no refresh
     p1 --> p2
   }
