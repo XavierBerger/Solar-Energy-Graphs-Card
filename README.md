@@ -208,19 +208,31 @@ No. This card requires power sensors in `W` or `kW`, with
 
 No. Import and export are configured as separate sensors.
 
-## Contributing
+## Development
 
-See the [contribution guide](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/blob/main/CONTRIBUTION.md).
+### Developer motivation
 
-## AI-assisted development transparency
+In mid-September 2026, support for InfluxDB disappeared for a few weeks. At the time, I was using InfluxDB + Grafana to generate production and consumption graphs for my home, which is equipped with solar panels.
 
-This integration was the opportunity for me, as an experienced developer to explore AI-assisted software development in a language that was new to me. AI was used as a pair programmer, not as an autonomous developer: architectural and implementation decisions remained under human direction and review.
+As a professional developer, I wanted to see if an AI could help me write code in a language I don't know, while retaining full control over what it does: functionality, architecture, and tests (coverage and quality). This experience was very rich. It helped me learn how to better interact with an AI and showed me the benefit of mutation testing to guarantee the quality of the written tests.
+
+Since the results of this development were satisfying, I quickly uninstalled InfluxDB and Grafana in favor of this card, which provides the exact same information faster and taking fa rfewer space : ~140 KB compared to ~1 GB for the same service (Note: I hadn't optimized data retention, something that became unnecessary with this card).
+
+Because this card works quite well, I decided to share it with the community via HACS, and I plan to continue developing it to add more advanced features to better understand how energy is consumed in my home.
+
+### AI-assisted development transparency
+
+As said in developer's motivation, AI was used as a pair programmer, not as an autonomous developer: architectural and implementation decisions remained under human direction and review.
 
 The development process focused on three areas:
 
 * **Design and Software architecture** — The implementation follows established software engineering best practices, with a focus on clean, maintainable, well-structured and testable code, clear separation of responsibilities, and avoiding unnecessary complexity.
 * **Testing** — In addition to unit tests and coverage, mutation testing was used to verify that the test suite could actually detect meaningful regressions.
 * **Real-world validation** — Features were tested not only in isolation, but also on a running Home Assistant installation with real devices before being considered ready.
+
+### Contributing
+
+See the [contribution guide](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/blob/main/CONTRIBUTION.md).
 
 AI assistance was a development tool, not a substitute for maintainer review. As with any software, this does not guarantee that every change is free of issues.
 

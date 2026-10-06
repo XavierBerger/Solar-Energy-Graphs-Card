@@ -7,7 +7,7 @@ sequenceDiagram
   participant R as EnergyChartsRenderer
 
   L->>C: setConfig(config)
-  Note over C: validate the 4 entity IDs<br/>reset model, bump historyRequestId
+  Note over C: each of the 4 roles: entity ID or null<br/>reset model, bump historyRequestId
   L->>C: set hass(hass)
   C->>C: loadHistoryWhenNeeded()
   Note over C: loadKey = timeZone:day:entities<br/>same key -> nothing to do
@@ -19,8 +19,11 @@ sequenceDiagram
   and today only
     C->>WS: history, last 15 min
     WS-->>C: compressed raw states
+  and precision probe
+    C->>WS: history, minute before the same time of day
+    WS-->>C: compressed raw states
   end
-  Note over C: response dropped if historyRequestId changed
+  Note over C: response dropped if historyRequestId changed<br/>probe finer than statistics -> precision button shown
   C->>H: combineStatistics, parseCompressedPowerSamples,<br/>replaceSensorHistory
   C->>H: projectEnergyHistory(samples, window, now, statistics)
   H-->>C: EnergyHistoryResponse
