@@ -48,20 +48,16 @@ Podman volumes. `build` writes the distributable bundle to `dist/`;
 
 ## Changes and tests
 
-- Work from the open items in [`docs/TODO.md`](docs/TODO.md), one item at a
-  time. Check the existing structure and patterns before changing them.
 - Add targeted Vitest tests for every changed behavior. Test pure functions
   without the DOM; mock Home Assistant and uPlot boundaries when testing card
   behavior.
 - Precede each test (`it`/`test`) with a short English comment explaining its
   purpose.
 - Keep source code, comments, commit messages, and developer documentation in
-  English. The user-facing README is in English for HACS; `docs/TODO.md` is in
-  French.
+  English. The user-facing README is in English for HACS; you may find some French
+  in temporary files since this card is developper in France.
 - Keep the project buildable and preserve previously validated behavior. Run
   the relevant checks through `./dev.sh`.
-- Do not mark a TODO item complete until technical checks pass and the user
-  has explicitly confirmed the relevant Home Assistant behavior.
 
 Automated checks do not replace visual confirmation in Home Assistant. Manual
 checks should cover both themes, responsive layout, touch interactions, unit
