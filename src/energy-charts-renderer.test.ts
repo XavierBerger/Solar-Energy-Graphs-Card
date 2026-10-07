@@ -1119,6 +1119,136 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
+  // Pans both charts synchronously when 1-finger horizontal touch drag occurs while zoomed in.
+  it("pans both charts synchronously on 1-finger horizontal touchmove when zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 105, max: 285 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 105, max: 285 });
+  });
+
+  // Allows default vertical page scrolling when 1-finger touch movement is primarily vertical.
+  it("allows native vertical page scrolling during vertical 1-finger touch movement", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 100, clientY: 150 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Allows native page scrolling when 1-finger dragging while not zoomed in.
+  it("allows native page scrolling when 1-finger dragging while not zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+  });
+
+  // Resets active touch state on touchend or touchcancel.
+  it("cleans up active touch state on touchend and touchcancel", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(endEvent, "touches", { value: [] });
+    containers[0].dispatchEvent(endEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+
+    // Test touchcancel as well
+    containers[0].dispatchEvent(startEvent);
+    const cancelEvent = new Event("touchcancel", { bubbles: true, cancelable: true });
+    Object.defineProperty(cancelEvent, "touches", { value: [] });
+    containers[0].dispatchEvent(cancelEvent);
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+  });
+
+  // Removes all touch event listeners when renderer is destroyed.
+  it("removes touch event listeners when destroyed", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    renderer.destroy();
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+  });
+
+
   // Uses dark mode defaults even if the card has no custom theme values.
   it("falls back to dark-mode defaults when CSS variables are missing", () => {
     new EnergyChartsRenderer(containers, legendContainers, true);
