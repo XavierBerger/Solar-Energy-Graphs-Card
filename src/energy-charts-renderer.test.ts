@@ -1248,6 +1248,76 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[0].setScale).not.toHaveBeenCalled();
   });
 
+  // Zooms both charts synchronously when a 2-finger pinch gesture occurs.
+  it("zooms both charts synchronously on 2-finger pinch gesture", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 20000, max: 60000 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [
+        { clientX: 50, clientY: 50 },
+        { clientX: 150, clientY: 50 },
+      ],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [
+        { clientX: 25, clientY: 50 },
+        { clientX: 175, clientY: 50 },
+      ],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    // start distance = 100, move distance = 150 -> ratio = 1.5 -> new duration = 40000/1.5 = 26666.66
+    expect(charts[0].setScale).toHaveBeenCalledOnce();
+    expect(charts[1].setScale).toHaveBeenCalledOnce();
+  });
+
+  // Smoothly transitions from a 2-finger pinch to a 1-finger pan without visual jumps.
+  it("smoothly transitions from 2-finger pinch to 1-finger drag pan", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    // Start with 2 fingers
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [
+        { clientX: 50, clientY: 50 },
+        { clientX: 150, clientY: 50 },
+      ],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    // Lift one finger -> 1 touch left
+    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(endEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(endEvent);
+
+    charts[0].setScale.mockClear();
+
+    // Now move remaining finger horizontally
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 10, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledOnce();
+  });
+
+
+
 
   // Uses dark mode defaults even if the card has no custom theme values.
   it("falls back to dark-mode defaults when CSS variables are missing", () => {

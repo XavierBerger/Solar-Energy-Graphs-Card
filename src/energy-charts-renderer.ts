@@ -357,9 +357,13 @@ export class EnergyChartsRenderer {
     startX: number;
     startY: number;
     isPan: boolean;
+    isPinch: boolean;
     rangeAtStart: TimeRange;
     dayWindow: TimeRange;
     plotWidth: number;
+    plotLeft: number;
+    startDistance?: number;
+    startRange?: TimeRange;
   };
   private destroyed = false;
   private theme: ChartTheme;
@@ -636,7 +640,7 @@ export class EnergyChartsRenderer {
   }
 
   private handleTouchStart(event: TouchEvent, targetIndex: number): void {
-    if (this.destroyed || event.touches.length !== 1) {
+    if (this.destroyed || event.touches.length === 0) {
       return;
     }
 
@@ -657,29 +661,112 @@ export class EnergyChartsRenderer {
     const currentMax = scales.x?.max ?? dayEnd;
 
     const overlay = target.chart.over ?? target.element;
-    const rect = overlay.getBoundingClientRect?.() ?? { width: 0 };
+    const rect = overlay.getBoundingClientRect?.() ?? { left: 0, width: 0 };
     if (!rect.width || rect.width <= 0) {
       return;
     }
 
-    const touch = event.touches[0];
-    this.touchState = {
-      targetIndex,
-      startX: touch.clientX,
-      startY: touch.clientY,
-      isPan: false,
-      rangeAtStart: { min: currentMin, max: currentMax },
-      dayWindow: { min: dayStart, max: dayEnd },
-      plotWidth: rect.width,
-    };
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      this.touchState = {
+        targetIndex,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        isPan: false,
+        isPinch: false,
+        rangeAtStart: { min: currentMin, max: currentMax },
+        dayWindow: { min: dayStart, max: dayEnd },
+        plotWidth: rect.width,
+        plotLeft: rect.left ?? 0,
+      };
+    } else if (event.touches.length === 2) {
+      const t1 = event.touches[0];
+      const t2 = event.touches[1];
+      const startDistance = computeTouchDistance(t1, t2);
+
+      this.touchState = {
+        targetIndex,
+        startX: t1.clientX,
+        startY: t1.clientY,
+        isPan: false,
+        isPinch: true,
+        rangeAtStart: { min: currentMin, max: currentMax },
+        dayWindow: { min: dayStart, max: dayEnd },
+        plotWidth: rect.width,
+        plotLeft: rect.left ?? 0,
+        startDistance,
+        startRange: { min: currentMin, max: currentMax },
+      };
+    }
   }
 
   private handleTouchMove(event: TouchEvent, targetIndex: number): void {
-    if (this.destroyed || !this.touchState || this.touchState.targetIndex !== targetIndex) {
+    if (
+      this.destroyed ||
+      !this.touchState ||
+      this.touchState.targetIndex !== targetIndex
+    ) {
       return;
     }
 
-    if (event.touches.length === 1) {
+    if (event.touches.length === 2) {
+      const t1 = event.touches[0];
+      const t2 = event.touches[1];
+      const currentDistance = computeTouchDistance(t1, t2);
+
+      if (
+        !this.touchState.isPinch ||
+        !this.touchState.startDistance ||
+        !this.touchState.startRange
+      ) {
+        const { scales } = this.charts[targetIndex].chart;
+        const currentMin = scales.x?.min ?? this.touchState.dayWindow.min;
+        const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
+        this.touchState.isPinch = true;
+        this.touchState.isPan = false;
+        this.touchState.startDistance = currentDistance;
+        this.touchState.startRange = { min: currentMin, max: currentMax };
+        return;
+      }
+
+      if (this.touchState.startDistance <= 0 || currentDistance <= 0) {
+        return;
+      }
+
+      event.preventDefault();
+      const distanceRatio = currentDistance / this.touchState.startDistance;
+      const midpointX = computeTouchMidpointX(t1, t2);
+      const cursorPct =
+        this.touchState.plotWidth > 0
+          ? (midpointX - this.touchState.plotLeft) / this.touchState.plotWidth
+          : 0.5;
+
+      const newRange = computePinchZoomRange(
+        this.touchState.startRange,
+        this.touchState.dayWindow,
+        cursorPct,
+        distanceRatio,
+      );
+
+      if (newRange) {
+        this.charts.forEach(({ chart }) => {
+          chart.setScale("x", newRange);
+        });
+      }
+    } else if (event.touches.length === 1) {
+      if (this.touchState.isPinch) {
+        const touch = event.touches[0];
+        const { scales } = this.charts[targetIndex].chart;
+        const currentMin = scales.x?.min ?? this.touchState.dayWindow.min;
+        const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
+        this.touchState.isPinch = false;
+        this.touchState.isPan = false;
+        this.touchState.startX = touch.clientX;
+        this.touchState.startY = touch.clientY;
+        this.touchState.rangeAtStart = { min: currentMin, max: currentMax };
+        return;
+      }
+
       const touch = event.touches[0];
       const deltaX = touch.clientX - this.touchState.startX;
       const deltaY = touch.clientY - this.touchState.startY;
@@ -720,6 +807,16 @@ export class EnergyChartsRenderer {
     if (this.touchState && this.touchState.targetIndex === targetIndex) {
       if (event.touches.length === 0) {
         this.touchState = undefined;
+      } else if (event.touches.length === 1 && this.touchState.isPinch) {
+        const touch = event.touches[0];
+        const { scales } = this.charts[targetIndex].chart;
+        const currentMin = scales.x?.min ?? this.touchState.dayWindow.min;
+        const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
+        this.touchState.isPinch = false;
+        this.touchState.isPan = false;
+        this.touchState.startX = touch.clientX;
+        this.touchState.startY = touch.clientY;
+        this.touchState.rangeAtStart = { min: currentMin, max: currentMax };
       }
     }
   }
