@@ -7,6 +7,10 @@ import {
   type UPlotOptions,
 } from "./uplot-adapter";
 
+// Type pour les fonctions de formatage des axes et légendes uPlot
+type UPlotTimeFormatter = (self: unknown, value: number) => string;
+type UPlotAxisFormatter = (self: unknown, splits: number[]) => string[];
+
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
 let nextSyncGroupId = 0;
@@ -23,26 +27,59 @@ const RANGE_BOUND_SERIES = {
   width: 0,
 };
 
-export function createFrenchTimeAxis(
+// ════════════════════════════════════════
+// UTILITAIRES PARTAGÉS (toutes langues)
+// ════════════════════════════════════
+
+/** Returns true for timestamp 0 (Unix epoch), null, undefined, NaN, or Infinity. */
+function isInvalidTimestamp(value: unknown): boolean {
+  if (value === 0 || value == null) return true;
+  return typeof value === "number" && !Number.isFinite(value);
+}
+
+/**
+ * Formats a timestamp with the given locale, or returns "-" for invalid/zero values.
+ * uPlot passes 0 when no point is under the cursor, which would display as 1970-01-01.
+ */
+function formatTimeOrDefault(
+  value: unknown,
   timeZone: string,
-): NonNullable<NonNullable<UPlotOptions["axes"]>[number]["values"]> {
-  const dayFormatter = new Intl.DateTimeFormat("fr-FR", {
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  if (isInvalidTimestamp(value)) return "-";
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone }).format(
+    new Date((value as number) * 1000),
+  );
+}
+
+// ════════════════════════════════════════
+// FONCTIONS GÉNÉRIQUES POUR LES AXES ET LÉGENDES TEMPORELS
+// ════════════════════════════════════════
+
+export function createTimeAxis(
+  timeZone: string,
+  locale: string,
+  hourCycle: "h11" | "h12" | "h23" | "h24" = "h23",
+): UPlotAxisFormatter {
+  const dayFormatter = new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
     timeZone,
   });
-  const timeFormatter = new Intl.DateTimeFormat("fr-FR", {
+  const timeFormatter = new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
-    hourCycle: "h23",
+    hourCycle,
     timeZone,
   });
 
   return (_self, splits) => {
     let previousDay: string | undefined;
     return splits.map((value) => {
-      const date = new Date(value * 1000);
+      if (isInvalidTimestamp(value)) return "-";
+      const date = new Date((value as number) * 1000);
       const day = dayFormatter.format(date);
       const label = day !== previousDay ? day : timeFormatter.format(date);
       previousDay = day;
@@ -51,19 +88,20 @@ export function createFrenchTimeAxis(
   };
 }
 
-export function createFrenchTimeLegend(
+export function createTimeLegend(
   timeZone: string,
-): NonNullable<NonNullable<UPlotOptions["series"]>[number]["value"]> {
-  const formatter = new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone,
-  });
-  return (_self, value) => formatter.format(new Date(value * 1000));
+  locale: string,
+  hourCycle: "h11" | "h12" | "h23" | "h24" = "h23",
+): UPlotTimeFormatter {
+  return (_self, value) =>
+    formatTimeOrDefault(value, timeZone, locale, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle,
+    });
 }
 
 interface ZeroLineChart {
@@ -507,6 +545,14 @@ export class EnergyChartsRenderer {
       this.theme.selection;
   }
 
+  private getTimeFormatters(timeZone: string) {
+    const t = translations(this.language);
+    return {
+      axis: createTimeAxis(timeZone, t.dateLocale, t.hourCycle),
+      legend: createTimeLegend(timeZone, t.dateLocale, t.hourCycle),
+    };
+  }
+
   private createOptions(
     element: HTMLElement,
     legendContainer: HTMLElement,
@@ -514,15 +560,14 @@ export class EnergyChartsRenderer {
     timeZone: string,
   ): UPlotOptions {
     const t = translations(this.language);
+    const { axis, legend } = this.getTimeFormatters(timeZone);
     const axes = [
       {
         stroke: () => this.theme.text,
         grid: { stroke: () => this.theme.grid, width: this.theme.gridWidth },
         ticks: { stroke: () => this.theme.text, width: 1 },
         border: { stroke: () => this.theme.grid, width: 1 },
-        ...(this.language === "fr"
-          ? { values: createFrenchTimeAxis(timeZone) }
-          : {}),
+        values: axis,
       },
       {
         stroke: () => this.theme.text,
@@ -536,9 +581,8 @@ export class EnergyChartsRenderer {
     const series = mainChart
       ? [
         {
-          value: this.language === "fr"
-            ? createFrenchTimeLegend(timeZone)
-            : undefined,
+          label: t.chart.time,
+          value: legend,
         },
         {
           label: "",
@@ -598,9 +642,8 @@ export class EnergyChartsRenderer {
       ] as UPlotOptions["series"]
       : [
         {
-          value: this.language === "fr"
-            ? createFrenchTimeLegend(timeZone)
-            : undefined,
+          label: t.chart.time,
+          value: legend,
         },
         {
           label: t.chart.gridExportPositive,

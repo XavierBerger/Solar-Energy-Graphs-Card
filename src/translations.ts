@@ -1,6 +1,7 @@
 import type { SolarEnergyEntityRole } from "./solar-energy-graphs-card-config";
 
 export type CardLanguage = "en" | "fr";
+export type HourCycle = "h11" | "h12" | "h23" | "h24";
 
 export function cardLanguage(language?: string): CardLanguage {
   return /^fr(?:-|$)/.test(language ?? "") ? "fr" : "en";
@@ -35,7 +36,8 @@ export interface CardTranslations {
   };
   sensorLabels: Record<SolarEnergyEntityRole, string>;
   sensorProblem: (role: SolarEnergyEntityRole, problem: "class" | "unit") => string;
-  dateLocale: "en-US" | "fr-FR";
+  dateLocale: string;
+  hourCycle: HourCycle;
   chart: {
     power: string;
     time: string;
@@ -129,6 +131,7 @@ export const EN: CardTranslations = {
     return `The ${subject} sensor must use W or kW.`;
   },
   dateLocale: "en-US",
+  hourCycle: "h12",
   chart: {
     power: "Power (W)",
     time: "Time",
@@ -193,6 +196,7 @@ export const FR: CardTranslations = {
     return `Le capteur ${subject} doit utiliser W ou kW.`;
   },
   dateLocale: "fr-FR",
+  hourCycle: "h23",
   chart: {
     power: "Puissance (W)",
     time: "Heure",

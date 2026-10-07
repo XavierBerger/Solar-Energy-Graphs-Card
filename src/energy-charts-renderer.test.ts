@@ -21,6 +21,8 @@ vi.mock("./uplot-adapter", () => ({
 import {
   computeDragPanRange,
   computeWheelZoomRange,
+  createTimeAxis,
+  createTimeLegend,
   drawZeroLine,
   EnergyChartsRenderer as Renderer,
 } from "./energy-charts-renderer";
@@ -222,6 +224,32 @@ describe("EnergyChartsRenderer", () => {
     expect(typeof secondOptions.series[0].value).toBe("function");
     expect(firstOptions.axes[1].label).toBe("Puissance (W)");
     expect(firstOptions.series[3].label).toBe("Autoconsommation");
+  });
+
+  // Returns "-" for invalid timestamps (0, null, undefined, NaN, Infinity) in French mode.
+  it("returns dash for invalid timestamps in French legend and axis", () => {
+    new EnergyChartsRenderer(containers, legendContainers, false, "fr");
+
+    const [firstOptions] = createChartMock.mock.calls.map(
+      ([options]) => options,
+    );
+
+    // Test axis values formatter with invalid timestamps
+    const invalidAxisLabels = firstOptions.axes[0].values(
+      undefined,
+      [0, null, undefined, Number.NaN, Number.POSITIVE_INFINITY],
+      0,
+      50,
+      1800,
+    );
+    expect(invalidAxisLabels).toEqual(["-", "-", "-", "-", "-"]);
+
+    // Test legend value formatter with invalid timestamps
+    expect(firstOptions.series[0].value(undefined, 0, 0, null)).toBe("-");
+    expect(firstOptions.series[0].value(undefined, null, 0, null)).toBe("-");
+    expect(firstOptions.series[0].value(undefined, undefined, 0, null)).toBe("-");
+    expect(firstOptions.series[0].value(undefined, Number.NaN, 0, null)).toBe("-");
+    expect(firstOptions.series[0].value(undefined, Number.POSITIVE_INFINITY, 0, null)).toBe("-");
   });
 
   // Builds both energy charts with the shared time scale and sign convention.
@@ -1424,5 +1452,81 @@ describe("computeDragPanRange", () => {
     const atEnd = { min: 46400, max: 86400 };
     // Dragging left should go later, but already at day end.
     expect(computeDragPanRange(atEnd, dayWindow, -50, 200)).toBeUndefined();
+  });
+});
+
+// ════════════════════════════════════════
+// TESTS DES FORMATTEURS DE TEMPS GÉNÉRIQUES
+// ════════════════════════════════════════
+
+describe("Time formatters", () => {
+  const timeZone = "Europe/Paris";
+
+  describe("createTimeAxis", () => {
+    it("returns dash for timestamp 0 (epoch) with 24h format", () => {
+      const axis = createTimeAxis(timeZone, "fr-FR", "h23");
+      const labels = axis(undefined, [0]);
+      expect(labels).toEqual(["-"]);
+    });
+
+    it("returns dash for NaN and Infinity with 24h format", () => {
+      const axis = createTimeAxis(timeZone, "fr-FR", "h23");
+      const labels = axis(undefined, [Number.NaN, Number.POSITIVE_INFINITY]);
+      expect(labels).toEqual(["-", "-"]);
+    });
+
+    it("formats valid timestamps in 24h format for French locale", () => {
+      const axis = createTimeAxis(timeZone, "fr-FR", "h23");
+      // 2026-10-06T22:30:00Z = 00:30 le 07/10/26 à Paris (UTC+2 en été)
+      const timestamp = Date.parse("2026-10-06T22:30:00Z") / 1000;
+      const labels = axis(undefined, [timestamp]);
+      expect(labels[0]).toBe("07/10/26");
+    });
+
+    it("returns dash for timestamp 0 (epoch) with 12h format", () => {
+      const axis = createTimeAxis(timeZone, "en-US", "h12");
+      const labels = axis(undefined, [0]);
+      expect(labels).toEqual(["-"]);
+    });
+
+    it("formats valid timestamps in 12h format for English locale", () => {
+      // Use UTC timezone to avoid DST offsets
+      const axis = createTimeAxis("UTC", "en-US", "h12");
+      const timestamp = Date.parse("2026-10-06T10:30:00Z") / 1000;
+      const labels = axis(undefined, [timestamp]);
+      expect(labels[0]).toBe("10/06/26");
+    });
+  });
+
+  describe("createTimeLegend", () => {
+    it("returns dash for timestamp 0 (epoch) with 24h format", () => {
+      const legend = createTimeLegend(timeZone, "fr-FR", "h23");
+      expect(legend(undefined, 0)).toBe("-");
+    });
+
+    it("returns dash for NaN and Infinity with 24h format", () => {
+      const legend = createTimeLegend(timeZone, "fr-FR", "h23");
+      expect(legend(undefined, Number.NaN)).toBe("-");
+      expect(legend(undefined, Number.POSITIVE_INFINITY)).toBe("-");
+    });
+
+    it("formats valid timestamps in 24h format for French locale", () => {
+      const legend = createTimeLegend(timeZone, "fr-FR", "h23");
+      const timestamp = Date.parse("2026-10-06T22:30:00Z") / 1000;
+      expect(legend(undefined, timestamp)).toBe("07/10/2026 00:30");
+    });
+
+    it("returns dash for timestamp 0 (epoch) with 12h format", () => {
+      const legend = createTimeLegend(timeZone, "en-US", "h12");
+      expect(legend(undefined, 0)).toBe("-");
+    });
+
+    it("formats valid timestamps in 12h format for English locale", () => {
+      // Use UTC timezone to avoid DST offsets
+      const legend = createTimeLegend("UTC", "en-US", "h12");
+      const timestamp = Date.parse("2026-10-06T22:30:00Z") / 1000;
+      // 22:30 UTC = 10:30 PM in 12-hour format (year is numeric, not 2-digit)
+      expect(legend(undefined, timestamp)).toBe("10/06/2026, 10:30 PM");
+    });
   });
 });
