@@ -337,6 +337,13 @@ export class EnergyChartsRenderer {
     element: HTMLElement;
     listener: (event: MouseEvent) => void;
   }> = [];
+  private readonly touchListeners: Array<{
+    element: HTMLElement;
+    onTouchStart: (event: TouchEvent) => void;
+    onTouchMove: (event: TouchEvent) => void;
+    onTouchEnd: (event: TouchEvent) => void;
+    onTouchCancel: (event: TouchEvent) => void;
+  }> = [];
   private dragState?: {
     startX: number;
     rangeAtStart: TimeRange;
@@ -344,6 +351,15 @@ export class EnergyChartsRenderer {
     plotWidth: number;
     onMove: (event: MouseEvent) => void;
     onUp: (event: MouseEvent) => void;
+  };
+  private touchState?: {
+    targetIndex: number;
+    startX: number;
+    startY: number;
+    isPan: boolean;
+    rangeAtStart: TimeRange;
+    dayWindow: TimeRange;
+    plotWidth: number;
   };
   private destroyed = false;
   private theme: ChartTheme;
@@ -386,6 +402,32 @@ export class EnergyChartsRenderer {
       };
       element.addEventListener("mousedown", onMouseDown);
       this.dragListeners.push({ element, listener: onMouseDown });
+
+      const onTouchStart = (event: TouchEvent) => {
+        this.handleTouchStart(event, index);
+      };
+      const onTouchMove = (event: TouchEvent) => {
+        this.handleTouchMove(event, index);
+      };
+      const onTouchEnd = (event: TouchEvent) => {
+        this.handleTouchEnd(event, index);
+      };
+      const onTouchCancel = (event: TouchEvent) => {
+        this.handleTouchEnd(event, index);
+      };
+
+      element.addEventListener("touchstart", onTouchStart, { passive: false });
+      element.addEventListener("touchmove", onTouchMove, { passive: false });
+      element.addEventListener("touchend", onTouchEnd);
+      element.addEventListener("touchcancel", onTouchCancel);
+      this.touchListeners.push({
+        element,
+        onTouchStart,
+        onTouchMove,
+        onTouchEnd,
+        onTouchCancel,
+      });
+
       return { element, legendElement, chart };
     });
   }
@@ -405,6 +447,16 @@ export class EnergyChartsRenderer {
       element.removeEventListener("mousedown", listener);
     });
     this.dragListeners.length = 0;
+    this.touchListeners.forEach(
+      ({ element, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel }) => {
+        element.removeEventListener("touchstart", onTouchStart);
+        element.removeEventListener("touchmove", onTouchMove);
+        element.removeEventListener("touchend", onTouchEnd);
+        element.removeEventListener("touchcancel", onTouchCancel);
+      },
+    );
+    this.touchListeners.length = 0;
+    this.touchState = undefined;
     if (this.dragState) {
       document.removeEventListener("mousemove", this.dragState.onMove);
       document.removeEventListener("mouseup", this.dragState.onUp);
@@ -415,6 +467,7 @@ export class EnergyChartsRenderer {
       legendElement.replaceChildren();
     });
   }
+
 
   updateData(data: EnergyHistoryResponse): void {
     if (this.destroyed) {
@@ -580,6 +633,95 @@ export class EnergyChartsRenderer {
     document.removeEventListener("mousemove", this.dragState.onMove);
     document.removeEventListener("mouseup", this.dragState.onUp);
     this.dragState = undefined;
+  }
+
+  private handleTouchStart(event: TouchEvent, targetIndex: number): void {
+    if (this.destroyed || event.touches.length !== 1) {
+      return;
+    }
+
+    const target = this.charts[targetIndex];
+    if (!target) {
+      return;
+    }
+
+    const { data, scales } = target.chart;
+    const xData = data[0];
+    if (!xData || xData.length < 2) {
+      return;
+    }
+
+    const dayStart = xData[0];
+    const dayEnd = xData[xData.length - 1];
+    const currentMin = scales.x?.min ?? dayStart;
+    const currentMax = scales.x?.max ?? dayEnd;
+
+    const overlay = target.chart.over ?? target.element;
+    const rect = overlay.getBoundingClientRect?.() ?? { width: 0 };
+    if (!rect.width || rect.width <= 0) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    this.touchState = {
+      targetIndex,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      isPan: false,
+      rangeAtStart: { min: currentMin, max: currentMax },
+      dayWindow: { min: dayStart, max: dayEnd },
+      plotWidth: rect.width,
+    };
+  }
+
+  private handleTouchMove(event: TouchEvent, targetIndex: number): void {
+    if (this.destroyed || !this.touchState || this.touchState.targetIndex !== targetIndex) {
+      return;
+    }
+
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - this.touchState.startX;
+      const deltaY = touch.clientY - this.touchState.startY;
+
+      const currentDuration =
+        this.touchState.rangeAtStart.max - this.touchState.rangeAtStart.min;
+      const dayDuration =
+        this.touchState.dayWindow.max - this.touchState.dayWindow.min;
+      const zoomed = currentDuration < dayDuration;
+
+      if (
+        !this.touchState.isPan &&
+        zoomed &&
+        isHorizontalTouchGesture(deltaX, deltaY)
+      ) {
+        this.touchState.isPan = true;
+      }
+
+      if (this.touchState.isPan) {
+        event.preventDefault();
+        const newRange = computeDragPanRange(
+          this.touchState.rangeAtStart,
+          this.touchState.dayWindow,
+          deltaX,
+          this.touchState.plotWidth,
+        );
+
+        if (newRange) {
+          this.charts.forEach(({ chart }) => {
+            chart.setScale("x", newRange);
+          });
+        }
+      }
+    }
+  }
+
+  private handleTouchEnd(event: TouchEvent, targetIndex: number): void {
+    if (this.touchState && this.touchState.targetIndex === targetIndex) {
+      if (event.touches.length === 0) {
+        this.touchState = undefined;
+      }
+    }
   }
 
   refreshTheme(darkMode: boolean): void {
