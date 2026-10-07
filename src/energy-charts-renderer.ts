@@ -242,6 +242,75 @@ export function computeDragPanRange(
   return { min: newMin, max: newMax };
 }
 
+export interface TouchPoint {
+  clientX: number;
+  clientY: number;
+}
+
+/** Computes the distance between two touch points in pixels. */
+export function computeTouchDistance(t1: TouchPoint, t2: TouchPoint): number {
+  const dx = t2.clientX - t1.clientX;
+  const dy = t2.clientY - t1.clientY;
+  return Math.hypot(dx, dy);
+}
+
+/** Computes the horizontal midpoint position in pixels for two touch points. */
+export function computeTouchMidpointX(t1: TouchPoint, t2: TouchPoint): number {
+  return (t1.clientX + t2.clientX) / 2;
+}
+
+/** Returns true if a touch displacement vector is primarily horizontal. */
+export function isHorizontalTouchGesture(deltaX: number, deltaY: number): boolean {
+  return Math.abs(deltaX) > Math.abs(deltaY);
+}
+
+/** Computes the new horizontal time range when zooming with a two-finger pinch gesture. */
+export function computePinchZoomRange(
+  currentRange: TimeRange,
+  dayWindow: TimeRange,
+  cursorPct: number,
+  distanceRatio: number,
+): TimeRange | undefined {
+  if (distanceRatio <= 0 || distanceRatio === 1) {
+    return undefined;
+  }
+
+  const { min: currentMin, max: currentMax } = currentRange;
+  const { min: dayStart, max: dayEnd } = dayWindow;
+  const dayDuration = dayEnd - dayStart;
+  const currentDuration = currentMax - currentMin;
+
+  if (dayDuration <= 0 || currentDuration <= 0) {
+    return undefined;
+  }
+
+  const clampedPct = Math.max(0, Math.min(1, cursorPct));
+  const pivot = currentMin + clampedPct * currentDuration;
+
+  const newDuration = currentDuration / distanceRatio;
+
+  if (newDuration >= dayDuration) {
+    if (currentMin === dayStart && currentMax === dayEnd) {
+      return undefined;
+    }
+    return { min: dayStart, max: dayEnd };
+  }
+
+  let newMin = pivot - clampedPct * newDuration;
+  let newMax = newMin + newDuration;
+
+  if (newMin < dayStart) {
+    newMin = dayStart;
+    newMax = dayStart + newDuration;
+  } else if (newMax > dayEnd) {
+    newMax = dayEnd;
+    newMin = dayEnd - newDuration;
+  }
+
+  return { min: newMin, max: newMax };
+}
+
+
 interface ChartTheme {
   text: string;
   grid: string;
