@@ -458,7 +458,7 @@ export function projectEnergyHistory(
     directSolar.map((value, index) =>
       value ?? (consumption.mean[index] === null ? null : 0),
     ),
-    consumption.mean.slice(),
+    consumption.mean,
     production.mean.slice(),
     consumption.mean.slice(),
     importMean,
@@ -564,6 +564,7 @@ function getLocalMidnightTimestamp(
   const targetWallTime = Date.UTC(year, month - 1, day);
   let candidate = targetWallTime;
 
+  // A candidate already at midnight gets a zero correction.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const parts = getZonedDateParts(new Date(candidate), timeZone);
     const observedWallTime = Date.UTC(
@@ -574,11 +575,7 @@ function getLocalMidnightTimestamp(
       parts.minute,
       parts.second,
     );
-    const correction = targetWallTime - observedWallTime;
-    candidate += correction;
-    if (correction === 0) {
-      break;
-    }
+    candidate += targetWallTime - observedWallTime;
   }
 
   return candidate / 1000;
@@ -622,8 +619,8 @@ export function parseCompressedPowerSamples(
   unitScale: number,
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
-    const timestamp = state.lu ?? state.lc;
-    if (timestamp === undefined || !Number.isFinite(timestamp)) {
+    const timestamp = state.lu ?? state.lc ?? Number.NaN;
+    if (!Number.isFinite(timestamp)) {
       return [];
     }
     return [{ timestamp, value: parsePowerValue(state.s, unitScale) }];
@@ -642,11 +639,8 @@ function parsePowerValue(state: string, unitScale: number): number | null {
 }
 
 function parseTimestampSeconds(value: string): number {
+  // An unparsable value stays NaN through the sum below.
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) {
-    return Number.NaN;
-  }
-
   const fractionalSeconds = /\.(\d+)(?=Z|[+-]\d{2}:?\d{2}$)/i.exec(value)?.[1];
   const subMillisecondSeconds = fractionalSeconds
     ? Number(`0.${fractionalSeconds.slice(3)}`) / 1000
