@@ -254,31 +254,29 @@ export class SolarEnergyGraphsCard extends LitElement {
       min-height: 0;
     }
 
-    .chart-legend {
-      flex: 0 0 auto;
-      max-width: 100%;
-      min-width: 0;
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-
-    .chart-legend .u-legend {
-      margin: 0 auto;
-      max-width: 100%;
-      width: max-content;
-      white-space: nowrap;
-    }
-
     .chart .u-legend .u-series.hide-helper-legend {
       display: none;
     }
 
-    .chart .u-legend .u-series.legend-values-only {
-      pointer-events: none;
-    }
-
     .chart .u-legend .u-series.legend-values-only > * {
       opacity: 1;
+    }
+
+    .chart .u-over .u-legend {
+      background: color-mix(in srgb, var(--ha-card-background, var(--card-background-color, #fff)) 85%, transparent);
+      border-radius: 0.25rem;
+      left: 0.25rem;
+      pointer-events: none;
+      position: absolute;
+      text-align: left;
+      top: 0.25rem;
+      white-space: nowrap;
+      z-index: 1;
+    }
+
+    .chart .u-over .u-legend tr {
+      display: block;
+      margin-right: 0;
     }
 
     .chart-status {
@@ -447,7 +445,6 @@ export class SolarEnergyGraphsCard extends LitElement {
             </p>
             <div class="chart">
               <div class="chart-plot" data-chart="one"></div>
-              <div class="chart-legend" data-legend="one"></div>
             </div>
           </section>
           <section class="graph" aria-labelledby="graph-two-title">
@@ -461,7 +458,6 @@ export class SolarEnergyGraphsCard extends LitElement {
             </p>
             <div class="chart">
               <div class="chart-plot" data-chart="two"></div>
-              <div class="chart-legend" data-legend="two"></div>
             </div>
           </section>
         </div>
@@ -485,17 +481,10 @@ export class SolarEnergyGraphsCard extends LitElement {
     const second = this.shadowRoot?.querySelector<HTMLElement>(
       '[data-chart="two"]',
     );
-    const firstLegend = this.shadowRoot?.querySelector<HTMLElement>(
-      '[data-legend="one"]',
-    );
-    const secondLegend = this.shadowRoot?.querySelector<HTMLElement>(
-      '[data-legend="two"]',
-    );
 
-    if (first && second && firstLegend && secondLegend) {
+    if (first && second) {
       this.chartRenderer = new EnergyChartsRenderer(
         [first, second],
-        [firstLegend, secondLegend],
         this.historyData,
         this.hassContext.config.time_zone,
         this.darkMode,

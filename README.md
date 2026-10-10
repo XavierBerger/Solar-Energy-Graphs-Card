@@ -110,8 +110,9 @@ means as lines. Yellow represents solar production; blue represents
 consumption. A pale min–max range accompanies each statistical series. The
 filled green area estimates direct self-consumption as the lower of production
 and consumption; the red area represents consumption above that estimate.
-When you move the cursor, the legend also shows the separately measured grid
-import and export values.
+Moving the cursor over either graph shows a legend in the top-left corner of
+the upper graph, with the time and one line per series, including the
+separately measured grid import and export values.
 
 **Grid Exchange** shows export above zero in yellow and import below zero in
 red. Import is negated for display only; the card reads import and export from

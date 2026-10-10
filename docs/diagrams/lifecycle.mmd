@@ -28,7 +28,7 @@ sequenceDiagram
   C->>H: projectEnergyHistory(samples, window, now, statistics)
   H-->>C: EnergyHistoryResponse
   alt first data
-    C->>R: new EnergyChartsRenderer(containers, legends, data)
+    C->>R: new EnergyChartsRenderer(containers, data)
   else charts exist
     C->>R: updateData(data)
   end

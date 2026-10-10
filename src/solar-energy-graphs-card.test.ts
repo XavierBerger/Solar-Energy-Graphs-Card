@@ -22,7 +22,6 @@ import { SolarEnergyGraphsCardEditor } from "./solar-energy-graphs-card-editor";
 const { rendererInstances } = vi.hoisted(() => ({
   rendererInstances: [] as Array<{
     containers: HTMLElement[];
-    legendContainers: HTMLElement[];
     data: EnergyHistoryResponse;
     timeZone: string;
     darkMode: boolean;
@@ -40,7 +39,6 @@ vi.mock("./energy-charts-renderer", () => ({
 
     constructor(
       readonly containers: HTMLElement[],
-      readonly legendContainers: HTMLElement[],
       readonly data: EnergyHistoryResponse,
       readonly timeZone: string,
       readonly darkMode: boolean,
@@ -405,7 +403,12 @@ describe("SolarEnergyGraphsCard", () => {
     await mountConfiguredCard(card);
 
     expect(card.shadowRoot?.querySelectorAll(".chart-plot")).toHaveLength(2);
-    expect(card.shadowRoot?.querySelectorAll(".chart-legend")).toHaveLength(2);
+    expect(card.shadowRoot?.querySelectorAll(".chart-legend")).toHaveLength(0);
+    expect(
+      Array.from(card.shadowRoot?.querySelectorAll(".chart") ?? [], (chart) =>
+        Array.from(chart.children, (child) => child.className),
+      ),
+    ).toEqual([["chart-plot"], ["chart-plot"]]);
     expect(card.shadowRoot?.textContent).toContain(
       "Solar Production and Consumption",
     );
@@ -574,23 +577,24 @@ describe("SolarEnergyGraphsCard", () => {
     );
   });
 
-  // Keeps each legend in its own layout row without hiding numeric legend values.
-  it("reserves an in-flow row for each chart legend", () => {
-    expect(SolarEnergyGraphsCard.styles.cssText).toContain(".chart-legend");
-    expect(SolarEnergyGraphsCard.styles.cssText).toContain("overflow-x: auto");
+  // Overlays the live legend at the plot's top-left without intercepting graph input.
+  it("overlays the legend at the plot's top-left, one entry per line, without catching the pointer", () => {
+    expect(SolarEnergyGraphsCard.styles.cssText).not.toContain(".chart-legend");
+    expect(SolarEnergyGraphsCard.styles.cssText).toMatch(
+      /\.chart \.u-over \.u-legend\s*\{[^}]*pointer-events: none;[^}]*position: absolute;[^}]*z-index: 1;/,
+    );
+    expect(SolarEnergyGraphsCard.styles.cssText).toMatch(
+      /\.chart \.u-over \.u-legend tr\s*\{[^}]*display: block;[^}]*margin-right: 0;/,
+    );
     expect(SolarEnergyGraphsCard.styles.cssText).toContain(
       ".chart .u-legend .u-series.hide-helper-legend",
     );
     expect(SolarEnergyGraphsCard.styles.cssText).toMatch(
-      /\.chart \.u-legend \.u-series\.legend-values-only\s*\{\s*pointer-events: none;/,
-    );
-    expect(SolarEnergyGraphsCard.styles.cssText).toMatch(
       /\.chart \.u-legend \.u-series\.legend-values-only > \*\s*\{\s*opacity: 1;/,
     );
-    expect(SolarEnergyGraphsCard.styles.cssText).toContain("display: none");
   });
 
-  // Passes normalized data, time zone and both chart/legend containers to uPlot.
+  // Passes normalized data, time zone and chart containers to uPlot.
   it("initializes the renderer from Home Assistant history", async () => {
     card = new SolarEnergyGraphsCard();
     const hass = createHassContext();
@@ -603,10 +607,6 @@ describe("SolarEnergyGraphsCard", () => {
     expect(rendererInstances[0].containers).toEqual([
       card.shadowRoot?.querySelector('[data-chart="one"]'),
       card.shadowRoot?.querySelector('[data-chart="two"]'),
-    ]);
-    expect(rendererInstances[0].legendContainers).toEqual([
-      card.shadowRoot?.querySelector('[data-legend="one"]'),
-      card.shadowRoot?.querySelector('[data-legend="two"]'),
     ]);
     expect(rendererInstances[0].data.hasGridImport).toBe(false);
     expect(rendererInstances[0].data.hasGridExport).toBe(false);
