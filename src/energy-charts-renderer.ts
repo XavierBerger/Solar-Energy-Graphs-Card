@@ -176,6 +176,7 @@ export function computeWheelZoomRange(
   const clampedPct = Math.max(0, Math.min(1, cursorPct));
   const pivot = currentMin + clampedPct * currentDuration;
 
+  // Stryker disable next-line EqualityOperator: deltaY === 0 has already returned.
   const newDuration = deltaY < 0 ? currentDuration * zoomFactor : currentDuration / zoomFactor;
 
   if (newDuration >= dayDuration) {
@@ -188,6 +189,7 @@ export function computeWheelZoomRange(
   let newMin = pivot - clampedPct * newDuration;
   let newMax = newMin + newDuration;
 
+  // Stryker disable EqualityOperator: at a day bound, clamping keeps the same range.
   if (newMin < dayStart) {
     newMin = dayStart;
     newMax = dayStart + newDuration;
@@ -195,6 +197,7 @@ export function computeWheelZoomRange(
     newMax = dayEnd;
     newMin = dayEnd - newDuration;
   }
+  // Stryker restore EqualityOperator
 
   return { min: newMin, max: newMax };
 }
@@ -227,6 +230,7 @@ export function computeDragPanRange(
   let newMin = currentMin + deltaTime;
   let newMax = currentMax + deltaTime;
 
+  // Stryker disable EqualityOperator: at a day bound, clamping keeps the same range.
   if (newMin < dayStart) {
     newMin = dayStart;
     newMax = dayStart + currentDuration;
@@ -234,7 +238,9 @@ export function computeDragPanRange(
     newMax = dayEnd;
     newMin = dayEnd - currentDuration;
   }
+  // Stryker restore EqualityOperator
 
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: a pan keeps the duration, so both bounds move together.
   if (newMin === currentMin && newMax === currentMax) {
     return undefined;
   }
@@ -378,6 +384,7 @@ export class EnergyChartsRenderer {
     this.language = language;
     this.theme = this.readTheme(containers[0], darkMode);
     this.syncGroup = uPlot.sync(
+      // Stryker disable next-line UpdateOperator: only the uniqueness of the key matters.
       `solar-energy-graphs-card-${++nextSyncGroupId}`,
     );
     this.resizeObserver = new ResizeObserver((entries) => {
@@ -599,6 +606,7 @@ export class EnergyChartsRenderer {
   }
 
   private handleDragMove(event: MouseEvent): void {
+    // Stryker disable next-line ConditionalExpression,BlockStatement: the document listeners only exist during a drag.
     if (!this.dragState) {
       return;
     }
@@ -619,6 +627,7 @@ export class EnergyChartsRenderer {
   }
 
   private handleDragEnd(_event: MouseEvent): void {
+    // Stryker disable next-line ConditionalExpression,BlockStatement: the document listeners only exist during a drag.
     if (!this.dragState) {
       return;
     }
@@ -819,7 +828,9 @@ export class EnergyChartsRenderer {
     if (
       theme.text === this.theme.text &&
       theme.grid === this.theme.grid &&
+      // Stryker disable next-line ConditionalExpression: gridWidth and selection both follow darkMode, so either one detects its change.
       theme.gridWidth === this.theme.gridWidth &&
+      // Stryker disable next-line ConditionalExpression: see gridWidth.
       theme.selection === this.theme.selection
     ) {
       return;
