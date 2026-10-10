@@ -242,6 +242,75 @@ export function computeDragPanRange(
   return { min: newMin, max: newMax };
 }
 
+export interface TouchPoint {
+  clientX: number;
+  clientY: number;
+}
+
+/** Computes the distance between two touch points in pixels. */
+export function computeTouchDistance(t1: TouchPoint, t2: TouchPoint): number {
+  const dx = t2.clientX - t1.clientX;
+  const dy = t2.clientY - t1.clientY;
+  return Math.hypot(dx, dy);
+}
+
+/** Computes the horizontal midpoint position in pixels for two touch points. */
+export function computeTouchMidpointX(t1: TouchPoint, t2: TouchPoint): number {
+  return (t1.clientX + t2.clientX) / 2;
+}
+
+/** Returns true if a touch displacement vector is primarily horizontal. */
+export function isHorizontalTouchGesture(deltaX: number, deltaY: number): boolean {
+  return Math.abs(deltaX) > Math.abs(deltaY);
+}
+
+/** Computes the new horizontal time range when zooming with a two-finger pinch gesture. */
+export function computePinchZoomRange(
+  currentRange: TimeRange,
+  dayWindow: TimeRange,
+  cursorPct: number,
+  distanceRatio: number,
+): TimeRange | undefined {
+  if (distanceRatio <= 0 || distanceRatio === 1) {
+    return undefined;
+  }
+
+  const { min: currentMin, max: currentMax } = currentRange;
+  const { min: dayStart, max: dayEnd } = dayWindow;
+  const dayDuration = dayEnd - dayStart;
+  const currentDuration = currentMax - currentMin;
+
+  if (dayDuration <= 0 || currentDuration <= 0) {
+    return undefined;
+  }
+
+  const clampedPct = Math.max(0, Math.min(1, cursorPct));
+  const pivot = currentMin + clampedPct * currentDuration;
+
+  const newDuration = currentDuration / distanceRatio;
+
+  if (newDuration >= dayDuration) {
+    if (currentMin === dayStart && currentMax === dayEnd) {
+      return undefined;
+    }
+    return { min: dayStart, max: dayEnd };
+  }
+
+  let newMin = pivot - clampedPct * newDuration;
+  let newMax = newMin + newDuration;
+
+  if (newMin < dayStart) {
+    newMin = dayStart;
+    newMax = dayStart + newDuration;
+  } else if (newMax > dayEnd) {
+    newMax = dayEnd;
+    newMin = dayEnd - newDuration;
+  }
+
+  return { min: newMin, max: newMax };
+}
+
+
 interface ChartTheme {
   text: string;
   grid: string;
@@ -268,6 +337,13 @@ export class EnergyChartsRenderer {
     element: HTMLElement;
     listener: (event: MouseEvent) => void;
   }> = [];
+  private readonly touchListeners: Array<{
+    element: HTMLElement;
+    onTouchStart: (event: TouchEvent) => void;
+    onTouchMove: (event: TouchEvent) => void;
+    onTouchEnd: (event: TouchEvent) => void;
+    onTouchCancel: (event: TouchEvent) => void;
+  }> = [];
   private dragState?: {
     startX: number;
     rangeAtStart: TimeRange;
@@ -275,6 +351,19 @@ export class EnergyChartsRenderer {
     plotWidth: number;
     onMove: (event: MouseEvent) => void;
     onUp: (event: MouseEvent) => void;
+  };
+  private touchState?: {
+    targetIndex: number;
+    startX: number;
+    startY: number;
+    isPan: boolean;
+    isPinch: boolean;
+    rangeAtStart: TimeRange;
+    dayWindow: TimeRange;
+    plotWidth: number;
+    plotLeft: number;
+    startDistance?: number;
+    startRange?: TimeRange;
   };
   private destroyed = false;
   private theme: ChartTheme;
@@ -317,6 +406,32 @@ export class EnergyChartsRenderer {
       };
       element.addEventListener("mousedown", onMouseDown);
       this.dragListeners.push({ element, listener: onMouseDown });
+
+      const onTouchStart = (event: TouchEvent) => {
+        this.handleTouchStart(event, index);
+      };
+      const onTouchMove = (event: TouchEvent) => {
+        this.handleTouchMove(event, index);
+      };
+      const onTouchEnd = (event: TouchEvent) => {
+        this.handleTouchEnd(event, index);
+      };
+      const onTouchCancel = (event: TouchEvent) => {
+        this.handleTouchEnd(event, index);
+      };
+
+      element.addEventListener("touchstart", onTouchStart, { passive: false });
+      element.addEventListener("touchmove", onTouchMove, { passive: false });
+      element.addEventListener("touchend", onTouchEnd);
+      element.addEventListener("touchcancel", onTouchCancel);
+      this.touchListeners.push({
+        element,
+        onTouchStart,
+        onTouchMove,
+        onTouchEnd,
+        onTouchCancel,
+      });
+
       return { element, legendElement, chart };
     });
   }
@@ -336,6 +451,16 @@ export class EnergyChartsRenderer {
       element.removeEventListener("mousedown", listener);
     });
     this.dragListeners.length = 0;
+    this.touchListeners.forEach(
+      ({ element, onTouchStart, onTouchMove, onTouchEnd, onTouchCancel }) => {
+        element.removeEventListener("touchstart", onTouchStart);
+        element.removeEventListener("touchmove", onTouchMove);
+        element.removeEventListener("touchend", onTouchEnd);
+        element.removeEventListener("touchcancel", onTouchCancel);
+      },
+    );
+    this.touchListeners.length = 0;
+    this.touchState = undefined;
     if (this.dragState) {
       document.removeEventListener("mousemove", this.dragState.onMove);
       document.removeEventListener("mouseup", this.dragState.onUp);
@@ -346,6 +471,7 @@ export class EnergyChartsRenderer {
       legendElement.replaceChildren();
     });
   }
+
 
   updateData(data: EnergyHistoryResponse): void {
     if (this.destroyed) {
@@ -511,6 +637,188 @@ export class EnergyChartsRenderer {
     document.removeEventListener("mousemove", this.dragState.onMove);
     document.removeEventListener("mouseup", this.dragState.onUp);
     this.dragState = undefined;
+  }
+
+  private handleTouchStart(event: TouchEvent, targetIndex: number): void {
+    if (this.destroyed || event.touches.length === 0) {
+      return;
+    }
+
+    const target = this.charts[targetIndex];
+    if (!target) {
+      return;
+    }
+
+    const { data, scales } = target.chart;
+    const xData = data[0];
+    if (!xData || xData.length < 2) {
+      return;
+    }
+
+    const dayStart = xData[0];
+    const dayEnd = xData[xData.length - 1];
+    const currentMin = scales.x?.min ?? dayStart;
+    const currentMax = scales.x?.max ?? dayEnd;
+
+    const overlay = target.chart.over ?? target.element;
+    const rect = overlay.getBoundingClientRect?.() ?? { left: 0, width: 0 };
+    if (!rect.width || rect.width <= 0) {
+      return;
+    }
+
+    if (event.touches.length === 1) {
+      const touch = event.touches[0];
+      this.touchState = {
+        targetIndex,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        isPan: false,
+        isPinch: false,
+        rangeAtStart: { min: currentMin, max: currentMax },
+        dayWindow: { min: dayStart, max: dayEnd },
+        plotWidth: rect.width,
+        plotLeft: rect.left ?? 0,
+      };
+    } else if (event.touches.length === 2) {
+      const t1 = event.touches[0];
+      const t2 = event.touches[1];
+      const startDistance = computeTouchDistance(t1, t2);
+
+      this.touchState = {
+        targetIndex,
+        startX: t1.clientX,
+        startY: t1.clientY,
+        isPan: false,
+        isPinch: true,
+        rangeAtStart: { min: currentMin, max: currentMax },
+        dayWindow: { min: dayStart, max: dayEnd },
+        plotWidth: rect.width,
+        plotLeft: rect.left ?? 0,
+        startDistance,
+        startRange: { min: currentMin, max: currentMax },
+      };
+    }
+  }
+
+  private handleTouchMove(event: TouchEvent, targetIndex: number): void {
+    if (
+      this.destroyed ||
+      !this.touchState ||
+      this.touchState.targetIndex !== targetIndex
+    ) {
+      return;
+    }
+
+    if (event.touches.length === 2) {
+      const t1 = event.touches[0];
+      const t2 = event.touches[1];
+      const currentDistance = computeTouchDistance(t1, t2);
+
+      if (
+        !this.touchState.isPinch ||
+        !this.touchState.startDistance ||
+        !this.touchState.startRange
+      ) {
+        const { scales } = this.charts[targetIndex].chart;
+        const currentMin = scales.x?.min ?? this.touchState.dayWindow.min;
+        const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
+        this.touchState.isPinch = true;
+        this.touchState.isPan = false;
+        this.touchState.startDistance = currentDistance;
+        this.touchState.startRange = { min: currentMin, max: currentMax };
+        return;
+      }
+
+      if (this.touchState.startDistance <= 0 || currentDistance <= 0) {
+        return;
+      }
+
+      event.preventDefault();
+      const distanceRatio = currentDistance / this.touchState.startDistance;
+      const midpointX = computeTouchMidpointX(t1, t2);
+      const cursorPct =
+        this.touchState.plotWidth > 0
+          ? (midpointX - this.touchState.plotLeft) / this.touchState.plotWidth
+          : 0.5;
+
+      const newRange = computePinchZoomRange(
+        this.touchState.startRange,
+        this.touchState.dayWindow,
+        cursorPct,
+        distanceRatio,
+      );
+
+      if (newRange) {
+        this.charts.forEach(({ chart }) => {
+          chart.setScale("x", newRange);
+        });
+      }
+    } else if (event.touches.length === 1) {
+      if (this.touchState.isPinch) {
+        const touch = event.touches[0];
+        const { scales } = this.charts[targetIndex].chart;
+        const currentMin = scales.x?.min ?? this.touchState.dayWindow.min;
+        const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
+        this.touchState.isPinch = false;
+        this.touchState.isPan = false;
+        this.touchState.startX = touch.clientX;
+        this.touchState.startY = touch.clientY;
+        this.touchState.rangeAtStart = { min: currentMin, max: currentMax };
+        return;
+      }
+
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - this.touchState.startX;
+      const deltaY = touch.clientY - this.touchState.startY;
+
+      const currentDuration =
+        this.touchState.rangeAtStart.max - this.touchState.rangeAtStart.min;
+      const dayDuration =
+        this.touchState.dayWindow.max - this.touchState.dayWindow.min;
+      const zoomed = currentDuration < dayDuration;
+
+      if (
+        !this.touchState.isPan &&
+        zoomed &&
+        isHorizontalTouchGesture(deltaX, deltaY)
+      ) {
+        this.touchState.isPan = true;
+      }
+
+      if (this.touchState.isPan) {
+        event.preventDefault();
+        const newRange = computeDragPanRange(
+          this.touchState.rangeAtStart,
+          this.touchState.dayWindow,
+          deltaX,
+          this.touchState.plotWidth,
+        );
+
+        if (newRange) {
+          this.charts.forEach(({ chart }) => {
+            chart.setScale("x", newRange);
+          });
+        }
+      }
+    }
+  }
+
+  private handleTouchEnd(event: TouchEvent, targetIndex: number): void {
+    if (this.touchState && this.touchState.targetIndex === targetIndex) {
+      if (event.touches.length === 0) {
+        this.touchState = undefined;
+      } else if (event.touches.length === 1 && this.touchState.isPinch) {
+        const touch = event.touches[0];
+        const { scales } = this.charts[targetIndex].chart;
+        const currentMin = scales.x?.min ?? this.touchState.dayWindow.min;
+        const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
+        this.touchState.isPinch = false;
+        this.touchState.isPan = false;
+        this.touchState.startX = touch.clientX;
+        this.touchState.startY = touch.clientY;
+        this.touchState.rangeAtStart = { min: currentMin, max: currentMax };
+      }
+    }
   }
 
   refreshTheme(darkMode: boolean): void {

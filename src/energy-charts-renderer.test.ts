@@ -20,13 +20,18 @@ vi.mock("./uplot-adapter", () => ({
 
 import {
   computeDragPanRange,
+  computePinchZoomRange,
+  computeTouchDistance,
+  computeTouchMidpointX,
   computeWheelZoomRange,
   createTimeAxis,
   createTimeLegend,
   drawZeroLine,
+  isHorizontalTouchGesture,
   EnergyChartsRenderer as Renderer,
 } from "./energy-charts-renderer";
 import type { EnergyHistoryResponse } from "./home-assistant-energy-history";
+
 
 const TEST_HISTORY_DATA: EnergyHistoryResponse = {
   mainData: [
@@ -1114,6 +1119,206 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
+  // Pans both charts synchronously when 1-finger horizontal touch drag occurs while zoomed in.
+  it("pans both charts synchronously on 1-finger horizontal touchmove when zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 105, max: 285 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 105, max: 285 });
+  });
+
+  // Allows default vertical page scrolling when 1-finger touch movement is primarily vertical.
+  it("allows native vertical page scrolling during vertical 1-finger touch movement", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 100, clientY: 150 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Allows native page scrolling when 1-finger dragging while not zoomed in.
+  it("allows native page scrolling when 1-finger dragging while not zoomed", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(false);
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+  });
+
+  // Resets active touch state on touchend or touchcancel.
+  it("cleans up active touch state on touchend and touchcancel", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(endEvent, "touches", { value: [] });
+    containers[0].dispatchEvent(endEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+
+    // Test touchcancel as well
+    containers[0].dispatchEvent(startEvent);
+    const cancelEvent = new Event("touchcancel", { bubbles: true, cancelable: true });
+    Object.defineProperty(cancelEvent, "touches", { value: [] });
+    containers[0].dispatchEvent(cancelEvent);
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+  });
+
+  // Removes all touch event listeners when renderer is destroyed.
+  it("removes touch event listeners when destroyed", () => {
+    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    renderer.destroy();
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+  });
+
+  // Zooms both charts synchronously when a 2-finger pinch gesture occurs.
+  it("zooms both charts synchronously on 2-finger pinch gesture", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 20000, max: 60000 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [
+        { clientX: 50, clientY: 50 },
+        { clientX: 150, clientY: 50 },
+      ],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [
+        { clientX: 25, clientY: 50 },
+        { clientX: 175, clientY: 50 },
+      ],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    // start distance = 100, move distance = 150 -> ratio = 1.5 -> new duration = 40000/1.5 = 26666.66
+    expect(charts[0].setScale).toHaveBeenCalledOnce();
+    expect(charts[1].setScale).toHaveBeenCalledOnce();
+  });
+
+  // Smoothly transitions from a 2-finger pinch to a 1-finger pan without visual jumps.
+  it("smoothly transitions from 2-finger pinch to 1-finger drag pan", () => {
+    new EnergyChartsRenderer(containers, legendContainers);
+    charts[0].scales.x = { min: 60, max: 240 };
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    // Start with 2 fingers
+    const startEvent = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(startEvent, "touches", {
+      value: [
+        { clientX: 50, clientY: 50 },
+        { clientX: 150, clientY: 50 },
+      ],
+    });
+    containers[0].dispatchEvent(startEvent);
+
+    // Lift one finger -> 1 touch left
+    const endEvent = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(endEvent, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(endEvent);
+
+    charts[0].setScale.mockClear();
+
+    // Now move remaining finger horizontally
+    const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(moveEvent, "touches", {
+      value: [{ clientX: 10, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(moveEvent);
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(charts[0].setScale).toHaveBeenCalledOnce();
+  });
+
+
+
+
   // Uses dark mode defaults even if the card has no custom theme values.
   it("falls back to dark-mode defaults when CSS variables are missing", () => {
     new EnergyChartsRenderer(containers, legendContainers, true);
@@ -1454,6 +1659,94 @@ describe("computeDragPanRange", () => {
     expect(computeDragPanRange(atEnd, dayWindow, -50, 200)).toBeUndefined();
   });
 });
+
+describe("Touch gesture calculation helpers", () => {
+  const dayWindow = { min: 0, max: 86400 };
+
+  // Calculates Euclidean distance between two touch points.
+  it("calculates Euclidean distance between two touch points", () => {
+    const p1 = { clientX: 10, clientY: 20 };
+    const p2 = { clientX: 40, clientY: 60 };
+    expect(computeTouchDistance(p1, p2)).toBe(50);
+  });
+
+  // Calculates the horizontal midpoint between two touch points.
+  it("calculates horizontal midpoint between two touch points", () => {
+    const p1 = { clientX: 100, clientY: 50 };
+    const p2 = { clientX: 300, clientY: 150 };
+    expect(computeTouchMidpointX(p1, p2)).toBe(200);
+  });
+
+  // Identifies primarily horizontal touch displacements over vertical ones.
+  it("determines whether touch movement is primarily horizontal", () => {
+    expect(isHorizontalTouchGesture(10, 5)).toBe(true);
+    expect(isHorizontalTouchGesture(-10, 5)).toBe(true);
+    expect(isHorizontalTouchGesture(5, 10)).toBe(false);
+    expect(isHorizontalTouchGesture(5, -10)).toBe(false);
+    expect(isHorizontalTouchGesture(5, 5)).toBe(false);
+  });
+
+  // Returns undefined for invalid or identity touch distance ratios.
+  it("returns undefined for non-positive or neutral touch distance ratios", () => {
+    const range = { min: 10000, max: 50000 };
+    expect(computePinchZoomRange(range, dayWindow, 0.5, 0)).toBeUndefined();
+    expect(computePinchZoomRange(range, dayWindow, 0.5, -1)).toBeUndefined();
+    expect(computePinchZoomRange(range, dayWindow, 0.5, 1)).toBeUndefined();
+  });
+
+  // Returns undefined when day window or current duration is invalid.
+  it("returns undefined for invalid day or current durations", () => {
+    const zeroRange = { min: 100, max: 100 };
+    const zeroDay = { min: 100, max: 100 };
+    expect(computePinchZoomRange(zeroRange, dayWindow, 0.5, 1.5)).toBeUndefined();
+    expect(computePinchZoomRange({ min: 0, max: 100 }, zeroDay, 0.5, 1.5)).toBeUndefined();
+  });
+
+  // Zooms in when touch points move further apart (ratio > 1).
+  it("zooms in around cursor pivot when fingers spread apart", () => {
+    const current = { min: 20000, max: 60000 }; // duration 40000
+    // ratio 2 -> new duration 20000 around 50% pivot (40000)
+    const result = computePinchZoomRange(current, dayWindow, 0.5, 2);
+    expect(result).toEqual({ min: 30000, max: 50000 });
+  });
+
+  // Zooms out when touch points move closer together (ratio < 1).
+  it("zooms out around cursor pivot when fingers pinch together", () => {
+    const current = { min: 30000, max: 50000 }; // duration 20000
+    // ratio 0.5 -> new duration 40000 around 50% pivot (40000)
+    const result = computePinchZoomRange(current, dayWindow, 0.5, 0.5);
+    expect(result).toEqual({ min: 20000, max: 60000 });
+  });
+
+  // Clamps range to day window when zooming out exceeds day duration.
+  it("clamps zoom out to full day window when exceeding day bounds", () => {
+    const current = { min: 20000, max: 60000 };
+    const result = computePinchZoomRange(current, dayWindow, 0.5, 0.1);
+    expect(result).toEqual(dayWindow);
+  });
+
+  // Returns undefined when zooming out while already showing full day.
+  it("returns undefined when zooming out while already showing full day", () => {
+    expect(computePinchZoomRange(dayWindow, dayWindow, 0.5, 0.5)).toBeUndefined();
+  });
+
+  // Clamps range to start of day when pivot is near the left edge.
+  it("clamps zoomed range to start of day window", () => {
+    const current = { min: 1000, max: 21000 }; // duration 20000
+    // ratio 0.5 -> new duration 40000, pivot = 3000 -> raw min = -1000 -> clamped to 0..40000
+    const result = computePinchZoomRange(current, dayWindow, 0.1, 0.5);
+    expect(result).toEqual({ min: 0, max: 40000 });
+  });
+
+  // Clamps zoomed range to end of day window when pivot is near right edge.
+  it("clamps zoomed range to end of day window", () => {
+    const current = { min: 65000, max: 85000 }; // duration 20000
+    // ratio 0.5 -> new duration 40000 -> clamped to 46400..86400
+    const result = computePinchZoomRange(current, dayWindow, 0.9, 0.5);
+    expect(result).toEqual({ min: 46400, max: 86400 });
+  });
+});
+
 
 // ════════════════════════════════════════
 // TESTS DES FORMATTEURS DE TEMPS GÉNÉRIQUES
