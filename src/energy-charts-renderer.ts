@@ -491,9 +491,10 @@ export class EnergyChartsRenderer {
     const { data, scales } = this.charts[0].chart;
     const x = data[0];
     const { min, max } = scales.x ?? {};
-    if (x.length === 0 || min === undefined || max === undefined) {
+    if (min === undefined || max === undefined) {
       return undefined;
     }
+    // An empty axis fails both comparisons.
     return min > x[0] || max < x[x.length - 1]
       ? { min, max, dayStart: x[0] }
       : undefined;
@@ -505,10 +506,6 @@ export class EnergyChartsRenderer {
     }
 
     const target = this.charts[targetIndex];
-    if (!target) {
-      return;
-    }
-
     const { data, scales } = target.chart;
     const xData = data[0];
     if (!xData || xData.length < 2) {
@@ -517,11 +514,11 @@ export class EnergyChartsRenderer {
 
     const dayStart = xData[0];
     const dayEnd = xData[xData.length - 1];
-    const currentMin = scales.x?.min ?? dayStart;
-    const currentMax = scales.x?.max ?? dayEnd;
+    const currentMin = scales.x.min ?? dayStart;
+    const currentMax = scales.x.max ?? dayEnd;
 
     const overlay = target.chart.over ?? target.element;
-    const rect = overlay.getBoundingClientRect?.() ?? { left: 0, width: 0 };
+    const rect = overlay.getBoundingClientRect();
     const clientX =
       Number.isFinite(event.clientX)
         ? event.clientX
@@ -552,10 +549,6 @@ export class EnergyChartsRenderer {
     }
 
     const target = this.charts[targetIndex];
-    if (!target) {
-      return;
-    }
-
     const { data, scales } = target.chart;
     const xData = data[0];
     if (!xData || xData.length < 2) {
@@ -564,8 +557,8 @@ export class EnergyChartsRenderer {
 
     const dayStart = xData[0];
     const dayEnd = xData[xData.length - 1];
-    const currentMin = scales.x?.min ?? dayStart;
-    const currentMax = scales.x?.max ?? dayEnd;
+    const currentMin = scales.x.min ?? dayStart;
+    const currentMax = scales.x.max ?? dayEnd;
     const currentDuration = currentMax - currentMin;
     const dayDuration = dayEnd - dayStart;
 
@@ -580,8 +573,8 @@ export class EnergyChartsRenderer {
     }
 
     const overlay = target.chart.over ?? target.element;
-    const rect = overlay.getBoundingClientRect?.() ?? { width: 0 };
-    if (!rect.width || rect.width <= 0) {
+    const rect = overlay.getBoundingClientRect();
+    if (!(rect.width > 0)) {
       return;
     }
 
@@ -1041,7 +1034,7 @@ export class EnergyChartsRenderer {
 
   private handleResize(entries: ResizeObserverEntry[]): void {
     entries.forEach((entry) => {
-      const target = this.charts?.find(({ element }) => element === entry.target);
+      const target = this.charts.find(({ element }) => element === entry.target);
       if (
         target &&
         entry.contentRect.width > 0 &&
