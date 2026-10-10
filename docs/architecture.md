@@ -271,6 +271,11 @@ Worth knowing:
   `min(production, consumption)`.
 - **Import and export come from separate sensors**; the card never derives
   one from the other. Import is negated only for drawing.
+- **Only the top chart has a legend.** uPlot mounts it in the plot overlay
+  (`chart.over`), at the top-left, one entry per line. A `setCursor` hook shows
+  it while either chart's own or synced cursor is on a plot. It ignores pointer
+  input, so curves cannot be toggled from the legend. The grid chart has no
+  legend; its values are the Grid import/export entries in the top chart.
 - The zero line of the grid chart is drawn by a uPlot `draw` hook,
   `drawZeroLine`.
 - Both charts join the same `uPlot.sync` group: the cursor and the x zoom
@@ -359,6 +364,7 @@ A typical loop:
 | I want to...                                 | Go to                                                                                                                                                 |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Change a color or a line width               | `createOptions` in `energy-charts-renderer.ts`                                                                                                        |
+| Change the legend                             | `createOptions` (`legend.mount`, `setCursor`) and the `.u-legend` rules in `styles`                                                                   |
 | Add or change a derived series               | `projectEnergyHistory`, then the matching `series` / `bands` in `createOptions` (keep the indexes aligned)                                            |
 | Change what data is requested                | `buildStatisticsRequest` / `buildHistoryRequest`, and `fetchHistory` / `fetchStatistics` in the element                                               |
 | Accept another unit                          | `powerUnitScale` in `home-assistant-energy-history.ts`                                                                                                |
