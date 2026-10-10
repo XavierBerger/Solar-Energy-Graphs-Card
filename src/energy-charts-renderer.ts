@@ -176,6 +176,7 @@ export function computeWheelZoomRange(
   const clampedPct = Math.max(0, Math.min(1, cursorPct));
   const pivot = currentMin + clampedPct * currentDuration;
 
+  // Stryker disable next-line EqualityOperator: deltaY === 0 has already returned.
   const newDuration = deltaY < 0 ? currentDuration * zoomFactor : currentDuration / zoomFactor;
 
   if (newDuration >= dayDuration) {
@@ -188,6 +189,7 @@ export function computeWheelZoomRange(
   let newMin = pivot - clampedPct * newDuration;
   let newMax = newMin + newDuration;
 
+  // Stryker disable EqualityOperator: at a day bound, clamping keeps the same range.
   if (newMin < dayStart) {
     newMin = dayStart;
     newMax = dayStart + newDuration;
@@ -195,6 +197,7 @@ export function computeWheelZoomRange(
     newMax = dayEnd;
     newMin = dayEnd - newDuration;
   }
+  // Stryker restore EqualityOperator
 
   return { min: newMin, max: newMax };
 }
@@ -227,6 +230,7 @@ export function computeDragPanRange(
   let newMin = currentMin + deltaTime;
   let newMax = currentMax + deltaTime;
 
+  // Stryker disable EqualityOperator: at a day bound, clamping keeps the same range.
   if (newMin < dayStart) {
     newMin = dayStart;
     newMax = dayStart + currentDuration;
@@ -234,7 +238,9 @@ export function computeDragPanRange(
     newMax = dayEnd;
     newMin = dayEnd - currentDuration;
   }
+  // Stryker restore EqualityOperator
 
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: a pan keeps the duration, so both bounds move together.
   if (newMin === currentMin && newMax === currentMax) {
     return undefined;
   }
@@ -378,6 +384,7 @@ export class EnergyChartsRenderer {
     this.language = language;
     this.theme = this.readTheme(containers[0], darkMode);
     this.syncGroup = uPlot.sync(
+      // Stryker disable next-line UpdateOperator: only the uniqueness of the key matters.
       `solar-energy-graphs-card-${++nextSyncGroupId}`,
     );
     this.resizeObserver = new ResizeObserver((entries) => {
@@ -491,9 +498,10 @@ export class EnergyChartsRenderer {
     const { data, scales } = this.charts[0].chart;
     const x = data[0];
     const { min, max } = scales.x ?? {};
-    if (x.length === 0 || min === undefined || max === undefined) {
+    if (min === undefined || max === undefined) {
       return undefined;
     }
+    // An empty axis fails both comparisons.
     return min > x[0] || max < x[x.length - 1]
       ? { min, max, dayStart: x[0] }
       : undefined;
@@ -505,10 +513,6 @@ export class EnergyChartsRenderer {
     }
 
     const target = this.charts[targetIndex];
-    if (!target) {
-      return;
-    }
-
     const { data, scales } = target.chart;
     const xData = data[0];
     if (!xData || xData.length < 2) {
@@ -517,11 +521,11 @@ export class EnergyChartsRenderer {
 
     const dayStart = xData[0];
     const dayEnd = xData[xData.length - 1];
-    const currentMin = scales.x?.min ?? dayStart;
-    const currentMax = scales.x?.max ?? dayEnd;
+    const currentMin = scales.x.min ?? dayStart;
+    const currentMax = scales.x.max ?? dayEnd;
 
     const overlay = target.chart.over ?? target.element;
-    const rect = overlay.getBoundingClientRect?.() ?? { left: 0, width: 0 };
+    const rect = overlay.getBoundingClientRect();
     const clientX =
       Number.isFinite(event.clientX)
         ? event.clientX
@@ -552,10 +556,6 @@ export class EnergyChartsRenderer {
     }
 
     const target = this.charts[targetIndex];
-    if (!target) {
-      return;
-    }
-
     const { data, scales } = target.chart;
     const xData = data[0];
     if (!xData || xData.length < 2) {
@@ -564,8 +564,8 @@ export class EnergyChartsRenderer {
 
     const dayStart = xData[0];
     const dayEnd = xData[xData.length - 1];
-    const currentMin = scales.x?.min ?? dayStart;
-    const currentMax = scales.x?.max ?? dayEnd;
+    const currentMin = scales.x.min ?? dayStart;
+    const currentMax = scales.x.max ?? dayEnd;
     const currentDuration = currentMax - currentMin;
     const dayDuration = dayEnd - dayStart;
 
@@ -580,8 +580,8 @@ export class EnergyChartsRenderer {
     }
 
     const overlay = target.chart.over ?? target.element;
-    const rect = overlay.getBoundingClientRect?.() ?? { width: 0 };
-    if (!rect.width || rect.width <= 0) {
+    const rect = overlay.getBoundingClientRect();
+    if (!(rect.width > 0)) {
       return;
     }
 
@@ -606,6 +606,7 @@ export class EnergyChartsRenderer {
   }
 
   private handleDragMove(event: MouseEvent): void {
+    // Stryker disable next-line ConditionalExpression,BlockStatement: the document listeners only exist during a drag.
     if (!this.dragState) {
       return;
     }
@@ -626,6 +627,7 @@ export class EnergyChartsRenderer {
   }
 
   private handleDragEnd(_event: MouseEvent): void {
+    // Stryker disable next-line ConditionalExpression,BlockStatement: the document listeners only exist during a drag.
     if (!this.dragState) {
       return;
     }
@@ -826,7 +828,9 @@ export class EnergyChartsRenderer {
     if (
       theme.text === this.theme.text &&
       theme.grid === this.theme.grid &&
+      // Stryker disable next-line ConditionalExpression: gridWidth and selection both follow darkMode, so either one detects its change.
       theme.gridWidth === this.theme.gridWidth &&
+      // Stryker disable next-line ConditionalExpression: see gridWidth.
       theme.selection === this.theme.selection
     ) {
       return;
@@ -1041,7 +1045,7 @@ export class EnergyChartsRenderer {
 
   private handleResize(entries: ResizeObserverEntry[]): void {
     entries.forEach((entry) => {
-      const target = this.charts?.find(({ element }) => element === entry.target);
+      const target = this.charts.find(({ element }) => element === entry.target);
       if (
         target &&
         entry.contentRect.width > 0 &&

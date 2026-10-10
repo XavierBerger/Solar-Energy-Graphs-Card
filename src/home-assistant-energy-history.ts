@@ -413,6 +413,8 @@ export function projectEnergyHistory(
   const rawStarts = statistics.map(
     (sensor) => sensor.at(-1)?.end ?? Number.NEGATIVE_INFINITY,
   );
+  // Stryker disable EqualityOperator: each bound, rawStarts[index], window.start
+  // and lastSample, is already a source time or added to the set below.
   const sourceTimes = [
     ...statistics.flatMap((sensor, index) => [
       ...sensor.map((sample) => (sample.start + sample.end) / 2),
@@ -424,6 +426,7 @@ export function projectEnergyHistory(
         .filter((timestamp) => timestamp >= rawStarts[index]),
     ),
   ].filter((timestamp) => timestamp >= window.start && timestamp < lastSample);
+  // Stryker restore EqualityOperator
   const sampleTimes = Array.from(
     new Set([window.start, ...sourceTimes, lastSample, window.end]),
   ).sort((first, second) => first - second);
@@ -458,7 +461,7 @@ export function projectEnergyHistory(
     directSolar.map((value, index) =>
       value ?? (consumption.mean[index] === null ? null : 0),
     ),
-    consumption.mean.slice(),
+    consumption.mean,
     production.mean.slice(),
     consumption.mean.slice(),
     importMean,
@@ -535,6 +538,7 @@ function parseLocalDate(date: string): {
   month: number;
   day: number;
 } {
+  // Stryker disable next-line Regex: the round-trip check below rejects any prefix or suffix.
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) {
     throw new Error(`Invalid local date "${date}".`);
@@ -564,6 +568,7 @@ function getLocalMidnightTimestamp(
   const targetWallTime = Date.UTC(year, month - 1, day);
   let candidate = targetWallTime;
 
+  // A candidate already at midnight gets a zero correction.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const parts = getZonedDateParts(new Date(candidate), timeZone);
     const observedWallTime = Date.UTC(
@@ -574,11 +579,7 @@ function getLocalMidnightTimestamp(
       parts.minute,
       parts.second,
     );
-    const correction = targetWallTime - observedWallTime;
-    candidate += correction;
-    if (correction === 0) {
-      break;
-    }
+    candidate += targetWallTime - observedWallTime;
   }
 
   return candidate / 1000;
@@ -609,6 +610,7 @@ export function parsePowerState(
   unitScale: number,
 ): NumericSample | undefined {
   const timestamp = parseTimestampSeconds(
+    // Stryker disable next-line StringLiteral: Date.parse gives NaN for any non-date string.
     state.last_updated ?? state.last_changed ?? "",
   );
   return Number.isFinite(timestamp)
@@ -622,8 +624,8 @@ export function parseCompressedPowerSamples(
   unitScale: number,
 ): NumericSample[] {
   const samples = history.flatMap((state) => {
-    const timestamp = state.lu ?? state.lc;
-    if (timestamp === undefined || !Number.isFinite(timestamp)) {
+    const timestamp = state.lu ?? state.lc ?? Number.NaN;
+    if (!Number.isFinite(timestamp)) {
       return [];
     }
     return [{ timestamp, value: parsePowerValue(state.s, unitScale) }];
@@ -642,11 +644,9 @@ function parsePowerValue(state: string, unitScale: number): number | null {
 }
 
 function parseTimestampSeconds(value: string): number {
+  // An unparsable value stays NaN through the sum below.
   const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) {
-    return Number.NaN;
-  }
-
+  // Stryker disable next-line Regex: Home Assistant sends ISO 8601 times, where the offset ends the string.
   const fractionalSeconds = /\.(\d+)(?=Z|[+-]\d{2}:?\d{2}$)/i.exec(value)?.[1];
   const subMillisecondSeconds = fractionalSeconds
     ? Number(`0.${fractionalSeconds.slice(3)}`) / 1000

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildHistoryRequest,
   buildStatisticsRequest,
@@ -41,6 +41,10 @@ function state(
 }
 
 describe("Home Assistant energy history", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   // Accepts W and kW power sensors and converts every input to watts.
   it("normalizes configured sensor units to watts", () => {
     const scales = getEnergyUnitScales([
@@ -190,15 +194,23 @@ describe("Home Assistant energy history", () => {
     }
   });
 
-  // Resolves midnight and the next midnight in the configured HA time zone.
+  // Resolves midnight and the next midnight in the configured HA time zone,
+  // and names the date part the time zone formatter does not provide.
   it("creates a local-day window using Europe/Paris offsets", () => {
     const window = getLocalDayWindow(
       new Date("2026-09-27T12:00:00Z"),
       "Europe/Paris",
     );
+    vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockReturnValue([
+      { type: "year", value: "2026" },
+      { type: "month", value: "9" },
+      { type: "day", value: "27" },
+    ]);
 
     expect(window.start).toBe(Date.parse("2026-09-26T22:00:00Z") / 1000);
     expect(window.end).toBe(Date.parse("2026-09-27T22:00:00Z") / 1000);
+    expect(() => getLocalDayWindow(new Date("2026-09-27T12:00:00Z"), "Europe/Paris"))
+      .toThrow('Unable to determine hour in time zone "Europe/Paris".');
   });
 
   // Keeps selected days as calendar dates in the configured Home Assistant time zone.
@@ -211,6 +223,9 @@ describe("Home Assistant energy history", () => {
     ).toBe("2026-09-28");
     expect(shiftLocalDate("2026-01-01", -1)).toBe("2025-12-31");
     expect(shiftLocalDate("2025-12-31", 1)).toBe("2026-01-01");
+    expect(shiftLocalDate("0999-12-31", 1)).toBe("1000-01-01");
+    expect(getLocalDateString(new Date("0999-06-15T12:00:00Z"), "UTC"))
+      .toBe("0999-06-15");
   });
 
   // Rejects malformed dates and calendar values outside their valid ranges.
@@ -232,7 +247,8 @@ describe("Home Assistant energy history", () => {
     }
   });
 
-  // Calculates day boundaries from a selected civil date in the HA time zone.
+  // Calculates day boundaries from a selected civil date in the HA time zone,
+  // including a midnight two corrections away and a midnight skipped by DST.
   it("creates selected local-day windows across daylight-saving changes", () => {
     const spring = getLocalDayWindowForDate(
       "2026-03-29",
@@ -242,9 +258,21 @@ describe("Home Assistant energy history", () => {
       "2026-10-25",
       "Europe/Paris",
     );
+    // UTC midnight is past the 03:00 NZDT change: one offset correction is not enough.
+    const auckland = getLocalDayWindowForDate("2026-04-05", "Pacific/Auckland");
+    // Clocks jump from 00:00 to 01:00: the day starts at its first instant.
+    const santiago = getLocalDayWindowForDate("2026-09-06", "America/Santiago");
 
     expect(spring.end - spring.start).toBe(23 * 60 * 60);
     expect(autumn.end - autumn.start).toBe(25 * 60 * 60);
+    expect(auckland).toEqual({
+      start: Date.parse("2026-04-04T11:00:00Z") / 1000,
+      end: Date.parse("2026-04-05T12:00:00Z") / 1000,
+    });
+    expect(santiago).toEqual({
+      start: Date.parse("2026-09-06T04:00:00Z") / 1000,
+      end: Date.parse("2026-09-07T03:00:00Z") / 1000,
+    });
   });
 
   // Carries the time elapsed since today's midnight onto a selected day,

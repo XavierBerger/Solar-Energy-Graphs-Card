@@ -10,8 +10,10 @@ import { hasHigherPrecisionSamples, SolarEnergyGraphsCard } from "./solar-energy
 import {
   getLocalDateString,
   getLocalDayWindowForDate,
+  NO_STATISTICS,
   shiftLocalDate,
   type EnergyHistoryResponse,
+  type NumericSample,
   type HistoryDuringPeriodMessage,
   type HistoryDuringPeriodResponse,
   type StatisticsDuringPeriodMessage,
@@ -177,13 +179,20 @@ async function flushHistoryResponse(): Promise<void> {
 
 describe("SolarEnergyGraphsCard", () => {
 
-  // Detects raw history only when its sampling interval is finer than statistics.
+  // Detects raw history only when its sampling interval is finer than statistics;
+  // any sensor's raw history is finer than missing statistics.
   it("detects higher precision history", () => {
     expect(hasHigherPrecisionSamples(
       [[{ timestamp: 1, value: 1 }, { timestamp: 1.5, value: 2 }], [], [], []],
       [[{ start: 0, end: 60, mean: 1, min: 1, max: 1 }], [], [], []],
     )).toBe(true);
     expect(hasHigherPrecisionSamples([[], [], [], []], [[{ start: 0, end: 60, mean: 1, min: 1, max: 1 }], [], [], []])).toBe(false);
+    for (const sensor of [0, 1, 2, 3]) {
+      const samples: [NumericSample[], NumericSample[], NumericSample[], NumericSample[]] =
+        [[], [], [], []];
+      samples[sensor] = [{ timestamp: 1, value: 1 }, { timestamp: 2, value: 2 }];
+      expect(hasHigherPrecisionSamples(samples, NO_STATISTICS)).toBe(true);
+    }
   });
 
   // Checks the zero-interval boundary: raw samples sharing one timestamp are not

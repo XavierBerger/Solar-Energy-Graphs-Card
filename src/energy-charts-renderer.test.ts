@@ -175,6 +175,7 @@ describe("EnergyChartsRenderer", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     document.body.replaceChildren();
   });
@@ -262,55 +263,71 @@ describe("EnergyChartsRenderer", () => {
     const secondOptions = createChartMock.mock.calls[1][0];
     const firstData = createChartMock.mock.calls[0][1];
     const secondData = createChartMock.mock.calls[1][1];
-    expect(firstOptions.series[3].label).toBe("Self-consumption");
-    expect(firstOptions.series[6].label).toBe("Solar production");
-    expect(firstOptions.series[6].stroke).toBe("#cc9d00");
-    expect(firstOptions.series[6].fill).toBeUndefined();
-    expect(firstOptions.series[1].fill).toBe("#fbf0a8");
-    expect(firstOptions.series[7].label).toBe("Consumption");
-    expect(firstOptions.series[8]).toMatchObject({
-      label: "Grid import",
-      class: "legend-values-only",
-      show: false,
-      fill: "#e96e7d",
-    });
-    expect(firstOptions.series[9]).toMatchObject({
-      label: "Grid export",
-      class: "legend-values-only",
-      show: false,
-      fill: "#fbf0a8",
-    });
-    expect(firstOptions.series[0].class).toBeUndefined();
-    expect(
-      firstOptions.series
-        .slice(1)
-        .filter((series: { class?: string }) => !series.class)
-        .map((series: { label?: string }) => series.label),
-    ).toEqual(["Self-consumption", "Solar production", "Consumption"]);
-    expect(
-      firstOptions.series
-        .slice(1)
-        .filter((series: { class?: string }) => series.class)
-        .map((series: { class?: string }) => series.class),
-    ).toEqual([
-      ...Array(4).fill("hide-helper-legend"),
-      "legend-values-only",
-      "legend-values-only",
-      ...Array(4).fill("hide-helper-legend"),
+    const points = { show: false };
+    const hiddenHelper = {
+      label: "",
+      class: "hide-helper-legend",
+      stroke: "rgba(0, 0, 0, 0)",
+      width: 0,
+      points,
+    };
+    // First series has label and value formatter for the time legend
+    const firstSeries = firstOptions.series[0];
+    expect(firstSeries.label).toBe("Time");
+    expect(firstSeries.value).toBeTypeOf("function");
+    expect(firstOptions.series.slice(1)).toStrictEqual([
+      { ...hiddenHelper, fill: "#fbf0a8" },
+      hiddenHelper,
+      { label: "Self-consumption", width: 0, fill: "#a2d49b", points },
+      hiddenHelper,
+      { label: "", class: "hide-helper-legend", width: 0, points },
+      { label: "Solar production", stroke: "#cc9d00", width: 1.25, points },
+      { label: "Consumption", stroke: "#3b82f6", width: 1.25, points },
+      {
+        label: "Grid import",
+        class: "legend-values-only",
+        show: false,
+        fill: "#e96e7d",
+        points,
+      },
+      {
+        label: "Grid export",
+        class: "legend-values-only",
+        show: false,
+        fill: "#fbf0a8",
+        points,
+      },
+      ...Array(4).fill(hiddenHelper),
     ]);
-    expect(
-      firstOptions.series
-        .slice(10)
-        .every((series: { label?: string }) => series.label === ""),
-    ).toBe(true);
-    expect(
-      firstOptions.series
-        .slice(10)
-        .every(
-          (series: { stroke?: string }) =>
-            series.stroke === "rgba(0, 0, 0, 0)",
-        ),
-    ).toBe(true);
+    // Second chart first series also has label and value formatter
+    const secondFirstSeries = secondOptions.series[0];
+    expect(secondFirstSeries.label).toBe("Time");
+    expect(secondFirstSeries.value).toBeTypeOf("function");
+    expect(secondOptions.series.slice(1)).toStrictEqual([
+      {
+        label: "Grid export (+W)",
+        stroke: "#cc9d00",
+        width: 1.25,
+        fill: "#fbf0a8",
+        points,
+      },
+      {
+        label: "Grid import (-W)",
+        stroke: "#ef4444",
+        width: 1.25,
+        fill: "#e96e7d",
+        points,
+      },
+      ...Array(4).fill(hiddenHelper),
+    ]);
+    expect(firstOptions.scales).toStrictEqual({
+      x: { time: true },
+      y: { auto: true, autoMin: 0 },
+    });
+    expect(secondOptions.scales).toStrictEqual({
+      x: { time: true },
+      y: { auto: true },
+    });
     expect(firstOptions.bands).toEqual([
       { series: [3, 2], fill: "#a2d49b" },
       { series: [5, 4], fill: "#e96e7d" },
@@ -318,28 +335,18 @@ describe("EnergyChartsRenderer", () => {
       { series: [12, 13], fill: "rgba(59, 130, 246, 0.2)" },
     ]);
     expect(firstOptions.axes[1].label).toBe("Power (W)");
-    expect(firstOptions.scales.y.autoMin).toBe(0);
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
-    expect(secondOptions.legend).toEqual({ show: false });
     expect(firstData).toHaveLength(14);
     expect(firstData[0]).toHaveLength(2);
     expect(firstData[1]).toEqual([null, 1800]);
     expect(firstData[8]).toEqual([null, 400]);
     expect(firstData[9]).toEqual([null, 200]);
-    expect(secondOptions.series[1].label).toBe("Grid export (+W)");
-    expect(secondOptions.series[2].label).toBe("Grid import (-W)");
     expect(secondOptions.axes[1].label).toBe("Power (W)");
     expect(secondOptions.bands).toEqual([
       { series: [3, 4], fill: "rgba(204, 157, 0, 0.25)" },
       { series: [5, 6], fill: "rgba(239, 68, 68, 0.3)" },
     ]);
-    expect(
-      secondOptions.series
-        .slice(3)
-        .map((series: { class?: string; width?: number }) => [series.class, series.width]),
-    ).toEqual(Array(4).fill(["hide-helper-legend", 0]));
-    expect(secondOptions.scales.y.autoMin).toBeUndefined();
     expect(secondData).toHaveLength(7);
     expect(secondData[0]).toHaveLength(2);
     expect(secondData[1]).toEqual([null, 200]);
@@ -441,6 +448,8 @@ describe("EnergyChartsRenderer", () => {
 
     charts[0].scales.x = { max: 200 };
     charts[1].scales.x = { min: 50 };
+    renderer.updateData(TEST_HISTORY_DATA);
+    charts[0].scales.x = { min: 100 };
     renderer.updateData(TEST_HISTORY_DATA);
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
@@ -581,10 +590,15 @@ describe("EnergyChartsRenderer", () => {
     checkSkipped({ y: { min: -700, max: -10 } });
   });
 
-  // Preserves the existing light-theme colors and grid width.
+  // Preserves the light-theme colors, trimmed, and grid width by default.
   it("keeps the current light theme palette unchanged", () => {
-    containers[0].style.setProperty("--primary-text-color", "#f4f4f4");
-    containers[0].style.setProperty("--divider-color", "#555555");
+    const cssValues: Record<string, string> = {
+      "--primary-text-color": "  #f4f4f4  ",
+      "--divider-color": " #555555 ",
+    };
+    vi.spyOn(globalThis, "getComputedStyle").mockReturnValue({
+      getPropertyValue: (name: string) => cssValues[name] ?? "",
+    } as CSSStyleDeclaration);
 
     new EnergyChartsRenderer(containers);
 
@@ -893,9 +907,14 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
-  // Stops responding to wheel events after the renderer is destroyed.
+  // Registers cancelable wheel listeners and removes them, and their effect, on destroy.
   it("removes wheel event listeners when destroyed", () => {
+    const added = containers.map((container) => vi.spyOn(container, "addEventListener"));
+    const removed = containers.map((container) => vi.spyOn(container, "removeEventListener"));
     const renderer = new EnergyChartsRenderer(containers);
+    const wheelListeners = added.map((spy) =>
+      spy.mock.calls.find(([type]) => type === "wheel")?.[1],
+    );
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -911,9 +930,15 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+    wheelListeners.forEach((listener, index) => {
+      expect(listener).toBeTypeOf("function");
+      expect(added[index]).toHaveBeenCalledWith("wheel", listener, { passive: false });
+      expect(removed[index]).toHaveBeenCalledWith("wheel", listener);
+    });
   });
 
-  // Pans both charts when the user press+drags while zoomed in.
+  // Pans both charts when the user press+drags while zoomed in, within the day,
+  // and leaves the scales alone when the pointer has not moved.
   it("pans both charts on mousedown+mousemove when zoomed", () => {
     new EnergyChartsRenderer(containers);
     // Simulate a zoomed-in state on both charts.
@@ -961,10 +986,22 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 187.5, max: 237.5 });
     expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 187.5, max: 237.5 });
+
+    charts[0].setScale.mockClear();
+    charts[1].setScale.mockClear();
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 100 }));
+    expect(charts[0].setScale).not.toHaveBeenCalled();
+    expect(charts[1].setScale).not.toHaveBeenCalled();
+
+    // deltaTime = -(900/200) * 50 = -225 would start before the day.
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 1000 }));
+    expect(charts[0].setScale).toHaveBeenCalledWith("x", { min: 0, max: 50 });
+    expect(charts[1].setScale).toHaveBeenCalledWith("x", { min: 0, max: 50 });
   });
 
   // Does not start panning when the view shows the full day (not zoomed).
   it("does not pan on drag when at full day bounds", () => {
+    const added = vi.spyOn(document, "addEventListener");
     new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -986,12 +1023,15 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+    expect(added).not.toHaveBeenCalled();
   });
 
   // Hands press+drag back to uPlot's x selection zoom on both charts when the
-  // full day is shown, e.g. after a zoom out.
+  // full day is shown, e.g. after a zoom out, wherever the day starts.
   it("enables x selection zoom on both charts at full day bounds", () => {
     new EnergyChartsRenderer(containers);
+    charts[0].data = [Float64Array.from([100, 400])];
+    charts[0].scales.x = { min: 100, max: 400 };
     charts[0].cursor.drag.x = false;
     charts[1].cursor.drag.x = false;
     containers[0].getBoundingClientRect = () =>
@@ -1042,6 +1082,8 @@ describe("EnergyChartsRenderer", () => {
 
   // Stops panning on mouseup and removes document-level move/up listeners.
   it("stops panning on mouseup", () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
     new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
@@ -1066,11 +1108,18 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+    expect(added.mock.calls.map(([type]) => type)).toEqual(["mousemove", "mouseup"]);
+    expect(removed.mock.calls).toEqual(added.mock.calls);
   });
 
   // Removes mousedown listeners from chart containers when destroyed.
   it("removes mousedown listeners when destroyed", () => {
+    const added = containers.map((container) => vi.spyOn(container, "addEventListener"));
+    const removed = containers.map((container) => vi.spyOn(container, "removeEventListener"));
     const renderer = new EnergyChartsRenderer(containers);
+    const mousedownListeners = added.map((spy) =>
+      spy.mock.calls.find(([type]) => type === "mousedown")?.[1],
+    );
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1087,10 +1136,16 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+    mousedownListeners.forEach((listener, index) => {
+      expect(listener).toBeTypeOf("function");
+      expect(removed[index]).toHaveBeenCalledWith("mousedown", listener);
+    });
   });
 
   // Cleans up document listeners for an active drag when destroyed mid-drag.
   it("cleans up active drag state on destroy", () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
     const renderer = new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
@@ -1113,6 +1168,8 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+    expect(added.mock.calls.map(([type]) => type)).toEqual(["mousemove", "mouseup"]);
+    expect(removed.mock.calls).toEqual(added.mock.calls);
   });
 
   // Pans both charts synchronously when 1-finger horizontal touch drag occurs while zoomed in.
@@ -1417,6 +1474,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Zero-width plots should not start a drag or recenter the time scale.
   it("ignores drag starts when the plot width is zero", () => {
+    const added = vi.spyOn(document, "addEventListener");
     new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
@@ -1430,6 +1488,7 @@ describe("EnergyChartsRenderer", () => {
 
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+    expect(added).not.toHaveBeenCalled();
   });
 
   // Resize callbacks should ignore unrelated container changes.
@@ -1522,12 +1581,14 @@ describe("computeWheelZoomRange", () => {
     ).toEqual(dayWindow);
   });
 
-  // Avoids unnecessary scale updates when zooming out while already showing the full day.
+  // Avoids unnecessary scale updates when zooming out, or by a unit factor,
+  // while already showing the full day.
   it("returns undefined when zooming out while already at full day bounds", () => {
     const current = { min: 0, max: 86400 };
     const zoomed = computeWheelZoomRange(current, dayWindow, 0.5, 100, 0.8);
 
     expect(zoomed).toBeUndefined();
+    expect(computeWheelZoomRange(current, dayWindow, 0.5, -100, 1)).toBeUndefined();
   });
 
   // Leaves the time range unchanged when the wheel event has zero deltaY.
@@ -1619,6 +1680,9 @@ describe("computeDragPanRange", () => {
       computeDragPanRange({ min: -100, max: 86500 }, dayWindow, 50, 200),
     ).toBeUndefined();
     expect(
+      computeDragPanRange({ min: -100, max: 86300 }, dayWindow, 50, 200),
+    ).toBeUndefined();
+    expect(
       computeDragPanRange(
         { min: 100000, max: 186400 },
         { min: 100000, max: 186400 },
@@ -1626,14 +1690,25 @@ describe("computeDragPanRange", () => {
         200,
       ),
     ).toBeUndefined();
+    expect(
+      computeDragPanRange(
+        { min: 100000, max: 187000 },
+        { min: 100000, max: 186400 },
+        -50,
+        200,
+      ),
+    ).toBeUndefined();
   });
 
-  // Returns undefined when pixel displacement is zero.
+  // Returns undefined when pixel displacement is zero, even for a range
+  // starting before the day.
   it("returns undefined when deltaPx is zero", () => {
     const current = { min: 20000, max: 60000 };
     const result = computeDragPanRange(current, dayWindow, 0, 200);
 
     expect(result).toBeUndefined();
+    expect(computeDragPanRange({ min: -100, max: 1000 }, dayWindow, 0, 200))
+      .toBeUndefined();
   });
 
   // Returns undefined when plot width is zero or negative.
