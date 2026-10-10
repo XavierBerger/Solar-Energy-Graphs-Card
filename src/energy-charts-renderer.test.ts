@@ -271,8 +271,11 @@ describe("EnergyChartsRenderer", () => {
       width: 0,
       points,
     };
-    expect(firstOptions.series).toStrictEqual([
-      {},
+    // First series has label and value formatter for the time legend
+    const firstSeries = firstOptions.series[0];
+    expect(firstSeries.label).toBe("Time");
+    expect(firstSeries.value).toBeTypeOf("function");
+    expect(firstOptions.series.slice(1)).toStrictEqual([
       { ...hiddenHelper, fill: "#fbf0a8" },
       hiddenHelper,
       { label: "Self-consumption", width: 0, fill: "#a2d49b", points },
@@ -296,8 +299,11 @@ describe("EnergyChartsRenderer", () => {
       },
       ...Array(4).fill(hiddenHelper),
     ]);
-    expect(secondOptions.series).toStrictEqual([
-      {},
+    // Second chart first series also has label and value formatter
+    const secondFirstSeries = secondOptions.series[0];
+    expect(secondFirstSeries.label).toBe("Time");
+    expect(secondFirstSeries.value).toBeTypeOf("function");
+    expect(secondOptions.series.slice(1)).toStrictEqual([
       {
         label: "Grid export (+W)",
         stroke: "#cc9d00",
