@@ -321,7 +321,6 @@ interface ChartTheme {
 
 type ChartTarget = {
   element: HTMLElement;
-  legendElement: HTMLElement;
   chart: UPlotInstance;
 };
 
@@ -371,7 +370,6 @@ export class EnergyChartsRenderer {
 
   constructor(
     containers: readonly [HTMLElement, HTMLElement],
-    legendContainers: readonly [HTMLElement, HTMLElement],
     data: EnergyHistoryResponse,
     timeZone: string,
     darkMode = false,
@@ -387,10 +385,9 @@ export class EnergyChartsRenderer {
     });
 
     this.charts = containers.map((element, index) => {
-      const legendElement = legendContainers[index];
       const mainChart = index === 0;
       const chart = createChart(
-        this.createOptions(element, legendElement, mainChart, timeZone),
+        this.createOptions(element, mainChart, timeZone),
         mainChart ? data.mainData : data.gridData,
         element,
       );
@@ -432,7 +429,7 @@ export class EnergyChartsRenderer {
         onTouchCancel,
       });
 
-      return { element, legendElement, chart };
+      return { element, chart };
     });
   }
 
@@ -466,9 +463,8 @@ export class EnergyChartsRenderer {
       document.removeEventListener("mouseup", this.dragState.onUp);
       this.dragState = undefined;
     }
-    this.charts.forEach(({ chart, legendElement }) => {
+    this.charts.forEach(({ chart }) => {
       chart.destroy();
-      legendElement.replaceChildren();
     });
   }
 
@@ -863,7 +859,6 @@ export class EnergyChartsRenderer {
 
   private createOptions(
     element: HTMLElement,
-    legendContainer: HTMLElement,
     mainChart: boolean,
     timeZone: string,
   ): UPlotOptions {
@@ -982,6 +977,12 @@ export class EnergyChartsRenderer {
         { series: [5, 6], fill: IMPORT_RANGE_FILL },
       ];
 
+    let legendTable!: HTMLElement;
+    // Displays the legend when the cursor is over either graph.
+    const showLegendWithCursor = (chart: UPlotInstance) => {
+      legendTable.style.display = chart.cursor.left! >= 0 ? "" : "none";
+    };
+
     return {
       width: element.clientWidth || DEFAULT_WIDTH,
       height: element.clientHeight || DEFAULT_HEIGHT,
@@ -991,11 +992,15 @@ export class EnergyChartsRenderer {
         sync: { key: this.syncGroup.key, scales: ["x", null] },
         drag: { x: true, y: false },
       },
-      legend: {
-        mount: (_chart, legend) => {
-          legendContainer.replaceChildren(legend);
-        },
-      },
+      legend: mainChart
+        ? {
+          mount: (chart, table) => {
+            legendTable = table;
+            chart.over.append(table);
+            showLegendWithCursor(chart);
+          },
+        }
+        : { show: false },
       scales: {
         x: { time: true },
         y: { auto: true, ...(mainChart ? { autoMin: 0 } : {}) },
@@ -1008,7 +1013,7 @@ export class EnergyChartsRenderer {
       axes,
       bands,
       ...(mainChart
-        ? {}
+        ? { hooks: { setCursor: [showLegendWithCursor] } }
         : { hooks: { draw: [(chart) => drawZeroLine(chart, this.theme.grid)] } }),
     };
   }

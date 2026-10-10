@@ -68,13 +68,11 @@ const TEST_HISTORY_DATA: EnergyHistoryResponse = {
 class EnergyChartsRenderer extends Renderer {
   constructor(
     containers: readonly [HTMLElement, HTMLElement],
-    legendContainers: readonly [HTMLElement, HTMLElement],
     darkMode = false,
     language: "en" | "fr" = "en",
   ) {
     super(
       containers,
-      legendContainers,
       TEST_HISTORY_DATA,
       "Europe/Paris",
       darkMode,
@@ -107,7 +105,6 @@ class MockResizeObserver implements ResizeObserver {
 
 describe("EnergyChartsRenderer", () => {
   let containers: [HTMLElement, HTMLElement];
-  let legendContainers: [HTMLElement, HTMLElement];
   let charts: Array<{
     setSize: ReturnType<typeof vi.fn>;
     setData: ReturnType<typeof vi.fn>;
@@ -138,8 +135,7 @@ describe("EnergyChartsRenderer", () => {
 
   beforeEach(() => {
     containers = [document.createElement("div"), document.createElement("div")];
-    legendContainers = [document.createElement("div"), document.createElement("div")];
-    document.body.append(...containers, ...legendContainers);
+    document.body.append(...containers);
     charts = [
       {
         setSize: vi.fn(),
@@ -185,7 +181,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Hides uPlot point markers, drawn in white on sparse statistics intervals.
   it("disables point markers on every data series", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     const [firstOptions, secondOptions] = createChartMock.mock.calls.map(
       ([options]) => options,
@@ -201,7 +197,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Formats French axis ticks and cursor timestamps as local 24-hour values.
   it("uses French chart labels and timezone-aware 24-hour time formatting", () => {
-    new EnergyChartsRenderer(containers, legendContainers, false, "fr");
+    new EnergyChartsRenderer(containers, false, "fr");
 
     const [firstOptions, secondOptions] = createChartMock.mock.calls.map(
       ([options]) => options,
@@ -233,7 +229,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Returns "-" for invalid timestamps (0, null, undefined, NaN, Infinity) in French mode.
   it("returns dash for invalid timestamps in French legend and axis", () => {
-    new EnergyChartsRenderer(containers, legendContainers, false, "fr");
+    new EnergyChartsRenderer(containers, false, "fr");
 
     const [firstOptions] = createChartMock.mock.calls.map(
       ([options]) => options,
@@ -259,7 +255,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Builds both energy charts with the shared time scale and sign convention.
   it("creates the solar and signed grid-exchange charts", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     expect(createChartMock).toHaveBeenCalledTimes(2);
     const firstOptions = createChartMock.mock.calls[0][0];
@@ -325,7 +321,7 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.scales.y.autoMin).toBe(0);
     expect(firstOptions.legend.mount).toBeTypeOf("function");
     expect(secondOptions.scales.y.autoMin).toBeUndefined();
-    expect(secondOptions.legend.mount).toBeTypeOf("function");
+    expect(secondOptions.legend).toEqual({ show: false });
     expect(firstData).toHaveLength(14);
     expect(firstData[0]).toHaveLength(2);
     expect(firstData[1]).toEqual([null, 1800]);
@@ -354,8 +350,8 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.cursor.drag).toEqual({ x: true, y: false });
     expect(secondOptions.cursor.drag).toEqual({ x: true, y: false });
     expect(firstOptions.legend.mount).toBeTypeOf("function");
-    expect(secondOptions.legend.mount).toBeTypeOf("function");
-    expect(firstOptions.hooks).toBeUndefined();
+    expect(secondOptions.legend).toEqual({ show: false });
+    expect(firstOptions.hooks.setCursor).toHaveLength(1);
     expect(secondOptions.hooks.draw).toHaveLength(1);
     expect(syncMock).toHaveBeenCalledOnce();
     expect(firstOptions.width).toBe(600);
@@ -364,7 +360,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Wires timezone, axis color and zero-line callbacks to their chart options.
   it("provides callable timezone, axis, and zero-line options", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     const firstOptions = createChartMock.mock.calls[0][0];
     const secondOptions = createChartMock.mock.calls[1][0];
 
@@ -404,7 +400,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Replaces both plot datasets after Home Assistant history is refreshed.
   it("updates both charts with normalized history data", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     const updatedData: EnergyHistoryResponse = {
       ...TEST_HISTORY_DATA,
       mainData: [Float64Array.from([0, 600]), [null, 2400]],
@@ -419,7 +415,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Keeps a horizontal zoom on both charts when data of the same day arrives.
   it("restores the x zoom after a same-day data update", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 300 };
 
     renderer.updateData(TEST_HISTORY_DATA);
@@ -436,7 +432,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Lets setData fit the whole day when the user has not zoomed.
   it("does not set the x scale after an update without zoom", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
 
     renderer.updateData(TEST_HISTORY_DATA);
 
@@ -453,7 +449,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Drops the zoom when the new data starts another day.
   it("resets the x zoom when another day is shown", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 120 };
     const nextDay: EnergyHistoryResponse = {
       ...TEST_HISTORY_DATA,
@@ -467,46 +463,46 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
-  // Mounts both legend tables into their own layout rows outside the plot.
-  it("mounts each legend into its dedicated container", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
-    const firstLegend = document.createElement("table");
-    const secondLegend = document.createElement("table");
+  // Mounts the top legend inside the plot overlay, hidden until the cursor is on it.
+  it("mounts the top legend inside the plot overlay, hidden until the cursor is on it", () => {
+    new EnergyChartsRenderer(containers);
+    const table = document.createElement("table");
+    const over = document.createElement("div");
 
-    createChartMock.mock.calls[0][0].legend.mount({}, firstLegend);
-    createChartMock.mock.calls[1][0].legend.mount({}, secondLegend);
+    createChartMock.mock.calls[0][0].legend.mount({ over, cursor: { left: -10 } }, table);
 
-    expect(legendContainers[0].firstElementChild).toBe(firstLegend);
-    expect(legendContainers[1].firstElementChild).toBe(secondLegend);
-    expect(containers[0].contains(firstLegend)).toBe(false);
-    expect(containers[1].contains(secondLegend)).toBe(false);
+    expect(over.firstElementChild).toBe(table);
+    expect(table.style.display).toBe("none");
   });
 
-  // Removes externally mounted legends when the graph renderer is destroyed.
-  it("clears mounted legends on destroy", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
-    const legends = [document.createElement("table"), document.createElement("table")];
-    createChartMock.mock.calls[0][0].legend.mount({}, legends[0]);
-    createChartMock.mock.calls[1][0].legend.mount({}, legends[1]);
+  // Shows the top legend while its own or the synced cursor is on the plot.
+  it("shows the top legend while its own or the synced cursor is on the plot", () => {
+    new EnergyChartsRenderer(containers);
+    const table = document.createElement("table");
+    const over = document.createElement("div");
+    const firstOptions = createChartMock.mock.calls[0][0];
 
-    renderer.destroy();
+    firstOptions.legend.mount({ over, cursor: { left: -10 } }, table);
+    expect(table.style.display).toBe("none");
 
-    expect(legendContainers[0].childElementCount).toBe(0);
-    expect(legendContainers[1].childElementCount).toBe(0);
+    firstOptions.hooks.setCursor[0]({ cursor: { left: 0 } });
+    expect(table.style.display).toBe("");
+
+    firstOptions.hooks.setCursor[0]({ cursor: { left: 120 } });
+    expect(table.style.display).toBe("");
+
+    firstOptions.hooks.setCursor[0]({ cursor: { left: -10 } });
+    expect(table.style.display).toBe("none");
   });
 
   // Keeps separately rendered cards from joining the same cursor and zoom group.
   it("creates a distinct uPlot synchronization group per card", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     const firstSyncKey = createChartMock.mock.calls[0][0].cursor.sync.key;
 
     containers = [document.createElement("div"), document.createElement("div")];
-    legendContainers = [
-      document.createElement("div"),
-      document.createElement("div"),
-    ];
     createChartMock.mockImplementation(() => ({ root: createRoot() }));
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     const secondSyncKey = createChartMock.mock.calls[2][0].cursor.sync.key;
 
     expect(secondSyncKey).not.toBe(firstSyncKey);
@@ -590,7 +586,7 @@ describe("EnergyChartsRenderer", () => {
     containers[0].style.setProperty("--primary-text-color", "#f4f4f4");
     containers[0].style.setProperty("--divider-color", "#555555");
 
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     const axes = createChartMock.mock.calls[0][0].axes;
     expect(axes[0].stroke()).toBe("#f4f4f4");
@@ -602,7 +598,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Uses readable text and a thinner gray grid for Home Assistant dark mode.
   it("uses a white axis and a thin gray grid in dark mode", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     charts[0].axes[0].grid = undefined;
     renderer.refreshTheme(true);
     const axes = createChartMock.mock.calls[0][0].axes;
@@ -617,7 +613,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Keeps color callbacks callable through repeated theme changes and redraws.
   it("retains stable color callbacks across repeated theme changes", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     const axes = createChartMock.mock.calls[0][0].axes;
     const stroke = axes[0].stroke;
     const gridStroke = axes[0].grid.stroke;
@@ -649,7 +645,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Leaves uPlot's own selection color, visible on a light card.
   it("keeps uPlot's zoom selection color in light mode", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     expect(selectionColor(0)).toBe("");
     expect(selectionColor(1)).toBe("");
@@ -658,7 +654,7 @@ describe("EnergyChartsRenderer", () => {
   // Draws the zoom selection in translucent gray on both charts in dark mode,
   // where uPlot's 7% black is invisible.
   it("shows a gray zoom selection on both charts in dark mode", () => {
-    new EnergyChartsRenderer(containers, legendContainers, true);
+    new EnergyChartsRenderer(containers, true);
 
     expect(selectionColor(0)).toBe("rgba(158, 158, 158, 0.25)");
     expect(selectionColor(1)).toBe("rgba(158, 158, 158, 0.25)");
@@ -666,7 +662,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Switches the zoom selection color with the Home Assistant theme.
   it("updates the zoom selection color when the theme changes", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
 
     renderer.refreshTheme(true);
     const darkColors = [selectionColor(0), selectionColor(1)];
@@ -682,7 +678,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Avoids redrawing canvas charts when the selected theme did not change.
   it("does not redraw when the theme is unchanged", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
 
     renderer.refreshTheme(false);
 
@@ -692,7 +688,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Ignores Home Assistant theme updates after chart resources have been released.
   it("does not refresh the theme after destroy", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     renderer.destroy();
 
     renderer.refreshTheme(true);
@@ -703,7 +699,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Watches both graph containers so responsive layout changes reach uPlot.
   it("observes both chart containers", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     expect(MockResizeObserver.instances).toHaveLength(1);
     expect(MockResizeObserver.instances[0].observedElements).toEqual(
@@ -713,7 +709,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Resizes only the chart whose observed container changed size.
   it("updates the matching chart dimensions after resize", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     MockResizeObserver.instances[0].trigger(containers[1], 420, 160);
 
@@ -726,7 +722,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Ignores zero-sized observations to avoid collapsing charts while hidden.
   it("ignores zero-sized containers", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     MockResizeObserver.instances[0].trigger(containers[0], 0, 0);
     MockResizeObserver.instances[0].trigger(containers[0], 420, 0);
@@ -738,7 +734,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Releases observers and both uPlot instances exactly once.
   it("destroys charts and disconnects its observer idempotently", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
 
     renderer.destroy();
     renderer.destroy();
@@ -750,7 +746,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Zooms both charts synchronously and falls back to the center for invalid cursor coordinates.
   it("zooms both charts synchronously when scrolling over the solar chart", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 50, right: 250, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -816,7 +812,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Zooms both energy charts synchronously when the mouse wheel scrolls on the second chart.
   it("zooms both charts synchronously when scrolling over the grid chart", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     containers[1].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -835,7 +831,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Uses full-day bounds and a centered cursor when uPlot has no x-scale limits.
   it("uses day bounds when wheel zoom has no x-scale limits", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = {};
     charts[1].scales.x = {};
     containers[0].getBoundingClientRect = () =>
@@ -855,7 +851,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Prevents scrolling and leaves scales unchanged when zooming out while already at full day.
   it("does not update scale when zooming out from the full day bounds", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -899,7 +895,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Stops responding to wheel events after the renderer is destroyed.
   it("removes wheel event listeners when destroyed", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -919,7 +915,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Pans both charts when the user press+drags while zoomed in.
   it("pans both charts on mousedown+mousemove when zoomed", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     // Simulate a zoomed-in state on both charts.
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
@@ -969,7 +965,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Does not start panning when the view shows the full day (not zoomed).
   it("does not pan on drag when at full day bounds", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -995,7 +991,7 @@ describe("EnergyChartsRenderer", () => {
   // Hands press+drag back to uPlot's x selection zoom on both charts when the
   // full day is shown, e.g. after a zoom out.
   it("enables x selection zoom on both charts at full day bounds", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].cursor.drag.x = false;
     charts[1].cursor.drag.x = false;
     containers[0].getBoundingClientRect = () =>
@@ -1012,7 +1008,7 @@ describe("EnergyChartsRenderer", () => {
   // Disables uPlot's x selection on both charts while zoomed in, so that
   // press+drag on either chart only pans.
   it("disables x selection zoom on both charts when zoomed", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[1].getBoundingClientRect = () =>
@@ -1046,7 +1042,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Stops panning on mouseup and removes document-level move/up listeners.
   it("stops panning on mouseup", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1074,7 +1070,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Removes mousedown listeners from chart containers when destroyed.
   it("removes mousedown listeners when destroyed", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1095,7 +1091,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Cleans up document listeners for an active drag when destroyed mid-drag.
   it("cleans up active drag state on destroy", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1121,7 +1117,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Pans both charts synchronously when 1-finger horizontal touch drag occurs while zoomed in.
   it("pans both charts synchronously on 1-finger horizontal touchmove when zoomed", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 240 };
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1145,7 +1141,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Allows default vertical page scrolling when 1-finger touch movement is primarily vertical.
   it("allows native vertical page scrolling during vertical 1-finger touch movement", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 240 };
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1169,7 +1165,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Allows native page scrolling when 1-finger dragging while not zoomed in.
   it("allows native page scrolling when 1-finger dragging while not zoomed", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
 
@@ -1191,7 +1187,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Resets active touch state on touchend or touchcancel.
   it("cleans up active touch state on touchend and touchcancel", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 240 };
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1226,7 +1222,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Removes all touch event listeners when renderer is destroyed.
   it("removes touch event listeners when destroyed", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 240 };
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1250,7 +1246,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Zooms both charts synchronously when a 2-finger pinch gesture occurs.
   it("zooms both charts synchronously on 2-finger pinch gesture", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 20000, max: 60000 };
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1281,7 +1277,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Smoothly transitions from a 2-finger pinch to a 1-finger pan without visual jumps.
   it("smoothly transitions from 2-finger pinch to 1-finger drag pan", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 60, max: 240 };
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1321,7 +1317,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Uses dark mode defaults even if the card has no custom theme values.
   it("falls back to dark-mode defaults when CSS variables are missing", () => {
-    new EnergyChartsRenderer(containers, legendContainers, true);
+    new EnergyChartsRenderer(containers, true);
 
     const axes = createChartMock.mock.calls[0][0].axes;
     expect(axes[0].stroke()).toBe("#ffffff");
@@ -1339,7 +1335,7 @@ describe("EnergyChartsRenderer", () => {
     containers[0].style.setProperty("--primary-text-color", "");
     containers[0].style.setProperty("--divider-color", "");
 
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
 
     const axes = createChartMock.mock.calls[0][0].axes;
     expect(axes[0].stroke()).toBe("#212121");
@@ -1348,7 +1344,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Keeps a destroyed renderer from mutating chart state on later updates.
   it("ignores updates after destroy", () => {
-    const renderer = new EnergyChartsRenderer(containers, legendContainers);
+    const renderer = new EnergyChartsRenderer(containers);
     renderer.destroy();
 
     renderer.updateData({
@@ -1363,7 +1359,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Ignores wheel zoom requests when the visible chart has only one x sample.
   it("does not zoom with a single-sample x axis", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].data = [Float64Array.from([0])];
     charts[1].data = [Float64Array.from([0])];
     containers[0].getBoundingClientRect = () =>
@@ -1384,7 +1380,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Right-click drags should never trigger a pan while the user is zoomed in.
   it("ignores right-button drag starts when zoomed", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1401,7 +1397,7 @@ describe("EnergyChartsRenderer", () => {
 
   // A drag already in progress should silently ignore a second mousedown.
   it("ignores a second drag start while panning", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1421,7 +1417,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Zero-width plots should not start a drag or recenter the time scale.
   it("ignores drag starts when the plot width is zero", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 50, max: 200 };
     charts[1].scales.x = { min: 50, max: 200 };
     containers[0].getBoundingClientRect = () =>
@@ -1438,7 +1434,7 @@ describe("EnergyChartsRenderer", () => {
 
   // Resize callbacks should ignore unrelated container changes.
   it("ignores resize notifications for unrelated elements", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     const unrelated = document.createElement("div");
     document.body.append(unrelated);
 
@@ -1462,7 +1458,7 @@ describe("EnergyChartsRenderer", () => {
 
   // A zoomed-in view should not react to drag moves once the last update is no-op.
   it("does not keep panning when the drag is already clamped at the boundary", () => {
-    new EnergyChartsRenderer(containers, legendContainers);
+    new EnergyChartsRenderer(containers);
     charts[0].scales.x = { min: 0, max: 40000 };
     charts[1].scales.x = { min: 0, max: 40000 };
     containers[0].getBoundingClientRect = () =>
