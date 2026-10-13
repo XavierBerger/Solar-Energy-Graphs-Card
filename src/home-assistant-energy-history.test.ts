@@ -10,6 +10,7 @@ import {
   getSameTimeOfDay,
   entityRowsOf,
   mergeLiveEnergySamples,
+  NO_STATISTICS,
   normalizeEnergyHistory,
   parseCompressedPowerSamples,
   parseEnergyHistory,
@@ -75,7 +76,28 @@ describe("Home Assistant energy history", () => {
       consumptionToW: 1,
       gridImportToW: 1000,
       gridExportToW: 1,
+      consumersToW: [],
     });
+  });
+
+  // Scales additional consumer sensors using the same strict power-unit rules.
+  it("validates and scales consumer sensor units", () => {
+    const watts = {
+      unit_of_measurement: "W",
+      device_class: "power",
+      state_class: "measurement",
+    };
+    const kilowatts = { ...watts, unit_of_measurement: "kW" };
+
+    expect(
+      getEnergyUnitScales([watts, watts, watts, watts], [watts, kilowatts])
+        .consumersToW,
+    ).toEqual([1, 1000]);
+    expect(() =>
+      getEnergyUnitScales([watts, watts, watts, watts], [
+        { ...watts, state_class: "total_increasing" },
+      ]),
+    ).toThrow("Consumer sensors must have device_class=power");
   });
 
   // Skips validation of unconfigured (null) sensors instead of rejecting them.
@@ -92,6 +114,7 @@ describe("Home Assistant energy history", () => {
       consumptionToW: 1000,
       gridImportToW: 1,
       gridExportToW: 1000,
+      consumersToW: [],
     });
   });
 
@@ -561,6 +584,86 @@ describe("Home Assistant energy history", () => {
     expect(data.gridData[4]).toEqual([0, 0, 20, null, null]);
     expect(data.gridData[5]).toEqual([-50, -50, 0, null, null]);
     expect(data.gridData[6]).toEqual([-150, -150, 0, null, null]);
+  });
+
+  // Stacks ordered consumers downward from total consumption and clamps the remainder at zero.
+  it("projects consumer bands in configured order and preserves residual consumption", () => {
+    const projected = projectEnergyHistory(
+      [
+        [{ timestamp: 60, value: 300 }],
+        [{ timestamp: 60, value: 1000 }],
+        [],
+        [],
+      ],
+      { start: 0, end: 86_400 },
+      120,
+      NO_STATISTICS,
+      [
+        {
+          entity: "sensor.first",
+          color: "#8B5CF6",
+          samples: [{ timestamp: 60, value: 300 }],
+        },
+        {
+          entity: "sensor.second",
+          color: "#F97316",
+          samples: [{ timestamp: 60, value: 800 }],
+        },
+      ],
+    );
+    const atReading = Array.from(projected.mainData[0]).indexOf(60);
+
+    expect(projected.mainData).toHaveLength(20);
+    expect(projected.consumers).toEqual([
+      {
+        label: "sensor.first",
+        color: "#8B5CF6",
+        valueIndex: 14,
+        upperIndex: 15,
+        lowerIndex: 16,
+      },
+      {
+        label: "sensor.second",
+        color: "#F97316",
+        valueIndex: 17,
+        upperIndex: 18,
+        lowerIndex: 19,
+      },
+    ]);
+    expect(projected.mainData[15][atReading]).toBe(1000);
+    expect(projected.mainData[16][atReading]).toBe(700);
+    expect(projected.mainData[18][atReading]).toBe(700);
+    expect(projected.mainData[19][atReading]).toBe(0);
+    expect(projected.mainData[4][atReading]).toBe(300);
+  });
+
+  // Missing consumer readings contribute zero, leaving the remaining total unchanged.
+  it("keeps consumer bands finite when readings are null or exceed the remainder", () => {
+    const projected = projectEnergyHistory(
+      [[], [{ timestamp: 60, value: 500 }], [], []],
+      { start: 0, end: 86_400 },
+      120,
+      NO_STATISTICS,
+      [
+        {
+          entity: "sensor.missing",
+          color: "#8B5CF6",
+          samples: [{ timestamp: 60, value: null }],
+        },
+        {
+          entity: "sensor.large",
+          color: "#F97316",
+          samples: [{ timestamp: 60, value: 900 }],
+        },
+      ],
+    );
+    const atReading = Array.from(projected.mainData[0]).indexOf(60);
+
+    expect(projected.mainData[14][atReading]).toBeNull();
+    expect(projected.mainData[15][atReading]).toBe(500);
+    expect(projected.mainData[16][atReading]).toBe(500);
+    expect(projected.mainData[18][atReading]).toBe(500);
+    expect(projected.mainData[19][atReading]).toBe(0);
   });
 
   // Includes a raw sample exactly at the selected day's start.

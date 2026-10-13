@@ -22,6 +22,16 @@ describe("translations", () => {
     expect(text.previousDay).toBe("Jour précédent");
     expect(text.returnToToday).toBe("Revenir à aujourd'hui");
     expect(text.nextDay).toBe("Jour suivant");
+    expect(text).toMatchObject({
+      consumersHeading: "Consommateurs individuels",
+      addConsumer: "Ajouter un consommateur",
+      removeConsumer: "Supprimer le consommateur",
+      moveConsumerUp: "Monter le consommateur",
+      moveConsumerDown: "Descendre le consommateur",
+      consumerColor: "Couleur du consommateur",
+      showConsumers: "Afficher les consommateurs",
+      hideConsumers: "Masquer les consommateurs",
+    });
     expect(text.graphTitles).toEqual({
       productionConsumption: "Production solaire et consommation",
       gridExchange: "Échanges avec le réseau",
@@ -77,6 +87,8 @@ describe("translations", () => {
       expectedType: 'Type de carte attendu : "custom:solar-energy-graphs-card".',
       missingEntities:
         'Configurez "entities.production", "entities.consumption", "entities.grid_import" et "entities.grid_export".',
+      invalidConsumers:
+        "Configurez chaque consommateur avec une entité de capteur et une couleur #RRGGBB facultative.",
     });
     expect(text.cardPickerDescription).toBe(
       "Deux graphiques d'énergie solaire synchronisés.",

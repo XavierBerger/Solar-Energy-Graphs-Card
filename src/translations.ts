@@ -12,6 +12,15 @@ export interface CardTranslations {
   previousDay: string;
   returnToToday: string;
   nextDay: string;
+  consumersHeading: string;
+  addConsumer: string;
+  removeConsumer: string;
+  moveConsumerUp: string;
+  moveConsumerDown: string;
+  consumerEntity: string;
+  consumerColor: string;
+  showConsumers: string;
+  hideConsumers: string;
   graphTitles: {
     productionConsumption: string;
     gridExchange: string;
@@ -52,6 +61,7 @@ export interface CardTranslations {
   setConfig: {
     expectedType: string;
     missingEntities: string;
+    invalidConsumers: string;
   };
   cardPickerDescription: string;
 }
@@ -91,6 +101,15 @@ export const EN: CardTranslations = {
   previousDay: "Previous day",
   returnToToday: "Return to today",
   nextDay: "Next day",
+  consumersHeading: "Individual consumers",
+  addConsumer: "Add a consumer",
+  removeConsumer: "Remove consumer",
+  moveConsumerUp: "Move consumer up",
+  moveConsumerDown: "Move consumer down",
+  consumerEntity: "Consumer entity",
+  consumerColor: "Consumer color",
+  showConsumers: "Show consumers",
+  hideConsumers: "Hide consumers",
   graphTitles: {
     productionConsumption: "Solar Production and Consumption",
     gridExchange: "Grid Exchange",
@@ -147,6 +166,8 @@ export const EN: CardTranslations = {
     expectedType: 'Expected card type "custom:solar-energy-graphs-card".',
     missingEntities:
       'Configure "entities.production", "entities.consumption", "entities.grid_import", and "entities.grid_export".',
+    invalidConsumers:
+      "Configure each consumer with a sensor entity ID and an optional #RRGGBB color.",
   },
   cardPickerDescription: "Two synchronized solar energy graphs.",
 };
@@ -156,6 +177,15 @@ export const FR: CardTranslations = {
   previousDay: "Jour précédent",
   returnToToday: "Revenir à aujourd'hui",
   nextDay: "Jour suivant",
+  consumersHeading: "Consommateurs individuels",
+  addConsumer: "Ajouter un consommateur",
+  removeConsumer: "Supprimer le consommateur",
+  moveConsumerUp: "Monter le consommateur",
+  moveConsumerDown: "Descendre le consommateur",
+  consumerEntity: "Entité du consommateur",
+  consumerColor: "Couleur du consommateur",
+  showConsumers: "Afficher les consommateurs",
+  hideConsumers: "Masquer les consommateurs",
   graphTitles: {
     productionConsumption: "Production solaire et consommation",
     gridExchange: "Échanges avec le réseau",
@@ -212,6 +242,8 @@ export const FR: CardTranslations = {
     expectedType: 'Type de carte attendu : "custom:solar-energy-graphs-card".',
     missingEntities:
       'Configurez "entities.production", "entities.consumption", "entities.grid_import" et "entities.grid_export".',
+    invalidConsumers:
+      "Configurez chaque consommateur avec une entité de capteur et une couleur #RRGGBB facultative.",
   },
   cardPickerDescription: "Deux graphiques d'énergie solaire synchronisés.",
 };

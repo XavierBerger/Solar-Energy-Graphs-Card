@@ -1,9 +1,11 @@
 import { css, html, LitElement, unsafeCSS } from "lit";
 import { EnergyChartsRenderer } from "./energy-charts-renderer";
 import type {
+  ConsumerConfig,
   SolarEnergyEntityRole,
   SolarEnergyGraphsCardConfig,
 } from "./solar-energy-graphs-card-config";
+import { CONSUMER_DEFAULT_COLORS } from "./solar-energy-graphs-card-config";
 import {
   buildHistoryRequest,
   buildStatisticsRequest,
@@ -25,11 +27,14 @@ import {
   type EnergyPowerSamples,
   type EnergySensorMetadata,
   type EnergyStatistics,
+  type EnergyStatisticsCollection,
   type EnergyUnitScales,
+  type StatisticSample,
   type HistoryDuringPeriodMessage,
   type HistoryDuringPeriodResponse,
   type LivePowerSample,
   type LocalDayWindow,
+  type NumericSample,
   type StatisticsDuringPeriodMessage,
   type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
@@ -88,9 +93,10 @@ export class SolarEnergyGraphsCard extends LitElement {
   private darkMode = false;
   private historyData?: EnergyHistoryResponse;
   private historyModel?: {
-    statistics: EnergyStatistics;
+    statistics: EnergyStatisticsCollection;
     /** Raw states in W, drawn after each sensor's last statistics interval. */
     samples: EnergyPowerSamples;
+    consumerSamples: readonly (readonly NumericSample[])[];
     window: LocalDayWindow;
     unitScales: EnergyUnitScales;
     loading: boolean;
@@ -105,6 +111,7 @@ export class SolarEnergyGraphsCard extends LitElement {
   private statisticsRefreshTimer?: ReturnType<typeof setTimeout>;
   private selectedDay?: string;
   private selectedDayTimeZone?: string;
+  private consumersVisible = false;
   private mainStatus: CardStatusDescriptor = { kind: "waiting" };
   private gridStatus: CardStatusDescriptor = { kind: "waiting" };
 
@@ -176,6 +183,14 @@ export class SolarEnergyGraphsCard extends LitElement {
       font: inherit;
       padding: 0.5rem;
       width: 150px
+    }
+
+    .chart .u-legend .u-series.consumer-legend {
+      display: none;
+    }
+
+    .chart.consumers-visible .u-legend .u-series.consumer-legend {
+      display: block;
     }
 
     .day-navigation .selected-day:focus-visible {
@@ -308,6 +323,10 @@ export class SolarEnergyGraphsCard extends LitElement {
     ) {
       throw new Error(t.setConfig.missingEntities);
     }
+    const consumers = config.consumers === undefined ? [] : config.consumers;
+    if (!Array.isArray(consumers) || !consumers.every(isValidConsumerConfig)) {
+      throw new Error(t.setConfig.invalidConsumers);
+    }
     this.config = {
       ...config,
       entities: {
@@ -316,7 +335,16 @@ export class SolarEnergyGraphsCard extends LitElement {
         grid_import: normalizeEntityId(entities.grid_import),
         grid_export: normalizeEntityId(entities.grid_export),
       },
+      consumers: consumers.map((consumer, index) => ({
+        ...consumer,
+        entity: consumer.entity.trim(),
+        color:
+          consumer.color ??
+          CONSUMER_DEFAULT_COLORS[index % CONSUMER_DEFAULT_COLORS.length],
+      })),
     };
+    this.chartRenderer?.destroy();
+    this.chartRenderer = undefined;
     this.historyData = undefined;
     this.historyModel = undefined;
     this.historyLoadKey = "";
@@ -340,6 +368,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         grid_import: null,
         grid_export: null,
       },
+      consumers: [],
     };
   }
 
@@ -403,6 +432,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     return html`
       <ha-card>
         <nav class="day-navigation" aria-label=${t.dayNavigation}>
+          ${this.renderConsumersButton()}
           ${this.renderPrecisionButton()}
           <button
             type="button"
@@ -490,6 +520,9 @@ export class SolarEnergyGraphsCard extends LitElement {
         this.darkMode,
         this.language,
       );
+      if (this.consumersVisible) {
+        this.chartRenderer.setConsumersVisible(true);
+      }
     }
   }
 
@@ -530,7 +563,9 @@ export class SolarEnergyGraphsCard extends LitElement {
         entityIds[1] ? hass.states?.[entityIds[1]]?.attributes : null,
         entityIds[2] ? hass.states?.[entityIds[2]]?.attributes : null,
         entityIds[3] ? hass.states?.[entityIds[3]]?.attributes : null,
-      ]);
+      ], entityIds.slice(4).map((entityId) =>
+        entityId ? hass.states?.[entityId]?.attributes : null,
+      ));
     } catch (error) {
       const sensorError: CardStatusDescriptor =
         error instanceof Error && "role" in error && "problem" in error
@@ -553,6 +588,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.historyModel = {
       statistics: NO_STATISTICS,
       samples: [[], [], [], []],
+      consumerSamples: (config.consumers ?? []).map(() => []),
       window: dayWindow,
       unitScales,
       loading: true,
@@ -565,7 +601,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private async fetchHistory(
     hass: HomeAssistantThemeContext,
-    entityIds: readonly [string | null, string | null, string | null, string | null],
+    entityIds: readonly (string | null)[],
     requestId: number,
   ): Promise<void> {
     const model = this.historyModel;
@@ -600,7 +636,11 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
 
     let samples = current.samples;
+    let consumerSamples = current.consumerSamples;
     let precisionSamples: EnergyPowerSamples = [[], [], [], []];
+    let precisionConsumerSamples: readonly (readonly NumericSample[])[] = current.consumerSamples.map(
+      () => [],
+    );
     let loadError =
       statistics.status === "rejected" ? errorMessage(statistics.reason) : undefined;
     let highPrecisionAvailable = false;
@@ -611,7 +651,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       }
       const scales = sensorUnitScales(current.unitScales);
       entityIds.forEach((entityId, sensor) => {
-        if (!entityId) {
+        if (!entityId || sensor >= 4) {
           return;
         }
         samples = replaceSensorHistory(
@@ -620,6 +660,19 @@ export class SolarEnergyGraphsCard extends LitElement {
           parseCompressedPowerSamples(
             entityRowsOf(tail.value, entityId),
             scales[sensor],
+          ),
+        );
+      });
+      entityIds.slice(4).forEach((entityId, consumer) => {
+        if (!entityId) {
+          return;
+        }
+        consumerSamples = replaceConsumerHistory(
+          consumerSamples,
+          consumer,
+          parseCompressedPowerSamples(
+            entityRowsOf(tail.value, entityId),
+            current.unitScales.consumersToW[consumer],
           ),
         );
       });
@@ -639,17 +692,28 @@ export class SolarEnergyGraphsCard extends LitElement {
           if (!entityId) {
             return;
           }
-          precisionSamples = replaceSensorHistory(
-            precisionSamples,
-            sensor as LivePowerSample["sensor"],
-            parseCompressedPowerSamples(
-              entityRowsOf(precisionProbe.value, entityId),
-              scales[sensor],
-            ),
+          const parsed = parseCompressedPowerSamples(
+            entityRowsOf(precisionProbe.value, entityId),
+            sensor < 4
+              ? scales[sensor]
+              : current.unitScales.consumersToW[sensor - 4],
           );
+          if (sensor < 4) {
+            precisionSamples = replaceSensorHistory(
+              precisionSamples,
+              sensor as LivePowerSample["sensor"],
+              parsed,
+            );
+          } else {
+            precisionConsumerSamples = replaceConsumerHistory(
+              precisionConsumerSamples,
+              sensor - 4,
+              parsed,
+            );
+          }
         });
         highPrecisionAvailable = hasHigherPrecisionSamples(
-          precisionSamples,
+          [...precisionSamples, ...precisionConsumerSamples],
           statistics.status === "fulfilled"
             ? statistics.value
             : current.statistics,
@@ -678,7 +742,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private scheduleStatisticsRefresh(
     hass: HomeAssistantThemeContext,
-    entityIds: readonly [string | null, string | null, string | null, string | null],
+    entityIds: readonly (string | null)[],
     requestId: number,
   ): void {
     const now = Date.now() / 1000;
@@ -699,7 +763,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private async refreshStatistics(
     hass: HomeAssistantThemeContext,
-    entityIds: readonly [string | null, string | null, string | null, string | null],
+    entityIds: readonly (string | null)[],
     requestId: number,
   ): Promise<void> {
     const model = this.historyModel;
@@ -712,7 +776,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.scheduleStatisticsRefresh(hass, entityIds, requestId);
       return;
     }
-    let statistics: EnergyStatistics | undefined;
+    let statistics: EnergyStatisticsCollection | undefined;
     let loadError: string | undefined;
     try {
       statistics = await fetchStatistics(
@@ -746,7 +810,20 @@ export class SolarEnergyGraphsCard extends LitElement {
           model.samples,
           model.window,
           Date.now() / 1000,
-          model.precision === "raw" ? NO_STATISTICS : model.statistics,
+          model.precision === "raw"
+            ? NO_STATISTICS
+            : baseStatistics(model.statistics),
+          (this.config?.consumers ?? [])
+            .map((consumer, index) => ({
+              ...consumer,
+              color: consumer.color ?? CONSUMER_DEFAULT_COLORS[index % CONSUMER_DEFAULT_COLORS.length],
+              samples: model.consumerSamples[index] ?? [],
+              statistics:
+                model.precision === "raw"
+                  ? []
+                  : model.statistics[index + 4] ?? [],
+            }))
+            .filter((consumer) => consumer.entity.length > 0),
         ),
       );
     }
@@ -757,6 +834,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     if (!model || model.highPrecisionAvailable === undefined) {
       return html``;
     }
+
     if (model?.highPrecisionAvailable === false) {
       return html``;
     }
@@ -783,6 +861,31 @@ export class SolarEnergyGraphsCard extends LitElement {
       </button>
     `;
   }
+
+  private renderConsumersButton() {
+    if (!this.config?.consumers?.some((consumer) => consumer.entity.length > 0)) {
+      return html``;
+    }
+    const t = translations(this.language);
+    const label = this.consumersVisible ? t.hideConsumers : t.showConsumers;
+    return html`
+      <button
+        type="button"
+        aria-label=${label}
+        title=${label}
+        aria-pressed=${this.consumersVisible}
+        @click=${this.toggleConsumers}
+      >
+        <span aria-hidden="true">▰</span>
+      </button>
+    `;
+  }
+
+  private toggleConsumers = (): void => {
+    this.consumersVisible = !this.consumersVisible;
+    this.chartRenderer?.setConsumersVisible(this.consumersVisible);
+    this.requestUpdate();
+  };
 
   private togglePrecision = (): void => {
     const hass = this.hassContext;
@@ -832,20 +935,37 @@ export class SolarEnergyGraphsCard extends LitElement {
       }
       const scales = sensorUnitScales(current.unitScales);
       let samples = [[], [], [], []] as EnergyPowerSamples;
+      let consumerSamples: readonly (readonly NumericSample[])[] = (config.consumers ?? []).map(
+        () => [],
+      );
       configuredEntityIds(config).forEach((entityId, sensor) => {
         if (!entityId) {
           return;
         }
-        samples = replaceSensorHistory(
-          samples,
-          sensor as LivePowerSample["sensor"],
-          parseCompressedPowerSamples(
-            entityRowsOf(response, entityId),
-            scales[sensor],
-          ),
+        const parsed = parseCompressedPowerSamples(
+          entityRowsOf(response, entityId),
+          sensor < 4
+            ? scales[sensor]
+            : current.unitScales.consumersToW[sensor - 4],
         );
+        if (sensor < 4) {
+          samples = replaceSensorHistory(
+            samples,
+            sensor as LivePowerSample["sensor"],
+            parsed,
+          );
+        } else {
+          consumerSamples = replaceConsumerHistory(
+            consumerSamples,
+            sensor - 4,
+            parsed,
+          );
+        }
       });
-      if (!hasHigherPrecisionSamples(samples, current.statistics)) {
+      if (!hasHigherPrecisionSamples(
+        [...samples, ...consumerSamples],
+        current.statistics,
+      )) {
         this.historyModel = {
           ...current,
           loading: false,
@@ -858,6 +978,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       this.historyModel = {
         ...current,
         samples,
+        consumerSamples,
         loading: false,
         precision: "raw",
         highPrecisionAvailable: true,
@@ -902,7 +1023,8 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
 
     const scales = sensorUnitScales(model.unitScales);
-    const live = configuredEntityIds(this.config).flatMap(
+    const configured = configuredEntityIds(this.config);
+    const live = configured.slice(0, 4).flatMap(
       (entityId, sensor): LivePowerSample[] => {
         if (!entityId) {
           return [];
@@ -913,11 +1035,28 @@ export class SolarEnergyGraphsCard extends LitElement {
       },
     );
     const samples = mergeLiveEnergySamples(model.samples, live);
-    if (samples === model.samples) {
+    let consumerSamples = model.consumerSamples;
+    configured.slice(4).forEach((entityId, consumer) => {
+      if (!entityId) {
+        return;
+      }
+      const state = hass.states?.[entityId];
+      const sample =
+        state &&
+        parsePowerState(state, model.unitScales.consumersToW[consumer]);
+      if (sample) {
+        consumerSamples = mergeConsumerLiveSample(
+          consumerSamples,
+          consumer,
+          sample,
+        );
+      }
+    });
+    if (samples === model.samples && consumerSamples === model.consumerSamples) {
       return;
     }
 
-    this.historyModel = { ...model, samples };
+    this.historyModel = { ...model, samples, consumerSamples };
     this.showCurrentModel();
   }
 
@@ -1008,21 +1147,86 @@ export class SolarEnergyGraphsCard extends LitElement {
   }
 }
 
+function replaceConsumerHistory(
+  consumers: readonly (readonly NumericSample[])[],
+  consumer: number,
+  history: readonly NumericSample[],
+): readonly (readonly NumericSample[])[] {
+  const replaced = consumers.map((samples) => [...samples]);
+  const lastRecorded = history.at(-1)?.timestamp ?? Number.NEGATIVE_INFINITY;
+  replaced[consumer] = [
+    ...history,
+    ...(consumers[consumer] ?? []).filter(
+      (sample) => sample.timestamp > lastRecorded,
+    ),
+  ];
+  return replaced;
+}
+
+function mergeConsumerLiveSample(
+  consumers: readonly (readonly NumericSample[])[],
+  consumer: number,
+  sample: NumericSample,
+): readonly (readonly NumericSample[])[] {
+  const current = consumers[consumer] ?? [];
+  const last = current.at(-1);
+  if (!Number.isFinite(sample.timestamp) || (last && sample.timestamp < last.timestamp)) {
+    return consumers;
+  }
+  if (last?.timestamp === sample.timestamp && last.value === sample.value) {
+    return consumers;
+  }
+  const next =
+    last?.timestamp === sample.timestamp
+      ? [...current.slice(0, -1), sample]
+      : [...current, sample];
+  return consumers.map((samples, index) =>
+    index === consumer ? next : [...samples],
+  );
+}
+
+function isValidConsumerConfig(value: unknown): value is ConsumerConfig {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const entity = Reflect.get(value, "entity");
+  const color = Reflect.get(value, "color");
+  const name = Reflect.get(value, "name");
+  return (
+    typeof entity === "string" &&
+    (name === undefined || typeof name === "string") &&
+    (color === undefined ||
+      (typeof color === "string" && /^#[\da-fA-F]{6}$/.test(color)))
+  );
+}
+
 function configuredEntityIds(
   config: SolarEnergyGraphsCardConfig,
-): readonly [string | null, string | null, string | null, string | null] {
+): Array<string | null> {
   return [
     config.entities.production,
     config.entities.consumption,
     config.entities.grid_import,
     config.entities.grid_export,
+    ...(config.consumers ?? []).map((consumer) =>
+      consumer.entity.trim() || null,
+    ),
   ];
 }
 
-function activeEntityIds(
-  entityIds: readonly [string | null, string | null, string | null, string | null],
-): string[] {
+function activeEntityIds(entityIds: readonly (string | null)[]): string[] {
   return entityIds.filter((entityId): entityId is string => entityId !== null);
+}
+
+function baseStatistics(
+  statistics: EnergyStatisticsCollection,
+): EnergyStatistics {
+  return [
+    statistics[0] ?? [],
+    statistics[1] ?? [],
+    statistics[2] ?? [],
+    statistics[3] ?? [],
+  ];
 }
 
 function normalizeEntityId(entityId: string | null): string | null {
@@ -1032,10 +1236,10 @@ function normalizeEntityId(entityId: string | null): string | null {
 /** Fetches 5-minute statistics, completed by hourly ones where purged. */
 async function fetchStatistics(
   hass: HomeAssistantThemeContext,
-  entityIds: readonly [string | null, string | null, string | null, string | null],
+  entityIds: readonly (string | null)[],
   window: LocalDayWindow,
   now: number,
-): Promise<EnergyStatistics> {
+): Promise<EnergyStatisticsCollection> {
   const activeIds = activeEntityIds(entityIds);
   if (activeIds.length === 0) {
     return NO_STATISTICS;
@@ -1044,28 +1248,23 @@ async function fetchStatistics(
     hass.callWS(buildStatisticsRequest(activeIds, window, now, "5minute")),
     hass.callWS(buildStatisticsRequest(activeIds, window, now, "hour")),
   ]);
-  const statisticsOf = (entityId: string | null) =>
+  return entityIds.map((entityId) =>
     entityId === null
       ? []
       : combineStatistics(
         parseStatisticRows(entityRowsOf(fiveMinute, entityId)),
         parseStatisticRows(entityRowsOf(hourly, entityId)),
-      );
-  return [
-    statisticsOf(entityIds[0]),
-    statisticsOf(entityIds[1]),
-    statisticsOf(entityIds[2]),
-    statisticsOf(entityIds[3]),
-  ];
+      ),
+  );
 }
 
 export function hasHigherPrecisionSamples(
-  samples: EnergyPowerSamples,
-  statistics: EnergyStatistics,
+  samples: readonly (readonly NumericSample[])[],
+  statistics: EnergyStatisticsCollection,
 ): boolean {
   for (let sensor = 0; sensor < samples.length; sensor += 1) {
     const raw = samples[sensor];
-    const stat = statistics[sensor];
+    const stat = statistics[sensor] ?? [];
     if (raw.length < 2) {
       continue;
     }

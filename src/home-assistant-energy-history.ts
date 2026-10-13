@@ -77,6 +77,9 @@ export type EnergyStatistics = readonly [
   readonly StatisticSample[],
 ];
 
+export type EnergyStatisticsCollection =
+  readonly (readonly StatisticSample[])[];
+
 export const NO_STATISTICS: EnergyStatistics = [[], [], [], []];
 
 export interface EnergySensorMetadata {
@@ -90,15 +93,34 @@ export interface EnergyUnitScales {
   consumptionToW: number;
   gridImportToW: number;
   gridExportToW: number;
+  consumersToW: readonly (number | null)[];
+  consumerErrors: readonly (string | null)[];
 }
 
 export interface EnergyHistoryResponse {
   mainData: EnergyChartPlotData;
   gridData: EnergyChartPlotData;
+  consumers?: readonly EnergyConsumerPlot[];
   hasProduction: boolean;
   hasConsumption: boolean;
   hasGridImport: boolean;
   hasGridExport: boolean;
+}
+
+export interface EnergyConsumerHistory {
+  entity: string;
+  name?: string;
+  color: string;
+  samples: readonly NumericSample[];
+  statistics?: readonly StatisticSample[];
+}
+
+export interface EnergyConsumerPlot {
+  label: string;
+  color: string;
+  valueIndex: number;
+  upperIndex: number;
+  lowerIndex: number;
 }
 
 export type EnergyChartPlotData = [
@@ -129,6 +151,7 @@ const WATT_UNIT_SCALES: EnergyUnitScales = {
   consumptionToW: 1,
   gridImportToW: 1,
   gridExportToW: 1,
+  consumersToW: [],
 };
 
 export function getLocalDayWindow(now: Date, timeZone: string): LocalDayWindow {
@@ -300,6 +323,7 @@ export function getEnergyUnitScales(
     EnergySensorMetadata | null | undefined,
     EnergySensorMetadata | null | undefined,
   ],
+  consumerMetadata: readonly (EnergySensorMetadata | null | undefined)[] = [],
 ): EnergyUnitScales {
   const [production, consumption, gridImport, gridExport] = metadata;
 
@@ -308,7 +332,28 @@ export function getEnergyUnitScales(
     consumptionToW: powerUnitScale(consumption, "consumption"),
     gridImportToW: powerUnitScale(gridImport, "grid_import"),
     gridExportToW: powerUnitScale(gridExport, "grid_export"),
+    ...consumerUnitScales(consumerMetadata),
   };
+}
+
+function consumerUnitScales(
+  metadata: readonly (EnergySensorMetadata | null | undefined)[],
+): Pick<EnergyUnitScales, "consumersToW" | "consumerErrors"> {
+  const scales: Array<number | null> = [];
+  const errors: Array<string | null> = [];
+  metadata.forEach((item) => {
+    try {
+      scales.push(powerUnitScale(item, "consumer"));
+      errors.push(null);
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+      scales.push(null);
+      errors.push(error.message);
+    }
+  });
+  return { consumersToW: scales, consumerErrors: errors };
 }
 
 export function normalizeEnergyHistory(
@@ -408,10 +453,14 @@ export function projectEnergyHistory(
   window: LocalDayWindow,
   now: number,
   statistics: EnergyStatistics = NO_STATISTICS,
+  consumers: readonly EnergyConsumerHistory[] = [],
 ): EnergyHistoryResponse {
   const lastSample = Math.max(window.start, Math.min(now, window.end));
   const rawStarts = statistics.map(
     (sensor) => sensor.at(-1)?.end ?? Number.NEGATIVE_INFINITY,
+  );
+  const consumerRawStarts = consumers.map(
+    (consumer) => consumer.statistics?.at(-1)?.end ?? Number.NEGATIVE_INFINITY,
   );
   // Stryker disable EqualityOperator: each bound, rawStarts[index], window.start
   // and lastSample, is already a source time or added to the set below.
@@ -425,6 +474,15 @@ export function projectEnergyHistory(
         .map((sample) => sample.timestamp)
         .filter((timestamp) => timestamp >= rawStarts[index]),
     ),
+    ...consumers.flatMap((consumer, index) => [
+      ...(consumer.statistics ?? []).map(
+        (sample) => (sample.start + sample.end) / 2,
+      ),
+      consumerRawStarts[index],
+      ...consumer.samples
+        .map((sample) => sample.timestamp)
+        .filter((timestamp) => timestamp >= consumerRawStarts[index]),
+    ]),
   ].filter((timestamp) => timestamp >= window.start && timestamp < lastSample);
   // Stryker restore EqualityOperator
   const sampleTimes = Array.from(
@@ -439,6 +497,42 @@ export function projectEnergyHistory(
         sampleTimes,
       ),
   );
+  const consumerPlots: EnergyConsumerPlot[] = [];
+  const consumerData: Array<Array<number | null>> = [];
+  const remainingBySample = consumption.mean.slice();
+  consumers.forEach((consumer, consumerIndex) => {
+    const aligned = alignPowerSamples(
+      consumer.statistics ?? [],
+      consumer.samples,
+      consumerRawStarts[consumerIndex],
+      sampleTimes,
+    );
+    const upper: Array<number | null> = [];
+    const lower: Array<number | null> = [];
+    const valueIndex = 14 + consumerIndex * 3;
+    remainingBySample.forEach((top, sampleIndex) => {
+      if (top === null) {
+        upper.push(null);
+        lower.push(null);
+        return;
+      }
+      const remaining = Math.max(
+        0,
+        top - Math.max(0, aligned.mean[sampleIndex] ?? 0),
+      );
+      upper.push(top);
+      lower.push(remaining);
+      remainingBySample[sampleIndex] = remaining;
+    });
+    consumerData.push(aligned.mean, upper, lower);
+    consumerPlots.push({
+      label: consumer.name?.trim() || consumer.entity,
+      color: consumer.color,
+      valueIndex,
+      upperIndex: valueIndex + 1,
+      lowerIndex: valueIndex + 2,
+    });
+  });
   const nonNegative = (values: Array<number | null>) =>
     values.map((value) => (value === null ? null : Math.max(value, 0)));
   const negated = (values: Array<number | null>) =>
@@ -470,6 +564,7 @@ export function projectEnergyHistory(
     production.min,
     consumption.max,
     consumption.min,
+    ...consumerData,
   ];
   const gridData: EnergyChartPlotData = [
     x,
@@ -484,6 +579,7 @@ export function projectEnergyHistory(
   return {
     mainData,
     gridData,
+    consumers: consumerPlots,
     hasProduction: production.mean.some((value) => value !== null),
     hasConsumption: consumption.mean.some((value) => value !== null),
     hasGridImport: importMean.some((value) => value !== null),
@@ -587,7 +683,7 @@ function getLocalMidnightTimestamp(
 
 function powerUnitScale(
   metadata: EnergySensorMetadata | null | undefined,
-  role: SolarEnergyEntityRole,
+  role: SolarEnergyEntityRole | "consumer",
 ): number {
   if (metadata === null) {
     return 1;
@@ -596,9 +692,17 @@ function powerUnitScale(
     metadata?.device_class !== "power" ||
     metadata.state_class !== "measurement"
   ) {
+    if (role === "consumer") {
+      throw new Error(
+        "Consumer sensors must have device_class=power and state_class=measurement.",
+      );
+    }
     throw new SensorConfigurationError(role, "class");
   }
   if (metadata.unit_of_measurement !== "W" && metadata.unit_of_measurement !== "kW") {
+    if (role === "consumer") {
+      throw new Error("Consumer sensors must use W or kW.");
+    }
     throw new SensorConfigurationError(role, "unit");
   }
   return metadata.unit_of_measurement === "kW" ? 1000 : 1;

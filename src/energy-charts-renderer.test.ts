@@ -365,6 +365,53 @@ describe("EnergyChartsRenderer", () => {
     expect(firstOptions.height).toBe(100);
   });
 
+  // Adds consumer value legends and ordered fill bands without adding visible curves.
+  it("renders consumer bands and toggles their visibility without replacing chart data", () => {
+    containers[0].classList.add("chart");
+    const data: EnergyHistoryResponse = {
+      ...TEST_HISTORY_DATA,
+      mainData: [
+        ...TEST_HISTORY_DATA.mainData,
+        [400],
+        [1800],
+        [1400],
+      ],
+      consumers: [
+        {
+          label: "Kitchen",
+          color: "#8B5CF6",
+          valueIndex: 14,
+          upperIndex: 15,
+          lowerIndex: 16,
+        },
+      ],
+    };
+    const renderer = new Renderer(
+      containers,
+      data,
+      "Europe/Paris",
+    );
+    const options = createChartMock.mock.calls[0][0];
+
+    expect(options.series[14]).toMatchObject({
+      label: "Kitchen",
+      class: "consumer-legend",
+      show: false,
+      fill: "#8B5CF6",
+    });
+    expect(options.bands[2].series).toEqual([15, 16]);
+    expect(options.bands[2].show()).toBe(false);
+    expect(data.mainData).toHaveLength(17);
+
+    renderer.setConsumersVisible(true);
+
+    expect(options.bands[2].show()).toBe(true);
+    expect(containers[0].classList.contains("consumers-visible")).toBe(true);
+    expect(charts[0].redraw).toHaveBeenCalledOnce();
+    expect(charts[0].setData).not.toHaveBeenCalled();
+    renderer.destroy();
+  });
+
   // Wires timezone, axis color and zero-line callbacks to their chart options.
   it("provides callable timezone, axis, and zero-line options", () => {
     new EnergyChartsRenderer(containers);

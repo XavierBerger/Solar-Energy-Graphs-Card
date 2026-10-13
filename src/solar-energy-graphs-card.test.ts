@@ -30,6 +30,7 @@ const { rendererInstances } = vi.hoisted(() => ({
     destroy: ReturnType<typeof vi.fn>;
     refreshTheme: ReturnType<typeof vi.fn>;
     updateData: ReturnType<typeof vi.fn>;
+    setConsumersVisible: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -38,6 +39,7 @@ vi.mock("./energy-charts-renderer", () => ({
     readonly destroy = vi.fn();
     readonly refreshTheme = vi.fn();
     readonly updateData = vi.fn();
+    readonly setConsumersVisible = vi.fn();
 
     constructor(
       readonly containers: HTMLElement[],
@@ -238,6 +240,7 @@ describe("SolarEnergyGraphsCard", () => {
     card = new SolarEnergyGraphsCard();
 
     expect(() => card.setConfig(CARD_CONFIG)).not.toThrow();
+    expect(Reflect.get(card, "config")).toMatchObject({ consumers: [] });
   });
 
   // Exposes the graphical editor and an empty, role-preserving card stub to Lovelace.
@@ -253,7 +256,162 @@ describe("SolarEnergyGraphsCard", () => {
         grid_import: null,
         grid_export: null,
       },
+      consumers: [],
     });
+  });
+
+  // Normalizes consumer entity IDs and applies fallback colors without replacing custom values.
+  it("normalizes configured consumers and assigns missing colors", () => {
+    card = new SolarEnergyGraphsCard();
+    card.setConfig({
+      ...CARD_CONFIG,
+      consumers: [
+        { entity: " sensor.kitchen ", name: "Kitchen" },
+        { entity: "sensor.ev", color: "#abcdef" },
+      ],
+    });
+
+    expect(Reflect.get(card, "config")).toMatchObject({
+      consumers: [
+        { entity: "sensor.kitchen", name: "Kitchen", color: "#8B5CF6" },
+        { entity: "sensor.ev", color: "#abcdef" },
+      ],
+    });
+  });
+
+  // Rejects malformed consumer entries and colors while accepting empty editor drafts.
+  it("rejects consumers with an invalid entity value or color", () => {
+    card = new SolarEnergyGraphsCard();
+
+    expect(() =>
+      card.setConfig({
+        ...CARD_CONFIG,
+        consumers: [{ entity: 42 as unknown as string }],
+      }),
+    ).toThrow("Configure each consumer with a sensor entity ID");
+    expect(() =>
+      card.setConfig({
+        ...CARD_CONFIG,
+        consumers: [{ entity: "sensor.kitchen", color: "red" }],
+      }),
+    ).toThrow("Configure each consumer with a sensor entity ID");
+  });
+
+  // Omits the consumer control entirely when the card has no configured consumer.
+  it("does not render a visibility control without consumers", async () => {
+    card = new SolarEnergyGraphsCard();
+    await mountConfiguredCard(card);
+
+    expect(navigationButton(card, "Show consumers")).toBeNull();
+  });
+
+  // Requests consumer history and toggles only its renderer state without refetching data.
+  it("loads consumers and preserves their visibility across day navigation", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    const timestamp = Date.now() / 1000;
+    const intervalStart = new Date(Date.now() - 5 * 60_000).toISOString();
+    const callWS = vi.fn<HistoryApi>(async (message) => {
+      if (message.type === "recorder/statistics_during_period") {
+        return Object.fromEntries(
+          message.statistic_ids.map((entityId) => [
+            entityId,
+            [statisticRow(intervalStart, entityId === "sensor.kitchen" ? 200 : 800, 100, 900)],
+          ]),
+        );
+      }
+      return Object.fromEntries(
+        message.entity_ids.map((entityId) => [
+          entityId,
+          [
+            { s: entityId === "sensor.kitchen" ? "150" : "600", lu: timestamp - 30 },
+            { s: entityId === "sensor.kitchen" ? "250" : "700", lu: timestamp - 15 },
+          ],
+        ]),
+      );
+    });
+    const hass = createHassContext(callWS);
+    card = new SolarEnergyGraphsCard();
+    card.setConfig({
+      ...CARD_CONFIG,
+      consumers: [{ entity: "sensor.kitchen", name: "Kitchen", color: "#8B5CF6" }],
+    });
+    document.body.append(card);
+    card.hass = {
+      ...hass,
+      states: {
+        ...hass.states,
+        "sensor.kitchen": {
+          state: "250",
+          last_updated: new Date(timestamp * 1000).toISOString(),
+          attributes: {
+            unit_of_measurement: "W",
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+      },
+    };
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    await card.updateComplete;
+
+    const statisticsRequest = callWS.mock.calls.find(
+      ([message]) => message.type === "recorder/statistics_during_period",
+    )?.[0];
+    expect(
+      statisticsRequest &&
+        "statistic_ids" in statisticsRequest &&
+        statisticsRequest.statistic_ids,
+    ).toContain("sensor.kitchen");
+    const historyRequests = callWS.mock.calls
+      .map(([message]) => message)
+      .filter(
+        (message): message is HistoryDuringPeriodMessage =>
+          message.type === "history/history_during_period",
+      );
+    expect(historyRequests.some((message) => message.entity_ids.includes("sensor.kitchen"))).toBe(true);
+    expect(rendererInstances[0].data.consumers).toEqual([
+      {
+        label: "Kitchen",
+        color: "#8B5CF6",
+        valueIndex: 14,
+        upperIndex: 15,
+        lowerIndex: 16,
+      },
+    ]);
+    const statisticsMidpoint = Date.parse("2026-09-27T10:07:30Z") / 1000;
+    const consumerPoint = Array.from(
+      rendererInstances[0].data.mainData[0],
+    ).indexOf(statisticsMidpoint);
+    expect(rendererInstances[0].data.mainData[14][consumerPoint]).toBe(200);
+    expect(rendererInstances[0].data.mainData[15][consumerPoint]).toBe(800);
+    expect(rendererInstances[0].data.mainData[16][consumerPoint]).toBe(600);
+    const consumerButton = navigationButton(card, "Show consumers");
+    const precisionButton = navigationButton(card, "Load high precision");
+    expect(consumerButton).not.toBeNull();
+    expect(consumerButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(
+      Array.from(card.shadowRoot!.querySelectorAll(".day-navigation button")).indexOf(
+        consumerButton!,
+      ),
+    ).toBeLessThan(
+      Array.from(card.shadowRoot!.querySelectorAll(".day-navigation button")).indexOf(
+        precisionButton!,
+      ),
+    );
+
+    const requestCount = callWS.mock.calls.length;
+    consumerButton?.click();
+    await card.updateComplete;
+    expect(navigationButton(card, "Hide consumers")?.getAttribute("aria-pressed")).toBe("true");
+    expect(rendererInstances[0].setConsumersVisible).toHaveBeenCalledWith(true);
+    expect(callWS).toHaveBeenCalledTimes(requestCount);
+
+    navigationButton(card, "Previous day")?.click();
+    await vi.waitFor(() =>
+      expect(callWS.mock.calls.length).toBeGreaterThan(requestCount),
+    );
+    await card.updateComplete;
+    expect(navigationButton(card, "Hide consumers")?.getAttribute("aria-pressed")).toBe("true");
   });
 
   // Prevents unrelated Lovelace card configurations from being accepted.

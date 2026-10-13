@@ -371,6 +371,7 @@ export class EnergyChartsRenderer {
     startRange?: TimeRange;
   };
   private destroyed = false;
+  private consumersVisible = false;
   private theme: ChartTheme;
   private readonly language: CardLanguage;
 
@@ -394,7 +395,7 @@ export class EnergyChartsRenderer {
     this.charts = containers.map((element, index) => {
       const mainChart = index === 0;
       const chart = createChart(
-        this.createOptions(element, mainChart, timeZone),
+        this.createOptions(element, mainChart, timeZone, data.consumers ?? []),
         mainChart ? data.mainData : data.gridData,
         element,
       );
@@ -489,6 +490,17 @@ export class EnergyChartsRenderer {
         chart.setScale("x", { min: zoom.min, max: zoom.max });
       });
     }
+  }
+
+  setConsumersVisible(visible: boolean): void {
+    if (this.destroyed || this.consumersVisible === visible) {
+      return;
+    }
+    this.consumersVisible = visible;
+    this.charts.forEach(({ chart, element }) => {
+      element.closest(".chart")?.classList.toggle("consumers-visible", visible);
+      chart.redraw();
+    });
   }
 
   /** Returns the x range when it is narrower than the displayed day. */
@@ -865,6 +877,7 @@ export class EnergyChartsRenderer {
     element: HTMLElement,
     mainChart: boolean,
     timeZone: string,
+    consumers: NonNullable<EnergyHistoryResponse["consumers"]>,
   ): UPlotOptions {
     const t = translations(this.language);
     const { axis, legend } = this.getTimeFormatters(timeZone);
@@ -946,6 +959,16 @@ export class EnergyChartsRenderer {
         { ...RANGE_BOUND_SERIES },
         { ...RANGE_BOUND_SERIES },
         { ...RANGE_BOUND_SERIES },
+        ...consumers.flatMap((consumer) => [
+          {
+            label: consumer.label,
+            class: "consumer-legend",
+            show: false,
+            fill: consumer.color,
+          },
+          { ...RANGE_BOUND_SERIES },
+          { ...RANGE_BOUND_SERIES },
+        ]),
       ] as UPlotOptions["series"]
       : [
         {
@@ -973,6 +996,11 @@ export class EnergyChartsRenderer {
       ? [
         { series: [3, 2], fill: "#a2d49b" },
         { series: [5, 4], fill: "#e96e7d" },
+        ...consumers.map((consumer) => ({
+          series: [consumer.upperIndex, consumer.lowerIndex] as [number, number],
+          fill: consumer.color,
+          show: () => this.consumersVisible,
+        })),
         { series: [10, 11], fill: PRODUCTION_RANGE_FILL },
         { series: [12, 13], fill: CONSUMPTION_RANGE_FILL },
       ]

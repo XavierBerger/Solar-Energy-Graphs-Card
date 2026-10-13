@@ -112,6 +112,7 @@ describe("SolarEnergyGraphsCardEditor", () => {
 
     expect(changedConfig).toEqual({
       ...CARD_CONFIG,
+      consumers: [],
       entities: { ...CARD_CONFIG.entities, production: "sensor.other_pv" },
     });
   });
@@ -167,5 +168,83 @@ describe("SolarEnergyGraphsCardEditor", () => {
       grid_import: null,
       grid_export: null,
     });
+  });
+
+  // Adds an empty consumer draft without guessing an entity ID.
+  it("adds a consumer using an empty entity and a default color", async () => {
+    editor = new SolarEnergyGraphsCardEditor();
+    editor.setConfig(CARD_CONFIG);
+    document.body.append(editor);
+    await editor.updateComplete;
+    let changedConfig: SolarEnergyGraphsCardConfig | undefined;
+    editor.addEventListener("config-changed", (event) => {
+      changedConfig = (
+        event as CustomEvent<{ config: SolarEnergyGraphsCardConfig }>
+      ).detail.config;
+    });
+
+    const addButton = Array.from(
+      editor.shadowRoot?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("Add a consumer"));
+    addButton?.click();
+    await editor.updateComplete;
+
+    expect(changedConfig?.consumers).toEqual([
+      { entity: "", color: "#8B5CF6" },
+    ]);
+    expect(editor.shadowRoot?.querySelectorAll(".consumer-row")).toHaveLength(1);
+  });
+
+  // Emits entity, color, reordering, and removal edits in the consumer-list order.
+  it("edits consumer entities and colors, reorders them, and removes a row", async () => {
+    editor = new SolarEnergyGraphsCardEditor();
+    editor.setConfig({
+      ...CARD_CONFIG,
+      consumers: [
+        { entity: "sensor.first", color: "#8B5CF6" },
+        { entity: "sensor.second", color: "#F97316" },
+      ],
+    });
+    document.body.append(editor);
+    await editor.updateComplete;
+    let changedConfig: SolarEnergyGraphsCardConfig | undefined;
+    editor.addEventListener("config-changed", (event) => {
+      changedConfig = (
+        event as CustomEvent<{ config: SolarEnergyGraphsCardConfig }>
+      ).detail.config;
+    });
+
+    const consumerForms = editor.shadowRoot?.querySelectorAll("ha-form");
+    consumerForms?.[1].dispatchEvent(
+      new CustomEvent("value-changed", {
+        detail: { value: { entity: "sensor.oven" } },
+      }),
+    );
+    const color = editor.shadowRoot?.querySelector<HTMLInputElement>(
+      ".consumer-row input[type=color]",
+    );
+    if (color) {
+      color.value = "#abcdef";
+      color.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    const downButton = editor.shadowRoot?.querySelector<HTMLButtonElement>(
+      '.consumer-row button[aria-label="Move consumer down"]',
+    );
+    downButton?.click();
+    await editor.updateComplete;
+
+    expect(changedConfig?.consumers).toEqual([
+      { entity: "sensor.second", color: "#F97316" },
+      { entity: "sensor.oven", color: "#abcdef" },
+    ]);
+    const removeButton = editor.shadowRoot?.querySelector<HTMLButtonElement>(
+      '.consumer-row button[aria-label="Remove consumer"]',
+    );
+    removeButton?.click();
+    await editor.updateComplete;
+
+    expect(changedConfig?.consumers).toEqual([
+      { entity: "sensor.oven", color: "#abcdef" },
+    ]);
   });
 });
