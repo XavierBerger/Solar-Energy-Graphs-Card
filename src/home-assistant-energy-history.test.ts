@@ -4,6 +4,8 @@ import {
   buildStatisticsRequest,
   combineStatistics,
   getEnergyUnitScales,
+  getCompatibleSensorIds,
+  isCompatiblePowerSensor,
   getLocalDateString,
   getLocalDayWindow,
   getLocalDayWindowForDate,
@@ -43,6 +45,128 @@ function state(
 describe("Home Assistant energy history", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  // Accepts only the metadata required for supported power measurements.
+  it("identifies compatible power sensor metadata", () => {
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "W",
+        device_class: "power",
+        state_class: "measurement",
+      }),
+    ).toBe(true);
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "kW",
+        device_class: "power",
+        state_class: "measurement",
+      }),
+    ).toBe(true);
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "kWh",
+        device_class: "power",
+        state_class: "measurement",
+      }),
+    ).toBe(false);
+    expect(
+      isCompatiblePowerSensor({
+        device_class: "power",
+        state_class: "measurement",
+      }),
+    ).toBe(false);
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "W",
+        device_class: "energy",
+        state_class: "measurement",
+      }),
+    ).toBe(false);
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "W",
+        device_class: "power",
+        state_class: "total",
+      }),
+    ).toBe(false);
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "W",
+        state_class: "measurement",
+      }),
+    ).toBe(false);
+    expect(
+      isCompatiblePowerSensor({
+        unit_of_measurement: "W",
+        device_class: "power",
+      }),
+    ).toBe(false);
+    expect(isCompatiblePowerSensor(undefined)).toBe(false);
+  });
+
+  // Returns no IDs when Home Assistant has no compatible sensor states.
+  it("returns an empty compatible sensor list without matching states", () => {
+    expect(getCompatibleSensorIds({})).toEqual([]);
+  });
+
+  // Includes compatible sensors by attributes, regardless of their state value.
+  it("lists only compatible sensor entity IDs", () => {
+    expect(
+      getCompatibleSensorIds({
+        "sensor.available_power": {
+          state: "500",
+          attributes: {
+            unit_of_measurement: "W",
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+        "sensor.unavailable_power": {
+          state: "unavailable",
+          attributes: {
+            unit_of_measurement: "kW",
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+        "sensor.unknown_power": {
+          state: "unknown",
+          attributes: {
+            unit_of_measurement: "W",
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+        "sensor.energy": {
+          state: "1",
+          attributes: {
+            unit_of_measurement: "kWh",
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+        "sensor.missing_unit": {
+          state: "1",
+          attributes: {
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+        "number.power": {
+          state: "1",
+          attributes: {
+            unit_of_measurement: "W",
+            device_class: "power",
+            state_class: "measurement",
+          },
+        },
+      }),
+    ).toEqual([
+      "sensor.available_power",
+      "sensor.unavailable_power",
+      "sensor.unknown_power",
+    ]);
   });
 
   // Accepts W and kW power sensors and converts every input to watts.

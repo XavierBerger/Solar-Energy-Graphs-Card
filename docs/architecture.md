@@ -66,9 +66,9 @@ All sources live in `src/`. Each module has a test file next to it.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------- |
 | `index.ts`                           | Bundle entry point: registers the card and lists it in Home Assistant's visual card picker              | yes (import) | `index.test.ts`                           |
 | `solar-energy-graphs-card.ts`        | Lit element: config, lifecycle, WebSocket calls, timers, day navigation, precision toggle, status texts | yes          | `solar-energy-graphs-card.test.ts`        |
-| `solar-energy-graphs-card-editor.ts` | Lovelace editor: four fixed Home Assistant sensor selectors and config changes                          | yes          | `solar-energy-graphs-card-editor.test.ts` |
+| `solar-energy-graphs-card-editor.ts` | Lovelace editor: four filtered Home Assistant power-sensor selectors and config changes                  | yes          | `solar-energy-graphs-card-editor.test.ts` |
 | `solar-energy-graphs-card-config.ts` | Shared TypeScript shape for the four configured entities                                                | no           | via card and editor tests                 |
-| `home-assistant-energy-history.ts`   | Request builders, parsing, unit scaling, local-day windows, merging, projection to uPlot columns        | **none**     | `home-assistant-energy-history.test.ts`   |
+| `home-assistant-energy-history.ts`   | Request builders, parsing, power-sensor compatibility, unit scaling, local-day windows, merging, projection to uPlot columns | **none**     | `home-assistant-energy-history.test.ts`   |
 | `translations.ts`                   | Card language detection and the shared English/French strings for UI labels and status text            | no           | `translations.test.ts`                    |
 | `energy-charts-renderer.ts`          | Creates, syncs, zooms, pans, updates, themes, resizes and destroys the two uPlot charts                 | yes (DOM)    | `energy-charts-renderer.test.ts`          |
 | `uplot-adapter.ts`                   | Single import point for uPlot and its CSS (inlined in the shadow DOM)                                   | no           | via the renderer tests                    |
@@ -367,7 +367,7 @@ A typical loop:
 | Change the legend                             | `createOptions` (`legend.mount`, `setCursor`) and the `.u-legend` rules in `styles`                                                                   |
 | Add or change a derived series               | `projectEnergyHistory`, then the matching `series` / `bands` in `createOptions` (keep the indexes aligned)                                            |
 | Change what data is requested                | `buildStatisticsRequest` / `buildHistoryRequest`, and `fetchHistory` / `fetchStatistics` in the element                                               |
-| Accept another unit                          | `powerUnitScale` in `home-assistant-energy-history.ts`                                                                                                |
+| Change the sensor compatibility rule         | `isCompatiblePowerSensor`, `getCompatibleSensorIds` and `powerUnitScale` in `home-assistant-energy-history.ts`                                     |
 | Tune live, refresh, raw tail or probe timing | Constants at the top of `solar-energy-graphs-card.ts`                                                                                                 |
 | Change the precision probe or toggle         | `getSameTimeOfDay` in `home-assistant-energy-history.ts`; `hasHigherPrecisionSamples`, `renderPrecisionButton` and `loadHighPrecision` in the element |
 | Change the wheel zoom or the drag pan        | `computeWheelZoomRange` / `computeDragPanRange` in `energy-charts-renderer.ts`                                                                        |
