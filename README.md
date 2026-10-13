@@ -79,6 +79,10 @@ Use the [My Home Assistant link](https://my.home-assistant.io/redirect/hacs_repo
 In the dashboard editor, choose **Add card** and select **Solar Energy Graphs
 Card**. In the visual editor, select one sensor for each of the four roles:
 
+The visual editor lists only sensors with `device_class: power`,
+`state_class: measurement`, and a `W` or `kW` unit; an already configured
+sensor remains visible even if it is no longer compatible.
+
 ![Solar Energy Graphs Card visual configuration editor](https://raw.githubusercontent.com/XavierBerger/Solar-Energy-Graphs-Card/main/docs/images/Solar-Energy-Graphs-Card_configuration.png)
 
 For a YAML dashboard, use:

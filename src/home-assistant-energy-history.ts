@@ -85,6 +85,38 @@ export interface EnergySensorMetadata {
   state_class?: string;
 }
 
+export interface HomeAssistantEntityState {
+  attributes?: EnergySensorMetadata;
+  state?: string;
+}
+
+/** Returns whether metadata describes a supported instantaneous power sensor. */
+export function isCompatiblePowerSensor(
+  metadata: EnergySensorMetadata | null | undefined,
+): metadata is EnergySensorMetadata & {
+  unit_of_measurement: "W" | "kW";
+  device_class: "power";
+  state_class: "measurement";
+} {
+  return (
+    metadata?.device_class === "power" &&
+    metadata.state_class === "measurement" &&
+    (metadata.unit_of_measurement === "W" ||
+      metadata.unit_of_measurement === "kW")
+  );
+}
+
+/** Lists sensor entities whose metadata is compatible with the power graphs. */
+export function getCompatibleSensorIds(
+  states: Readonly<Record<string, HomeAssistantEntityState | undefined>>,
+): string[] {
+  return Object.keys(states).filter(
+    (entityId) =>
+      entityId.startsWith("sensor.") &&
+      isCompatiblePowerSensor(states[entityId]?.attributes),
+  );
+}
+
 export interface EnergyUnitScales {
   productionToW: number;
   consumptionToW: number;
@@ -592,16 +624,16 @@ function powerUnitScale(
   if (metadata === null) {
     return 1;
   }
+  if (isCompatiblePowerSensor(metadata)) {
+    return metadata.unit_of_measurement === "kW" ? 1000 : 1;
+  }
   if (
     metadata?.device_class !== "power" ||
     metadata.state_class !== "measurement"
   ) {
     throw new SensorConfigurationError(role, "class");
   }
-  if (metadata.unit_of_measurement !== "W" && metadata.unit_of_measurement !== "kW") {
-    throw new SensorConfigurationError(role, "unit");
-  }
-  return metadata.unit_of_measurement === "kW" ? 1000 : 1;
+  throw new SensorConfigurationError(role, "unit");
 }
 
 /** Parses one live state; undefined when it has no usable timestamp. */
