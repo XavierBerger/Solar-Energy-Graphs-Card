@@ -6,49 +6,33 @@ Ce document fixe les spécifications techniques complètes et validées pour ét
 
 ## 1. Spécifications fonctionnelles & visuelles validées
 
-1. **Étape 0 (Prérequis indispensable) :**
-   - Ajout de la **courbe d'autoconsommation en vert foncé** (`stroke: "#2e7d32"`, `width: 1.25`).
-   - **Toutes les lignes de courbe** (Production solaire, Consommation globale, Autoconsommation vert foncé) sont tracées au **premier plan** et ne sont jamais recouvertes par un remplissage de couleur.
-2. **Empilement de haut en bas :**
+1. **Empilement de haut en bas :**
    - Les consommateurs sont des surfaces de couleurs et ne possèdent pas de courbes.
    - Les surfaces des consommateurs sont affichées devant les autres surface (mais dérrière les courbes).
    - Les consommateurs s'empilent à partir du haut (depuis la ligne de consommation globale $C(t)$ vers le bas) dans l'ordre défini dans le YAML/éditeur :
      - Consommateur 1 (premier dans la liste YAML) : occupe la bande $[C(t), L_1(t)]$ avec $L_1(t) = \max(0, C(t) - K_1(t))$.
      - Consommateur 2 : occupe la bande $[L_1(t), L_2(t)]$ avec $L_2(t) = \max(0, L_1(t) - K_2(t))$.
      - Consommateur $i$ : s'empile sous le précédent avec $L_i(t) = \max(0, L_{i-1}(t) - K_i(t))$.
-3. **Plafonnement à 0 :**
+2. **Plafonnement à 0 :**
    - L'empilement est borné inférieurement à 0 et ne descend jamais sous l'axe 0.
-4. **Consommation non attribuée :**
+3. **Consommation non attribuée :**
    - La portion de consommation résiduelle sous le dernier consommateur empilé jusqu'à 0 conserve le remplissage rouge/rose d'origine de la consommation ("#e96e7d") ou vert claire en cas d'autoconsomation ("#9fd19d").  
      Note: A déterminer lors du developpement - S'il est nécessaire d'avoir une première zone entre 0 et la première zone d'un consommateur, cette zone peut-elle être transparente ("#00000000") ?
-5. **Couleur Hexadécimale & Sélecteur :**
+4. **Couleur Hexadécimale & Sélecteur :**
    - La couleur de chaque consommateur est stockée sous forme de chaîne hexadécimale `#RRGGBB` dans la configuration YAML (`color: "#8B5CF6"`).
    - Sélecteur de couleur HTML `<input type="color">` / `<ha-color-picker>` dans l’éditeur visuel.
-6. **Réordonnancement dans l'éditeur :**
+5. **Réordonnancement dans l'éditeur :**
    - Boutons fléchés **Monter ($\uparrow$) / Descendre ($\downarrow$)** sur chaque ligne de la liste des consommateurs.
    - En fin de projet, une estimation d'éffort pour remplacée les flèche par des poignés et activer le drag-n-drop sera proposée comme évolution possible
+6. **Gestion de l'affichage :**
+   - Les surfaces et les entrées de légende des consommateurs sont masquées par défaut ; les autres courbes restent inchangées.
+   - Un bouton permettant d'afficher ou de masquer les consommateurs est placé immédiatement à gauche du bouton de précision, dans les contrôles existants en haut à droite.
+   - La visibilité est un état d'interface temporaire, non enregistré dans le YAML. Elle est conservée lors des mises à jour de données et des changements de jour ; elle n'entraîne ni nouvelle requête Home Assistant ni recalcul des données.
+   - Le bouton n'est affiché que si au moins un consommateur est configuré. Son libellé accessible et son infobulle indiquent l'action disponible.
 
 ---
 
 ## 2. Découpage détaillé étape par étape
-
----
-
-### **Étape 0 (Prérequis) : Courbe d'autoconsommation vert foncé & Lignes au premier plan (`energy-charts-renderer.ts`)**
-
-#### **Spécifications techniques :**
-1. **Ajout de la série ligne d'autoconsommation :**
-   - Ajout d'une série uPlot pour la ligne d'autoconsommation (`directSolar`) avec un trait en vert foncé : `stroke: "#2e7d32"`, `width: 1.25`.
-2. **Superposition uPlot (Z-Index / Ordre de tracé) :**
-   - S'assurer que uPlot trace toutes les bandes de couleur (*bands*) en arrière-plan et **toutes les lignes de séries** (*series*) au premier plan, afin qu'aucun remplissage ne vienne masquer une ligne de courbe.
-
-#### **Tests unitaires (Vitest dans `energy-charts-renderer.test.ts`) :**
-- Vérifier la présence et la configuration de la série ligne d'autoconsommation (`Self-consumption`, `stroke: "#2e7d32"`).
-- Vérifier que toutes les lignes de courbes sont configurées au premier plan sans remplissage direct qui masquerait les autres lignes.
-
-#### **Vérification Home Assistant :**
-- Exécution de `./dev.sh test` et `./dev.sh build`.
-- Vérification visuelle sur Home Assistant de la nouvelle ligne vert foncé d'autoconsommation et du maintien de toutes les lignes au premier plan.
 
 ---
 
@@ -73,14 +57,20 @@ Ce document fixe les spécifications techniques complètes et validées pour ét
    ```
 3. **Palette de couleurs hexadécimales par défaut (`CONSUMER_DEFAULT_COLORS`) :**
    ```ts
-   const CONSUMER_DEFAULT_COLORS = [
-     "#8B5CF6", // Violet
-     "#EC4899", // Pink
-     "#10B981", // Emerald
-     "#F59E0B", // Amber
-     "#6366F1", // Indigo
-     "#06B6D4", // Cyan
-   ];
+      const CONSUMER_DEFAULT_COLORS: string[] = [
+      "#8B5CF6", // Violet
+      "#F97316", // Orange
+      "#10B981", // Emerald
+      "#EC4899", // Pink
+      "#06B6D4", // Cyan
+      "#EF4444", // Red
+      "#84CC16", // Lime
+      "#6366F1", // Indigo
+      "#F59E0B", // Amber
+      "#14B8A6", // Teal
+      "#D946EF", // Fuchsia
+      "#3B82F6", // Blue
+      ];
    ```
 4. **Validation dans `setConfig(config)` ([`solar-energy-graphs-card.ts`](file:///workspace/Solar-Energy-Graphs-Card/src/solar-energy-graphs-card.ts)) :**
    - Nettoyer les identifiants d'entités consommateurs (`entity.trim()`).
@@ -143,21 +133,39 @@ Ce document fixe les spécifications techniques complètes et validées pour ét
 #### **Spécifications techniques :**
 1. **Bandes uPlot dynamiques :**
    - Créer pour chaque consommateur $i$ la bande d'empilement `[U_i, L_i]` avec sa couleur hexadécimale configurée.
-   - S'assurer que les bandes de couleur sont tracées en arrière-plan et que **toutes les lignes de courbe** (Production, Consommation, Autoconsommation vert foncé, Consommateurs) restent au **premier plan**.
+   - S'assurer que les bandes de couleur sont tracées en arrière-plan et que les lignes de Production, Consommation et Autoconsommation restent au premier plan. Les consommateurs restent des surfaces sans courbe.
 2. **Affichage dans la légende :**
    - Afficher chaque consommateur dans la table de légende du graphique de consommation avec son nom/entité et sa valeur instantanée sous le curseur.
+3. **Visibilité des consommateurs (`solar-energy-graphs-card.ts` et `translations.ts`) :**
+   - Ajouter un état de visibilité initialisé à `false` et un bouton dans les contrôles existants, immédiatement à gauche du bouton de précision. Ne pas ajouter de nouvelle barre d'outils.
+   - Le bouton n'est rendu que si au moins un consommateur est configuré. Son libellé accessible et son infobulle localisés indiquent l'action (« Afficher les consommateurs » / « Masquer les consommateurs »).
+   - Transmettre l'état au renderer afin de masquer ou d'afficher ensemble les bandes et les entrées de légende des consommateurs ; les autres courbes et leurs légendes ne changent pas.
+   - Conserver l'état lors des mises à jour, des changements de jour et des changements de précision. Le masquage ne doit ni interrompre le chargement des consommateurs ni déclencher une nouvelle requête ou projection.
 
 #### **Tests unitaires (Vitest dans `energy-charts-renderer.test.ts`) :**
 - Test de la génération dynamique des options uPlot (séries lignes et bandes d'arrière-plan).
 - Test du rendu des légendes sous le survol du curseur.
+- Vérifier que l'état masqué supprime les bandes et entrées de légende des consommateurs tout en conservant les courbes et légendes existantes, puis que l'état affiché les restaure.
+
+#### **Tests unitaires (Vitest dans `solar-energy-graphs-card.test.ts` et `translations.test.ts`) :**
+- Vérifier l'état masqué par défaut, l'absence du bouton sans consommateur et sa présence à gauche du bouton de précision lorsqu'il y a des consommateurs.
+- Vérifier que le clic bascule la visibilité, met à jour le libellé accessible et conserve l'état lors des mises à jour et changements de jour/précision sans nouvelle requête.
+- Vérifier les libellés localisés et les infobulles des deux états.
+
+#### **Vérification Home Assistant :**
+- Vérifier que le bouton apparaît à gauche du bouton de précision lorsque des consommateurs sont configurés, que les surfaces et entrées de légende sont masquées au chargement, puis qu'elles apparaissent/disparaissent au clic.
+- Vérifier que Production, Consommation et Autoconsommation restent visibles, et que le choix d'affichage est conservé au changement de jour et de précision.
 
 ---
 
 ### **Étape 5 : Mutation Stryker, Thèmes & Validation globale**
 
+**Attention : l'étape des tests de mutation ne sera faite qu'une seule fois à la fin du ceveloppement.**
+
 #### **Spécifications techniques :**
 - Exécution des tests de mutation avec Stryker (`./dev.sh mutation`) pour vérifier l'absence de mutant survivant.
-- Validation du rendu visuel dans les thèmes clair et sombre, ainsi qu'aux différentes largeurs d'écran (responsive).
+- Validation du rendu visuel dans les thèmes clair et sombre, ainsi qu'aux différentes largeurs d'écran (responsive), avec et sans consommateurs affichés.
+- Vérification de l'ordre et de la lisibilité du bouton d'affichage à côté du contrôle de précision, y compris sur écran étroit et au toucher.
 
 ---
 
