@@ -49,6 +49,9 @@ describe("translations", () => {
     expect(text.statuses.unavailableMain("2024-04-12")).toBe(
       "Erreur : l'historique de production ou de consommation du 2024-04-12 est indisponible.",
     );
+    expect(text.statuses.unavailableGrid("2024-04-12")).toBe(
+      "Erreur : l'historique d'import ou d'export réseau du 2024-04-12 est indisponible.",
+    );
     expect(text.statuses.loadError("timeout")).toBe(
       "Erreur de chargement de l'historique : timeout",
     );
@@ -60,6 +63,12 @@ describe("translations", () => {
     });
     expect(text.sensorProblem("grid_export", "unit")).toBe(
       "Le capteur d'export réseau doit utiliser W ou kW.",
+    );
+    expect(text.sensorProblem("production", "unit")).toBe(
+      "Le capteur de production doit utiliser W ou kW.",
+    );
+    expect(text.sensorProblem("consumption", "unit")).toBe(
+      "Le capteur de consommation doit utiliser W ou kW.",
     );
     expect(text.dateLocale).toBe("fr-FR");
     expect(text.chart).toEqual({
