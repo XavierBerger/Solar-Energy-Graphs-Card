@@ -570,8 +570,8 @@ function parseLocalDate(date: string): {
   month: number;
   day: number;
 } {
-  // Stryker disable next-line Regex: the round-trip check below rejects any prefix or suffix.
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  // The round-trip check below rejects any prefix or suffix.
+  const match = /(\d{4})-(\d{2})-(\d{2})/.exec(date);
   if (!match) {
     throw new Error(`Invalid local date "${date}".`);
   }

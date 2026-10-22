@@ -355,6 +355,7 @@ describe("Home Assistant energy history", () => {
   // Rejects malformed dates and calendar values outside their valid ranges.
   it("rejects invalid local dates", () => {
     const invalidDates = [
+      "not-a-date",
       "2026-02-30",
       "prefix-2026-01-01",
       "2026-01-01-suffix",
