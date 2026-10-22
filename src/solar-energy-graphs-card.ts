@@ -351,9 +351,9 @@ export class SolarEnergyGraphsCard extends LitElement {
     super.connectedCallback();
 
     if (this.hasUpdated) {
+      // The reload renders the card, and updated() recreates the charts.
       void this.updateComplete.then(() => {
         if (this.isConnected) {
-          this.initializeCharts();
           this.loadHistoryWhenNeeded(this.hassContext);
         }
       });
@@ -475,10 +475,10 @@ export class SolarEnergyGraphsCard extends LitElement {
       return;
     }
 
-    const first = this.shadowRoot?.querySelector<HTMLElement>(
+    const first = this.renderRoot.querySelector<HTMLElement>(
       '[data-chart="one"]',
     );
-    const second = this.shadowRoot?.querySelector<HTMLElement>(
+    const second = this.renderRoot.querySelector<HTMLElement>(
       '[data-chart="two"]',
     );
 
@@ -519,11 +519,8 @@ export class SolarEnergyGraphsCard extends LitElement {
     const requestId = ++this.historyRequestId;
     this.mainStatus = { kind: "loading" };
     this.gridStatus = { kind: "loading" };
-    queueMicrotask(() => {
-      if (this.isConnected && requestId === this.historyRequestId) {
-        this.requestUpdate();
-      }
-    });
+    // Rendering a stale or disconnected card again is harmless.
+    queueMicrotask(() => this.requestUpdate());
     let unitScales: EnergyUnitScales;
     try {
       unitScales = getEnergyUnitScales([
@@ -541,17 +538,13 @@ export class SolarEnergyGraphsCard extends LitElement {
               problem: error.problem as "class" | "unit",
             }
           : { kind: "loadError", detail: errorMessage(error) };
+      // The update queued above renders this status.
       this.mainStatus = sensorError;
       this.gridStatus = sensorError;
-      queueMicrotask(() => {
-        if (this.isConnected && requestId === this.historyRequestId) {
-          this.requestUpdate();
-        }
-      });
       return;
     }
 
-    this.historyModel = {
+    const model: NonNullable<SolarEnergyGraphsCard["historyModel"]> = {
       statistics: NO_STATISTICS,
       samples: [[], [], [], []],
       window: dayWindow,
@@ -561,18 +554,16 @@ export class SolarEnergyGraphsCard extends LitElement {
       highPrecisionAvailable: undefined,
       highPrecisionCheckError: undefined,
     };
-    void this.fetchHistory(hass, entityIds, requestId);
+    this.historyModel = model;
+    void this.fetchHistory(hass, entityIds, requestId, model);
   }
 
   private async fetchHistory(
     hass: HomeAssistantThemeContext,
     entityIds: readonly [string | null, string | null, string | null, string | null],
     requestId: number,
+    model: NonNullable<SolarEnergyGraphsCard["historyModel"]>,
   ): Promise<void> {
-    const model = this.historyModel;
-    if (!model) {
-      return;
-    }
     const now = Date.now() / 1000;
     const today = this.isTodaySelected();
     const activeIds = activeEntityIds(entityIds);
@@ -604,7 +595,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     let precisionSamples: EnergyPowerSamples = [[], [], [], []];
     let loadError =
       statistics.status === "rejected" ? errorMessage(statistics.reason) : undefined;
-    let highPrecisionAvailable = false;
+    let highPrecisionAvailable: boolean;
     let highPrecisionCheckError: string | undefined;
     try {
       if (tail.status === "rejected") {
@@ -758,11 +749,11 @@ export class SolarEnergyGraphsCard extends LitElement {
     if (!model || model.highPrecisionAvailable === undefined) {
       return html``;
     }
-    if (model?.highPrecisionAvailable === false) {
+    if (model.highPrecisionAvailable === false) {
       return html``;
     }
     const t = translations(this.language);
-    const highPrecision = model?.precision === "raw";
+    const highPrecision = model.precision === "raw";
     const checkFailed = model.highPrecisionCheckError !== undefined;
     return html`
       <button
@@ -777,7 +768,7 @@ export class SolarEnergyGraphsCard extends LitElement {
           : checkFailed
           ? t.precision.highTitleUnavailable(model.highPrecisionCheckError ?? "")
           : t.precision.highTitle}
-        ?disabled=${model?.loading === true}
+        ?disabled=${model.loading}
         @click=${this.togglePrecision}
       >
         <span aria-hidden="true">${highPrecision ? "≋" : "▤"}</span>
@@ -925,11 +916,8 @@ export class SolarEnergyGraphsCard extends LitElement {
   private showHistoryData(data: EnergyHistoryResponse): void {
     this.historyData = data;
     this.updateHistoryStatus(data);
-    if (this.chartRenderer) {
-      this.chartRenderer.updateData(data);
-    } else {
-      this.initializeCharts();
-    }
+    // Without charts yet, updated() creates them from this data.
+    this.chartRenderer?.updateData(data);
     this.requestUpdate();
   }
 
