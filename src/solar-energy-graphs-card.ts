@@ -635,10 +635,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     } catch (error) {
       loadError ??= errorMessage(error);
     }
-    // Stryker disable next-line BlockStatement: an unset or false availability both hide the button.
-    if (!hasProbeEntities) {
-      highPrecisionAvailable = false;
-    } else if (precisionProbe.status === "rejected") {
+    if (precisionProbe.status === "rejected") {
       // Keep the manual full-day action available when a probe fails.
       highPrecisionAvailable = true;
       highPrecisionCheckError = errorMessage(precisionProbe.reason);
