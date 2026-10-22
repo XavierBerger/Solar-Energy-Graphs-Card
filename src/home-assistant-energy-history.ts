@@ -678,7 +678,6 @@ function parsePowerValue(state: string, unitScale: number): number | null {
 function parseTimestampSeconds(value: string): number {
   // An unparsable value stays NaN through the sum below.
   const timestamp = Date.parse(value);
-  // Stryker disable next-line Regex: Home Assistant sends ISO 8601 times, where the offset ends the string.
   const fractionalSeconds = /\.(\d+)(?=Z|[+-]\d{2}:?\d{2}$)/i.exec(value)?.[1];
   const subMillisecondSeconds = fractionalSeconds
     ? Number(`0.${fractionalSeconds.slice(3)}`) / 1000
