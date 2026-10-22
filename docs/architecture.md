@@ -285,9 +285,11 @@ Worth knowing:
   in or out by a factor of 0.8 around the cursor in either state
   (`computeWheelZoomRange`). Pan and wheel zoom are card code: they set the x
   scale of both charts and stay within the day. Touch gestures are supported:
-  1-finger horizontal drag pans when zoomed in, 2-finger pinch zooms
-  (`computePinchZoomRange`), while vertical touch drag is preserved for normal
-  page scrolling.
+  1-finger horizontal drag pans when zoomed in. On a full-day view, a
+  horizontal swipe of at least 48 px changes day instead (left for the next
+  day, right for the previous day); the card still refuses to move past today.
+  2-finger pinch zooms (`computePinchZoomRange`), while vertical touch drag is
+  preserved for normal page scrolling.
 - `updateData` keeps the x zoom across data updates (live states, statistics
   refresh, precision toggle). The zoom resets when the new data starts at
   another day window start, or on a double-click.
