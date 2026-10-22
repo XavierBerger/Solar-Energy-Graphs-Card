@@ -275,7 +275,8 @@ describe("Home Assistant energy history", () => {
     ).toThrow("state_class=measurement");
   });
 
-  // Rejects unrecognized units when the sensor classes are otherwise valid.
+  // Rejects unrecognized units when the sensor classes are otherwise valid, with
+  // a named error that tells the card which role and problem to report.
   it("rejects unsupported power units", () => {
     expect(() =>
       getEnergyUnitScales([
@@ -288,7 +289,14 @@ describe("Home Assistant energy history", () => {
         null,
         null,
       ]),
-    ).toThrow("The production sensor must use W or kW.");
+    ).toThrow(
+      expect.objectContaining({
+        name: "SensorConfigurationError",
+        message: "The production sensor must use W or kW.",
+        role: "production",
+        problem: "unit",
+      }),
+    );
   });
 
   // Reports the correct role when any configured sensor has invalid metadata.
