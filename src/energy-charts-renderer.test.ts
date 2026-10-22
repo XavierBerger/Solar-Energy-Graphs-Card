@@ -2068,6 +2068,8 @@ describe("Time formatters", () => {
 
     it("throws for non-numeric values", () => {
       const legend = createTimeLegend(timeZone, "fr-FR", "h23");
+      // Exercise the runtime guard despite the public numeric type.
+      // @ts-expect-error A malformed value can still arrive from an untyped boundary.
       expect(() => legend(undefined, "not a number")).toThrow(RangeError);
     });
   });
