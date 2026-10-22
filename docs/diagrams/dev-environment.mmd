@@ -1,5 +1,5 @@
 flowchart TB
-  dev(["./dev.sh ACTION<br/>install | typecheck | test | coverage<br/>build | mutation | diagrams"])
+  dev(["./dev.sh ACTION<br/>install | audit | typecheck | test | coverage<br/>build | mutation | diagrams"])
   img["podman build Containerfile<br/>node 24 alpine + chromium, cached"]
   src["Host: solar-energy-graphs-card/<br/>mounted at /source"]
 
