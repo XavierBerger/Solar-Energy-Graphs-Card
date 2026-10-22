@@ -1,6 +1,6 @@
 # Solar Energy Graphs Card
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-blue.svg)](https://www.hacs.xyz/)
 [![GitHub Release](https://img.shields.io/github/v/release/XavierBerger/Solar-Energy-Graphs-Card)](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/releases)
 [![CI](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/actions/workflows/ci.yml/badge.svg)](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -54,14 +54,13 @@ recent recorded states and live state updates.
 
 ### HACS
 
-Use the [My Home Assistant link](https://my.home-assistant.io/redirect/hacs_repository/?owner=XavierBerger&repository=Solar-Energy-Graphs-Card&category=plugin), or add the repository as a custom repository until it is included in the HACS default list:
+[![Open HACS repository on My Home Assistant](docs/images/HACS-link.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=XavierBerger&repository=Solar-Energy-Graphs-Card&category=plugin)
+
+Or search for **Solar Energy Graphs Card** in HACS:
 
 1. Open **HACS** in Home Assistant.
-2. Open the three-dot menu and choose **Custom repositories**.
-3. Enter `https://github.com/XavierBerger/Solar-Energy-Graphs-Card` and select
-   **Dashboard** as the category.
-4. Add **Solar Energy Graphs Card** from HACS and install it.
-5. HACS adds the dashboard resource automatically. Refresh the browser if the
+2. Search for **Solar Energy Graphs Card** and install it.
+3. HACS adds the dashboard resource automatically. Refresh the browser if the
    card does not appear in the card picker.
 
 ### Manual installation
