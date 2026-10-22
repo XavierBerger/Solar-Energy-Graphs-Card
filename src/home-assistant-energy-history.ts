@@ -1,5 +1,5 @@
 import type { SolarEnergyEntityRole } from "./solar-energy-graphs-card-config";
-import { translations } from "./translations";
+import { EN } from "./translations";
 
 const MAX_POWER_STALENESS_SECONDS = 10 * 60;
 
@@ -317,7 +317,7 @@ export class SensorConfigurationError extends Error {
   readonly problem: "class" | "unit";
 
   constructor(role: SolarEnergyEntityRole, problem: "class" | "unit") {
-    super(translations("en").sensorProblem(role, problem));
+    super(EN.sensorProblem(role, problem));
     this.name = "SensorConfigurationError";
     this.role = role;
     this.problem = problem;
