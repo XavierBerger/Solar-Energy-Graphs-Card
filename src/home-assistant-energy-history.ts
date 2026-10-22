@@ -1,5 +1,5 @@
 import type { SolarEnergyEntityRole } from "./solar-energy-graphs-card-config";
-import { translations } from "./translations";
+import { EN } from "./translations";
 
 const MAX_POWER_STALENESS_SECONDS = 10 * 60;
 
@@ -317,7 +317,7 @@ export class SensorConfigurationError extends Error {
   readonly problem: "class" | "unit";
 
   constructor(role: SolarEnergyEntityRole, problem: "class" | "unit") {
-    super(translations("en").sensorProblem(role, problem));
+    super(EN.sensorProblem(role, problem));
     this.name = "SensorConfigurationError";
     this.role = role;
     this.problem = problem;
@@ -570,8 +570,8 @@ function parseLocalDate(date: string): {
   month: number;
   day: number;
 } {
-  // Stryker disable next-line Regex: the round-trip check below rejects any prefix or suffix.
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  // The round-trip check below rejects any prefix or suffix.
+  const match = /(\d{4})-(\d{2})-(\d{2})/.exec(date);
   if (!match) {
     throw new Error(`Invalid local date "${date}".`);
   }
@@ -678,7 +678,8 @@ function parsePowerValue(state: string, unitScale: number): number | null {
 function parseTimestampSeconds(value: string): number {
   // An unparsable value stays NaN through the sum below.
   const timestamp = Date.parse(value);
-  // Stryker disable next-line Regex: Home Assistant sends ISO 8601 times, where the offset ends the string.
+  // Known mutation survivor: dropping "$" only affects non-ISO input; a Regex
+  // disable would also hide nine killed variants.
   const fractionalSeconds = /\.(\d+)(?=Z|[+-]\d{2}:?\d{2}$)/i.exec(value)?.[1];
   const subMillisecondSeconds = fractionalSeconds
     ? Number(`0.${fractionalSeconds.slice(3)}`) / 1000

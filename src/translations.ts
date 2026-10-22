@@ -4,7 +4,7 @@ export type CardLanguage = "en" | "fr";
 export type HourCycle = "h11" | "h12" | "h23" | "h24";
 
 export function cardLanguage(language?: string): CardLanguage {
-  return /^fr(?:-|$)/.test(language ?? "") ? "fr" : "en";
+  return language?.match(/^fr(?:-|$)/) ? "fr" : "en";
 }
 
 export interface CardTranslations {
@@ -56,20 +56,7 @@ export interface CardTranslations {
   cardPickerDescription: string;
 }
 
-const roleName = (role: SolarEnergyEntityRole): string => {
-  switch (role) {
-    case "production":
-      return "production";
-    case "consumption":
-      return "consumption";
-    case "grid_import":
-      return "grid import";
-    case "grid_export":
-      return "grid export";
-    default:
-      return role;
-  }
-};
+const roleName = (role: SolarEnergyEntityRole): string => role.replace("_", " ");
 
 const sensorDescription = (role: SolarEnergyEntityRole): string => {
   switch (role) {
@@ -81,8 +68,6 @@ const sensorDescription = (role: SolarEnergyEntityRole): string => {
       return "d'import réseau";
     case "grid_export":
       return "d'export réseau";
-    default:
-      return role;
   }
 };
 
@@ -216,6 +201,6 @@ export const FR: CardTranslations = {
   cardPickerDescription: "Deux graphiques d'énergie solaire synchronisés.",
 };
 
-export function translations(language: CardLanguage = "en"): CardTranslations {
+export function translations(language?: CardLanguage): CardTranslations {
   return language === "fr" ? FR : EN;
 }
