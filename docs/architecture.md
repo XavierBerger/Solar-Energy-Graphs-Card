@@ -323,6 +323,7 @@ Chromium for the documentation diagrams). Everything goes through `dev.sh`:
 | Command                    | What it does                                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `./dev.sh install`         | `npm install`, copies the updated `package-lock.json` back to the host. Use it after changing dependencies.                                       |
+| `./dev.sh audit`           | Checks packages resolved by `package-lock.json` against npm security advisories; does not update dependencies.                                    |
 | `./dev.sh typecheck`       | `tsc --noEmit`                                                                                                                                    |
 | `./dev.sh test`            | Vitest with happy-dom (`src/**/*.test.ts`)                                                                                                        |
 | `./dev.sh coverage`        | Vitest with V8 coverage, copies the HTML report to `reports/coverage/`                                                                            |
@@ -340,6 +341,10 @@ How it works:
   `package.json` or `package-lock.json` changed (a hash stored in
   `node_modules` triggers `npm ci`).
 - `dist/` and `reports/` are ignored by git.
+
+Dependabot checks npm dependencies and the development image base every week,
+opening pull requests for available updates. Security updates must also be
+enabled in the repository settings.
 
 The CI (`.github/workflows/ci.yml`) runs `./dev.sh build` and `./dev.sh test`
 on every push, in the same container; releasing is described in
