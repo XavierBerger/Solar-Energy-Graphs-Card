@@ -678,6 +678,8 @@ function parsePowerValue(state: string, unitScale: number): number | null {
 function parseTimestampSeconds(value: string): number {
   // An unparsable value stays NaN through the sum below.
   const timestamp = Date.parse(value);
+  // Known mutation survivor: dropping "$" only affects non-ISO input; a Regex
+  // disable would also hide nine killed variants.
   const fractionalSeconds = /\.(\d+)(?=Z|[+-]\d{2}:?\d{2}$)/i.exec(value)?.[1];
   const subMillisecondSeconds = fractionalSeconds
     ? Number(`0.${fractionalSeconds.slice(3)}`) / 1000
