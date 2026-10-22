@@ -70,6 +70,7 @@ class EnergyChartsRenderer extends Renderer {
     containers: readonly [HTMLElement, HTMLElement],
     darkMode = false,
     language: "en" | "fr" = "en",
+    onDaySwipe?: (days: -1 | 1) => void,
   ) {
     super(
       containers,
@@ -77,6 +78,7 @@ class EnergyChartsRenderer extends Renderer {
       "Europe/Paris",
       darkMode,
       language,
+      onDaySwipe,
     );
   }
 }
@@ -1220,8 +1222,8 @@ describe("EnergyChartsRenderer", () => {
     expect(charts[1].setScale).not.toHaveBeenCalled();
   });
 
-  // Allows native page scrolling when 1-finger dragging while not zoomed in.
-  it("allows native page scrolling when 1-finger dragging while not zoomed", () => {
+  // Keeps short horizontal touch movement native while the full day is visible.
+  it("allows native scrolling for short horizontal movement while not zoomed", () => {
     new EnergyChartsRenderer(containers);
     containers[0].getBoundingClientRect = () =>
       ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
@@ -1234,7 +1236,7 @@ describe("EnergyChartsRenderer", () => {
 
     const moveEvent = new Event("touchmove", { bubbles: true, cancelable: true });
     Object.defineProperty(moveEvent, "touches", {
-      value: [{ clientX: 50, clientY: 50 }],
+      value: [{ clientX: 60, clientY: 50 }],
     });
     containers[0].dispatchEvent(moveEvent);
 
@@ -1433,6 +1435,131 @@ describe("EnergyChartsRenderer", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(charts[0].setScale).not.toHaveBeenCalled();
     expect(charts[1].setScale).not.toHaveBeenCalled();
+  });
+
+  // Changes to the adjacent day after a sufficiently long full-day horizontal swipe.
+  it("reports left and right full-day swipes", () => {
+    const onDaySwipe = vi.fn();
+    new EnergyChartsRenderer(containers, false, "en", onDaySwipe);
+    containers[0].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const leftStart = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(leftStart, "touches", {
+      value: [{ clientX: 150, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(leftStart);
+    const leftMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(leftMove, "touches", {
+      value: [{ clientX: 90, clientY: 55 }],
+    });
+    containers[0].dispatchEvent(leftMove);
+    const leftEnd = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(leftEnd, "touches", { value: [] });
+    containers[0].dispatchEvent(leftEnd);
+
+    const rightStart = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(rightStart, "touches", {
+      value: [{ clientX: 50, clientY: 50 }],
+    });
+    containers[0].dispatchEvent(rightStart);
+    const rightMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(rightMove, "touches", {
+      value: [{ clientX: 110, clientY: 55 }],
+    });
+    containers[0].dispatchEvent(rightMove);
+    const rightEnd = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(rightEnd, "touches", { value: [] });
+    containers[0].dispatchEvent(rightEnd);
+
+    expect(leftMove.defaultPrevented).toBe(true);
+    expect(rightMove.defaultPrevented).toBe(true);
+    expect(onDaySwipe).toHaveBeenNthCalledWith(1, 1);
+    expect(onDaySwipe).toHaveBeenNthCalledWith(2, -1);
+  });
+
+  // Keeps incomplete, vertical, and cancelled full-day gestures from changing day.
+  it("ignores ineligible full-day touch gestures", () => {
+    const onDaySwipe = vi.fn();
+    new EnergyChartsRenderer(containers, false, "en", onDaySwipe);
+    containers[1].getBoundingClientRect = () =>
+      ({ left: 0, right: 200, width: 200, top: 0, bottom: 100, height: 100 }) as DOMRect;
+
+    const start = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(start, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(start);
+    const shortMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(shortMove, "touches", {
+      value: [{ clientX: 60, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(shortMove);
+    const shortEnd = new Event("touchend", { bubbles: true, cancelable: true });
+    Object.defineProperty(shortEnd, "touches", { value: [] });
+    containers[1].dispatchEvent(shortEnd);
+
+    const verticalStart = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(verticalStart, "touches", {
+      value: [{ clientX: 100, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(verticalStart);
+    const verticalMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(verticalMove, "touches", {
+      value: [{ clientX: 30, clientY: 150 }],
+    });
+    containers[1].dispatchEvent(verticalMove);
+    containers[1].dispatchEvent(shortEnd);
+
+    const cancelledStart = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(cancelledStart, "touches", {
+      value: [{ clientX: 150, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(cancelledStart);
+    const cancelledMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(cancelledMove, "touches", {
+      value: [{ clientX: 90, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(cancelledMove);
+    const cancel = new Event("touchcancel", { bubbles: true, cancelable: true });
+    Object.defineProperty(cancel, "touches", { value: [] });
+    containers[1].dispatchEvent(cancel);
+
+    charts[1].scales.x = { min: 60, max: 240 };
+    const zoomedStart = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(zoomedStart, "touches", {
+      value: [{ clientX: 150, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(zoomedStart);
+    const zoomedMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(zoomedMove, "touches", {
+      value: [{ clientX: 90, clientY: 50 }],
+    });
+    containers[1].dispatchEvent(zoomedMove);
+    containers[1].dispatchEvent(shortEnd);
+
+    charts[1].scales.x = {};
+    const pinchStart = new Event("touchstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(pinchStart, "touches", {
+      value: [
+        { clientX: 60, clientY: 50 },
+        { clientX: 140, clientY: 50 },
+      ],
+    });
+    containers[1].dispatchEvent(pinchStart);
+    const pinchMove = new Event("touchmove", { bubbles: true, cancelable: true });
+    Object.defineProperty(pinchMove, "touches", {
+      value: [
+        { clientX: 30, clientY: 50 },
+        { clientX: 170, clientY: 50 },
+      ],
+    });
+    containers[1].dispatchEvent(pinchMove);
+    containers[1].dispatchEvent(shortEnd);
+
+    expect(shortMove.defaultPrevented).toBe(false);
+    expect(verticalMove.defaultPrevented).toBe(false);
+    expect(onDaySwipe).not.toHaveBeenCalled();
   });
 
   // Right-click drags should never trigger a pan while the user is zoomed in.

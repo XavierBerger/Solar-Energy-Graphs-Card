@@ -489,6 +489,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         this.hassContext.config.time_zone,
         this.darkMode,
         this.language,
+        this.showAdjacentDayBy,
       );
     }
   }
@@ -992,20 +993,22 @@ export class SolarEnergyGraphsCard extends LitElement {
   };
 
   private showAdjacentDay(days: -1 | 1): () => void {
-    return () => {
-      const hass = this.hassContext;
-      if (
-        !hass ||
-        !this.selectedDay ||
-        (days === 1 && this.isTodaySelected())
-      ) {
-        return;
-      }
-      this.selectedDay = shiftLocalDate(this.selectedDay, days);
-      this.requestUpdate();
-      this.loadHistoryWhenNeeded(hass);
-    };
+    return () => this.showAdjacentDayBy(days);
   }
+
+  private showAdjacentDayBy = (days: -1 | 1): void => {
+    const hass = this.hassContext;
+    if (
+      !hass ||
+      !this.selectedDay ||
+      (days === 1 && this.isTodaySelected())
+    ) {
+      return;
+    }
+    this.selectedDay = shiftLocalDate(this.selectedDay, days);
+    this.requestUpdate();
+    this.loadHistoryWhenNeeded(hass);
+  };
 }
 
 function configuredEntityIds(

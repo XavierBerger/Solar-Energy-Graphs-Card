@@ -13,6 +13,7 @@ type UPlotAxisFormatter = (self: unknown, splits: number[]) => string[];
 
 const DEFAULT_WIDTH = 600;
 const DEFAULT_HEIGHT = 100;
+const DAY_SWIPE_MIN_DISTANCE_PX = 48;
 let nextSyncGroupId = 0;
 
 // Pale min-max ranges drawn around the mean of each sensor.
@@ -363,6 +364,8 @@ export class EnergyChartsRenderer {
     startY: number;
     isPan: boolean;
     isPinch: boolean;
+    canNavigateDay: boolean;
+    swipeDays?: -1 | 1;
     rangeAtStart: TimeRange;
     dayWindow: TimeRange;
     plotWidth: number;
@@ -373,6 +376,7 @@ export class EnergyChartsRenderer {
   private destroyed = false;
   private theme: ChartTheme;
   private readonly language: CardLanguage;
+  private readonly onDaySwipe?: (days: -1 | 1) => void;
 
   constructor(
     containers: readonly [HTMLElement, HTMLElement],
@@ -380,8 +384,10 @@ export class EnergyChartsRenderer {
     timeZone: string,
     darkMode = false,
     language: CardLanguage = "en",
+    onDaySwipe?: (days: -1 | 1) => void,
   ) {
     this.language = language;
+    this.onDaySwipe = onDaySwipe;
     this.theme = this.readTheme(containers[0], darkMode);
     this.syncGroup = uPlot.sync(
       // Stryker disable next-line UpdateOperator: only the uniqueness of the key matters.
@@ -421,7 +427,7 @@ export class EnergyChartsRenderer {
         this.handleTouchEnd(event, index);
       };
       const onTouchCancel = (event: TouchEvent) => {
-        this.handleTouchEnd(event, index);
+        this.handleTouchCancel(event, index);
       };
 
       element.addEventListener("touchstart", onTouchStart, { passive: false });
@@ -672,6 +678,7 @@ export class EnergyChartsRenderer {
         startY: touch.clientY,
         isPan: false,
         isPinch: false,
+        canNavigateDay: true,
         rangeAtStart: { min: currentMin, max: currentMax },
         dayWindow: { min: dayStart, max: dayEnd },
         plotWidth: rect.width,
@@ -688,6 +695,7 @@ export class EnergyChartsRenderer {
         startY: t1.clientY,
         isPan: false,
         isPinch: true,
+        canNavigateDay: false,
         rangeAtStart: { min: currentMin, max: currentMax },
         dayWindow: { min: dayStart, max: dayEnd },
         plotWidth: rect.width,
@@ -722,6 +730,7 @@ export class EnergyChartsRenderer {
         const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
         this.touchState.isPinch = true;
         this.touchState.isPan = false;
+        this.touchState.canNavigateDay = false;
         this.touchState.startDistance = currentDistance;
         this.touchState.startRange = { min: currentMin, max: currentMax };
         return;
@@ -759,6 +768,7 @@ export class EnergyChartsRenderer {
         const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
         this.touchState.isPinch = false;
         this.touchState.isPan = false;
+        this.touchState.canNavigateDay = false;
         this.touchState.startX = touch.clientX;
         this.touchState.startY = touch.clientY;
         this.touchState.rangeAtStart = { min: currentMin, max: currentMax };
@@ -797,6 +807,17 @@ export class EnergyChartsRenderer {
             chart.setScale("x", newRange);
           });
         }
+      } else if (
+        this.touchState.canNavigateDay &&
+        !zoomed &&
+        !this.touchState.swipeDays &&
+        Math.abs(deltaX) >= DAY_SWIPE_MIN_DISTANCE_PX &&
+        isHorizontalTouchGesture(deltaX, deltaY)
+      ) {
+        this.touchState.swipeDays = deltaX < 0 ? 1 : -1;
+        event.preventDefault();
+      } else if (this.touchState.swipeDays) {
+        event.preventDefault();
       }
     }
   }
@@ -804,7 +825,11 @@ export class EnergyChartsRenderer {
   private handleTouchEnd(event: TouchEvent, targetIndex: number): void {
     if (this.touchState && this.touchState.targetIndex === targetIndex) {
       if (event.touches.length === 0) {
+        const swipeDays = this.touchState.swipeDays;
         this.touchState = undefined;
+        if (swipeDays) {
+          this.onDaySwipe?.(swipeDays);
+        }
       } else if (event.touches.length === 1 && this.touchState.isPinch) {
         const touch = event.touches[0];
         const { scales } = this.charts[targetIndex].chart;
@@ -812,10 +837,17 @@ export class EnergyChartsRenderer {
         const currentMax = scales.x?.max ?? this.touchState.dayWindow.max;
         this.touchState.isPinch = false;
         this.touchState.isPan = false;
+        this.touchState.canNavigateDay = false;
         this.touchState.startX = touch.clientX;
         this.touchState.startY = touch.clientY;
         this.touchState.rangeAtStart = { min: currentMin, max: currentMax };
       }
+    }
+  }
+
+  private handleTouchCancel(_event: TouchEvent, targetIndex: number): void {
+    if (this.touchState?.targetIndex === targetIndex) {
+      this.touchState = undefined;
     }
   }
 

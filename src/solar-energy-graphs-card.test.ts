@@ -30,6 +30,7 @@ const { rendererInstances } = vi.hoisted(() => ({
     destroy: ReturnType<typeof vi.fn>;
     refreshTheme: ReturnType<typeof vi.fn>;
     updateData: ReturnType<typeof vi.fn>;
+    onDaySwipe?: (days: -1 | 1) => void;
   }>,
 }));
 
@@ -44,6 +45,8 @@ vi.mock("./energy-charts-renderer", () => ({
       readonly data: EnergyHistoryResponse,
       readonly timeZone: string,
       readonly darkMode: boolean,
+      _language: "en" | "fr",
+      readonly onDaySwipe?: (days: -1 | 1) => void,
     ) {
       rendererInstances.push(this);
     }
@@ -494,6 +497,30 @@ describe("SolarEnergyGraphsCard", () => {
     await card.updateComplete;
 
     expect(date?.dateTime).toBe(today);
+    expect(hass.callWS).toHaveBeenCalledTimes(11);
+  });
+
+  // Uses the renderer's full-day swipe callback and keeps today as the upper bound.
+  it("loads adjacent days from a graph swipe", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+
+    const swipe = rendererInstances[0].onDaySwipe;
+    expect(swipe).toBeTypeOf("function");
+    swipe?.(-1);
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(7));
+    expect(card.shadowRoot?.querySelector("time")?.dateTime).toBe("2026-09-26");
+
+    swipe?.(1);
+    await vi.waitFor(() => expect(hass.callWS).toHaveBeenCalledTimes(11));
+    expect(card.shadowRoot?.querySelector("time")?.dateTime).toBe("2026-09-27");
+
+    swipe?.(1);
     expect(hass.callWS).toHaveBeenCalledTimes(11);
   });
 
