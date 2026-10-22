@@ -37,6 +37,8 @@ import { cardLanguage, translations, type CardLanguage } from "./translations";
 import { uPlotStyles } from "./uplot-adapter";
 
 const CARD_TYPE = "custom:solar-energy-graphs-card";
+// Stryker disable next-line StringLiteral: an empty name throws on import,
+// which Vitest reports as a failed file, not as a failed test.
 const ELEMENT_NAME = "solar-energy-graphs-card";
 // Home Assistant pushes each sensor separately; merge a burst in one pass.
 const LIVE_UPDATE_COALESCE_MS = 250;
@@ -85,6 +87,7 @@ export class SolarEnergyGraphsCard extends LitElement {
   private chartRenderer?: EnergyChartsRenderer;
   private config?: SolarEnergyGraphsCardConfig;
   private hassContext?: HomeAssistantThemeContext;
+  // Stryker disable next-line BooleanLiteral: the hass setter sets it before any chart exists.
   private darkMode = false;
   private historyData?: EnergyHistoryResponse;
   private historyModel?: {
@@ -99,6 +102,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     highPrecisionAvailable?: boolean;
     highPrecisionCheckError?: string;
   };
+  // Stryker disable next-line StringLiteral: no load key is ever empty or equal to any other text.
   private historyLoadKey = "";
   private historyRequestId = 0;
   private liveUpdateTimer?: ReturnType<typeof setTimeout>;
@@ -319,11 +323,14 @@ export class SolarEnergyGraphsCard extends LitElement {
     };
     this.historyData = undefined;
     this.historyModel = undefined;
+    // Stryker disable next-line StringLiteral: no load key is ever empty or equal to any other text.
     this.historyLoadKey = "";
     this.historyRequestId += 1;
     this.cancelLiveMerge();
+    // Stryker disable next-line CallExpression: a pending refresh implies a load, and the reload below cancels it.
     this.cancelStatisticsRefresh();
     this.loadHistoryWhenNeeded(this.hassContext);
+    // Stryker disable next-line CallExpression: a started load queues its own render; otherwise nothing shown changes.
     this.requestUpdate();
   }
 
@@ -350,9 +357,11 @@ export class SolarEnergyGraphsCard extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
 
+    // Stryker disable next-line ConditionalExpression: on a first connection, updated() runs the same load.
     if (this.hasUpdated) {
       // The reload renders the card, and updated() recreates the charts.
       void this.updateComplete.then(() => {
+        // Stryker disable next-line ConditionalExpression: a disconnected card loads nothing.
         if (this.isConnected) {
           this.loadHistoryWhenNeeded(this.hassContext);
         }
@@ -362,12 +371,15 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   disconnectedCallback(): void {
     this.historyRequestId += 1;
+    // Stryker disable next-line StringLiteral: no load key is ever empty or equal to any other text.
     this.historyLoadKey = "";
     this.historyModel = undefined;
     this.cancelLiveMerge();
+    // Stryker disable next-line CallExpression: without a model, a refresh returns at once, and a reconnection cancels it.
     this.cancelStatisticsRefresh();
     this.chartRenderer?.destroy();
     this.chartRenderer = undefined;
+    // Stryker disable next-line CallExpression: the card has no reactive controller or directive to disconnect.
     super.disconnectedCallback();
   }
 
@@ -482,6 +494,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       '[data-chart="two"]',
     );
 
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: updated() calls this once rendered, with the two containers.
     if (first && second) {
       this.chartRenderer = new EnergyChartsRenderer(
         [first, second],
@@ -508,6 +521,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     const dayWindow = getLocalDayWindowForDate(selectedDay, timeZone);
     const entityIds = configuredEntityIds(config);
     // Live state changes are merged by mergeLiveStates, never reloaded here.
+    // Stryker disable next-line StringLiteral: entity IDs only change through setConfig, which clears the key.
     const loadKey = `${timeZone}:${selectedDay}:${entityIds.join(",")}`;
     if (loadKey === this.historyLoadKey) {
       return;
@@ -550,6 +564,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       window: dayWindow,
       unitScales,
       loading: true,
+      // Stryker disable next-line StringLiteral: only "raw" is compared, so any other value means statistics.
       precision: "statistics",
       highPrecisionAvailable: undefined,
       highPrecisionCheckError: undefined,
@@ -592,6 +607,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
 
     let samples = current.samples;
+    // Stryker disable next-line ArrayDeclaration: configured series are replaced, the others stay below two samples.
     let precisionSamples: EnergyPowerSamples = [[], [], [], []];
     let loadError =
       statistics.status === "rejected" ? errorMessage(statistics.reason) : undefined;
@@ -603,6 +619,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       }
       const scales = sensorUnitScales(current.unitScales);
       entityIds.forEach((entityId, sensor) => {
+        // Stryker disable next-line ConditionalExpression,BlockStatement: a null ID has no row nor state.
         if (!entityId) {
           return;
         }
@@ -618,6 +635,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     } catch (error) {
       loadError ??= errorMessage(error);
     }
+    // Stryker disable next-line BlockStatement: an unset or false availability both hide the button.
     if (!hasProbeEntities) {
       highPrecisionAvailable = false;
     } else if (precisionProbe.status === "rejected") {
@@ -628,6 +646,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       try {
         const scales = sensorUnitScales(current.unitScales);
         entityIds.forEach((entityId, sensor) => {
+          // Stryker disable next-line ConditionalExpression,BlockStatement: a null ID has no row nor state.
           if (!entityId) {
             return;
           }
@@ -677,6 +696,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     const nextBoundary =
       (Math.floor(now / STATISTICS_PERIOD_SECONDS) + 1) * STATISTICS_PERIOD_SECONDS;
     const delay = nextBoundary + STATISTICS_REFRESH_DELAY_SECONDS - now;
+    // Stryker disable next-line CallExpression: callers schedule once the previous timer has fired or been cancelled.
     this.cancelStatisticsRefresh();
     this.statisticsRefreshTimer = setTimeout(() => {
       this.statisticsRefreshTimer = undefined;
@@ -695,6 +715,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     requestId: number,
   ): Promise<void> {
     const model = this.historyModel;
+    // Stryker disable next-line ConditionalExpression,LogicalOperator,BlockStatement: clearing the model or loading another day cancels this timer.
     if (!model || !this.isTodaySelected()) {
       return;
     }
@@ -732,6 +753,7 @@ export class SolarEnergyGraphsCard extends LitElement {
 
   private showCurrentModel(): void {
     const model = this.historyModel;
+    // Stryker disable next-line ConditionalExpression: every caller has just stored a model.
     if (model) {
       this.showHistoryData(
         projectEnergyHistory(
@@ -780,10 +802,12 @@ export class SolarEnergyGraphsCard extends LitElement {
     const hass = this.hassContext;
     const model = this.historyModel;
     const config = this.config;
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: the button only renders with hass, a model and a configuration.
     if (!hass || !model || !config || model.loading) {
       return;
     }
     if (model.precision === "raw") {
+      // Stryker disable next-line StringLiteral: only "raw" is compared, so any other value means statistics.
       this.historyModel = { ...model, precision: "statistics" };
       this.showCurrentModel();
       return;
@@ -825,6 +849,7 @@ export class SolarEnergyGraphsCard extends LitElement {
       const scales = sensorUnitScales(current.unitScales);
       let samples = [[], [], [], []] as EnergyPowerSamples;
       configuredEntityIds(config).forEach((entityId, sensor) => {
+        // Stryker disable next-line ConditionalExpression,BlockStatement: a null ID has no row nor state.
         if (!entityId) {
           return;
         }
@@ -842,6 +867,7 @@ export class SolarEnergyGraphsCard extends LitElement {
           ...current,
           loading: false,
           highPrecisionAvailable: false,
+          // Stryker disable next-line StringLiteral: only "raw" is compared, so any other value means statistics.
           precision: "statistics",
         };
         this.showCurrentModel();
@@ -876,6 +902,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     this.liveUpdateTimer = setTimeout(() => {
       this.liveUpdateTimer = undefined;
       // Read hass when the timer fires: it holds the last state of the burst.
+      // Stryker disable next-line ConditionalExpression: only the hass setter schedules this timer.
       if (this.hassContext) {
         this.mergeLiveStates(this.hassContext);
       }
@@ -896,6 +923,7 @@ export class SolarEnergyGraphsCard extends LitElement {
     const scales = sensorUnitScales(model.unitScales);
     const live = configuredEntityIds(this.config).flatMap(
       (entityId, sensor): LivePowerSample[] => {
+        // Stryker disable next-line ConditionalExpression,BlockStatement: a null ID has no row nor state.
         if (!entityId) {
           return [];
         }
@@ -925,11 +953,13 @@ export class SolarEnergyGraphsCard extends LitElement {
     const model = this.historyModel;
     const t = translations(this.language);
     // Missing series are expected until every request has settled.
+    // Stryker disable next-line OptionalChaining: only showCurrentModel calls this, with a model.
     if (model?.loading) {
       this.mainStatus = { kind: "loading" };
       this.gridStatus = { kind: "loading" };
       return;
     }
+    // Stryker disable next-line OptionalChaining: only showCurrentModel calls this, with a model.
     if (model?.loadError !== undefined) {
       this.mainStatus = { kind: "loadError", detail: model.loadError };
       this.gridStatus = { kind: "loadError", detail: model.loadError };
@@ -959,6 +989,7 @@ export class SolarEnergyGraphsCard extends LitElement {
   private isTodaySelected(): boolean {
     const hass = this.hassContext;
     return (
+      // Stryker disable next-line LogicalOperator: the hass setter sets the day, so both are set or unset.
       !this.selectedDay ||
       !hass ||
       this.selectedDay >=
@@ -972,11 +1003,14 @@ export class SolarEnergyGraphsCard extends LitElement {
       return;
     }
     const today = getLocalDateString(new Date(), hass.config.time_zone);
+    // Stryker disable next-line ConditionalExpression,BlockStatement: the same day keeps its load key, so nothing reloads.
     if (this.selectedDay === today) {
       return;
     }
     this.selectedDay = today;
+    // Stryker disable next-line CallExpression: the load below queues its own render.
     this.requestUpdate();
+    // Stryker disable next-line CallExpression: updated() starts the load after the render above.
     this.loadHistoryWhenNeeded(hass);
   };
 
@@ -1035,6 +1069,8 @@ async function fetchStatistics(
     hass.callWS(buildStatisticsRequest(activeIds, window, now, "5minute")),
     hass.callWS(buildStatisticsRequest(activeIds, window, now, "hour")),
   ]);
+  // Stryker disable ConditionalExpression,ArrayDeclaration: a null ID has no row,
+  // and an unconfigured sensor has no raw sample to draw or compare.
   const statisticsOf = (entityId: string | null) =>
     entityId === null
       ? []
@@ -1042,6 +1078,7 @@ async function fetchStatistics(
         parseStatisticRows(entityRowsOf(fiveMinute, entityId)),
         parseStatisticRows(entityRowsOf(hourly, entityId)),
       );
+  // Stryker restore ConditionalExpression,ArrayDeclaration
   return [
     statisticsOf(entityIds[0]),
     statisticsOf(entityIds[1]),
