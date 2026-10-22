@@ -236,11 +236,27 @@ describe("SolarEnergyGraphsCard", () => {
     document.body.replaceChildren();
   });
 
-  // Confirms that Lovelace accepts the card type with its required entities.
-  it("accepts its configured Lovelace type", () => {
+  // Accepts the card type with its entities, then waits for Home Assistant
+  // without a day, a request or an error, even when the navigation is clicked.
+  it("accepts its configured Lovelace type", async () => {
     card = new SolarEnergyGraphsCard();
 
     expect(() => card.setConfig(CARD_CONFIG)).not.toThrow();
+    document.body.append(card);
+    await card.updateComplete;
+    navigationButton(card, "Previous day")?.click();
+    navigationButton(card, "Return to today")?.click();
+    await card.updateComplete;
+
+    const navigation = card.shadowRoot?.querySelector(".day-navigation");
+    const time = navigation?.querySelector("time");
+    expect(Array.from(
+      card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+      (status) => status.textContent?.trim(),
+    )).toEqual(Array(2).fill("Waiting for Home Assistant data."));
+    expect([time?.dateTime, time?.textContent?.trim()]).toEqual(["", ""]);
+    expect(navigation?.textContent?.replace(/\s+/g, "")).toBe("←→");
+    expect(navigationButton(card, "Next day")?.disabled).toBe(true);
   });
 
   // Exposes the graphical editor and an empty, role-preserving card stub to Lovelace.
@@ -293,18 +309,38 @@ describe("SolarEnergyGraphsCard", () => {
     );
   });
 
-  // Renders without an unconfigured sensor and leaves it out of every Home Assistant request.
+  // Renders without an unconfigured sensor, leaves it out of every Home Assistant
+  // request and reports it on its own graph only.
   it("accepts null entities and omits them from Home Assistant requests", async () => {
+    vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     const optionalRoles = [
       "production",
       "consumption",
       "grid_import",
       "grid_export",
     ] as const;
+    const statistics = Object.fromEntries(SENSOR_IDS.map((entityId) => [
+      entityId,
+      [statisticRow("2026-09-27T09:00:00Z", 100, 50, 150)],
+    ]));
+    const mainStatus = "Power statistics: mean line with min–max range.";
+    const gridStatus = "Grid import and export are measured separately.";
+    const mainError =
+      "Error: September 27, 2026 production or consumption history is unavailable.";
+    const gridError =
+      "Error: September 27, 2026 grid import or export history is unavailable.";
+    const expectedStatuses = {
+      production: [mainError, gridStatus],
+      consumption: [mainError, gridStatus],
+      grid_import: [mainStatus, gridError],
+      grid_export: [mainStatus, gridError],
+    };
 
     for (const [index, role] of optionalRoles.entries()) {
       card = new SolarEnergyGraphsCard();
-      const hass = createHassContext();
+      const hass = createHassContext(
+        fixedHistoryApi({ "statistics:5minute": statistics }),
+      );
       card.setConfig({
         ...CARD_CONFIG,
         entities: { ...CARD_CONFIG.entities, [role]: null },
@@ -322,18 +358,25 @@ describe("SolarEnergyGraphsCard", () => {
       expect(requests.map((request) =>
         "statistic_ids" in request ? request.statistic_ids : request.entity_ids,
       )).toEqual([expectedIds, expectedIds, expectedIds, expectedIds]);
-      expect({
-        production: rendererInstances[index].data.hasProduction,
-        consumption: rendererInstances[index].data.hasConsumption,
-        grid_import: rendererInstances[index].data.hasGridImport,
-        grid_export: rendererInstances[index].data.hasGridExport,
-      }[role]).toBe(false);
+      const { data } = rendererInstances[index];
+      expect([
+        data.hasProduction,
+        data.hasConsumption,
+        data.hasGridImport,
+        data.hasGridExport,
+      ]).toEqual(optionalRoles.map((optionalRole) => optionalRole !== role));
+      await card.updateComplete;
+      expect(Array.from(
+        card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+        (status) => status.textContent?.trim(),
+      )).toEqual(expectedStatuses[role]);
 
       card.remove();
     }
   });
 
-  // Skips recorder requests and keeps the precision action hidden when no sensors are configured.
+  // Skips recorder requests, announces both empty states as alerts and keeps the
+  // precision action hidden when no sensors are configured.
   it("renders graph-local empty states when all sensor roles are unconfigured", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     card = new SolarEnergyGraphsCard();
@@ -358,30 +401,77 @@ describe("SolarEnergyGraphsCard", () => {
       .toContain("production or consumption history is unavailable");
     expect(card.shadowRoot?.querySelectorAll(".chart-status")[1].textContent)
       .toContain("grid import or export history is unavailable");
-    expect(navigationButton(card, "Load high precision")).toBeNull();
+    expect(Array.from(
+      card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+      (status) => status.getAttribute("role"),
+    )).toEqual(["alert", "alert"]);
+    const navigation = card.shadowRoot?.querySelector(".day-navigation");
+    expect(navigation?.querySelectorAll("button")).toHaveLength(3);
+    expect(navigation?.textContent?.replace(/\s+/g, " ").trim())
+      .toBe("← September 27, 2026 →");
   });
 
-  // Reports invalid Home Assistant sensor metadata locally without requesting history.
+  // Reports invalid or missing Home Assistant sensor metadata locally without
+  // requesting history, also when found on reconnection.
   it("reports invalid sensor metadata in both graph status areas", async () => {
     card = new SolarEnergyGraphsCard();
     card.setConfig(CARD_CONFIG);
     document.body.append(card);
+    const validHass = createHassContext();
     const hass = createHassContext();
     hass.states["sensor.solar"].attributes = {
       unit_of_measurement: "kWh",
       device_class: "energy",
       state_class: "total_increasing",
     };
+    const statusTexts = () => Array.from(
+      card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+      (status) => status.textContent?.trim(),
+    );
+    const metadataError = (role: string) =>
+      `Sensor configuration error: The ${role} sensor must have device_class=power and state_class=measurement.`;
     card.hass = hass;
     await card.updateComplete;
+    const invalidStatuses = statusTexts();
+    const missingEntityStatuses: Array<string | undefined> = [];
+    for (const entityId of SENSOR_IDS) {
+      card.hass = {
+        ...validHass,
+        states: Object.fromEntries(
+          Object.entries(validHass.states).filter(([id]) => id !== entityId),
+        ) as typeof validHass.states,
+      };
+      card.setConfig(CARD_CONFIG);
+      await card.updateComplete;
+      missingEntityStatuses.push(statusTexts()[0]);
+    }
+    card.hass = { ...validHass, states: undefined };
+    card.setConfig(CARD_CONFIG);
+    await card.updateComplete;
+    const noStatesStatus = statusTexts()[0];
+    card.remove();
+    const reconnectedHass = createHassContext();
+    reconnectedHass.states["sensor.consumption"].attributes = {
+      unit_of_measurement: "kWh",
+      device_class: "energy",
+      state_class: "total_increasing",
+    };
+    card.hass = reconnectedHass;
+    document.body.append(card);
 
+    await vi.waitFor(() =>
+      expect(statusTexts()).toEqual(Array(2).fill(metadataError("consumption"))),
+    );
     expect(hass.callWS).not.toHaveBeenCalled();
-    expect(Array.from(card.shadowRoot?.querySelectorAll(".chart-status") ?? [])
-      .map((status) => status.textContent))
-      .toEqual([
-        expect.stringContaining("Sensor configuration error: The production sensor"),
-        expect.stringContaining("Sensor configuration error: The production sensor"),
-      ]);
+    expect(invalidStatuses).toEqual([
+      expect.stringContaining("Sensor configuration error: The production sensor"),
+      expect.stringContaining("Sensor configuration error: The production sensor"),
+    ]);
+    expect(missingEntityStatuses).toEqual(
+      ["production", "consumption", "grid import", "grid export"].map(metadataError),
+    );
+    expect(noStatesStatus).toBe(metadataError("production"));
+    expect(reconnectedHass.callWS).not.toHaveBeenCalled();
   });
 
   // Trims spaces around configured entity IDs before querying Home Assistant.
@@ -1013,7 +1103,8 @@ describe("SolarEnergyGraphsCard", () => {
       .toContain("History loading error: Recorder unavailable");
   });
 
-  // Hides high precision again when its full-day response no longer has finer samples.
+  // Hides high precision again, and ends its loading state, when its full-day
+  // response no longer has finer samples.
   it("restores statistics when the full-day precision response is not finer", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     const probeStart = Date.parse("2026-09-27T10:09:00Z") / 1000;
@@ -1046,13 +1137,21 @@ describe("SolarEnergyGraphsCard", () => {
 
     expect(navigationButton(card, "Load high precision")).toBeNull();
     expect(navigationButton(card, "Use standard precision")).toBeNull();
+    expect(Array.from(
+      card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+      (status) => status.textContent?.trim(),
+    )).toEqual([
+      "Power statistics: mean line with min–max range.",
+      "Grid import and export are measured separately.",
+    ]);
     const data = rendererInstances[0].updateData.mock.lastCall?.[0];
     const intervalMidpoint = Date.parse("2026-09-27T09:02:30Z") / 1000;
     expect(data?.mainData[1][Array.from(data.mainData[0]).indexOf(intervalMidpoint)])
       .toBe(500);
   });
 
-  // Keeps a live state received while the recent raw history was still loading.
+  // Draws the live states of every sensor received while the recent raw history
+  // is still loading, keeps the loading status, then keeps them after it.
   it("keeps live states merged before the history response", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     const { callWS, pending } = deferredHistoryApi();
@@ -1062,8 +1161,27 @@ describe("SolarEnergyGraphsCard", () => {
     document.body.append(card);
     card.hass = hass;
     await vi.waitFor(() => expect(pending).toHaveLength(4));
-    card.hass = withSensorState(hass, "sensor.solar", "300", "2026-09-27T10:09:00Z");
+    const liveStates = [
+      ["sensor.solar", "300", "2026-09-27T10:09:00Z"],
+      ["sensor.consumption", "400", "2026-09-27T10:09:01Z"],
+      ["sensor.grid_import", "120", "2026-09-27T10:09:02Z"],
+      ["sensor.grid_export", "30", "2026-09-27T10:09:03Z"],
+    ] as const;
+    card.hass = liveStates.reduce(
+      (current, [entityId, state, lastUpdated]) =>
+        withSensorState(current, entityId, state, lastUpdated),
+      hass,
+    );
     await vi.advanceTimersByTimeAsync(250);
+    await card.updateComplete;
+    const loadingData = rendererInstances[0].data;
+    const loadingX = Array.from(loadingData.mainData[0]);
+    const liveIndex = (lastUpdated: string) =>
+      loadingX.indexOf(Date.parse(lastUpdated) / 1000);
+    const loadingStatuses = Array.from(
+      card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+      (status) => status.textContent?.trim(),
+    );
     const recorded = Date.parse("2026-09-27T10:05:00Z") / 1000;
 
     pending[0].resolve({});
@@ -1079,9 +1197,18 @@ describe("SolarEnergyGraphsCard", () => {
     expect(
       data.mainData[1][x.indexOf(Date.parse("2026-09-27T10:09:00Z") / 1000)],
     ).toBe(300);
+    expect([
+      loadingData.mainData[1][liveIndex("2026-09-27T10:09:00Z")],
+      loadingData.mainData[7][liveIndex("2026-09-27T10:09:01Z")],
+      loadingData.gridData[2][liveIndex("2026-09-27T10:09:02Z")],
+      loadingData.gridData[1][liveIndex("2026-09-27T10:09:03Z")],
+    ]).toEqual([300, 400, -120, 30]);
+    expect(loadingStatuses)
+      .toEqual(Array(2).fill("Loading Home Assistant history…"));
   });
 
-  // Requests the whole day's raw states and draws them in place of statistics.
+  // Requests the whole day's raw states, draws them in place of statistics and
+  // shows the action back to standard precision.
   it("loads the day's raw history at high precision", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     const recorded = Date.parse("2026-09-27T09:01:00Z") / 1000;
@@ -1104,12 +1231,19 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = hass;
     await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
     await flushHistoryResponse();
+    await card.updateComplete;
     const clickedAt = new Date().toISOString();
+    const loadButton = navigationButton(card, "Load high precision");
+    const loadAction = [loadButton?.title, loadButton?.textContent?.trim()];
 
-    navigationButton(card, "Load high precision")?.click();
+    loadButton?.click();
     await flushHistoryResponse();
     await card.updateComplete;
 
+    const standardButton = navigationButton(card, "Use standard precision");
+    expect(loadAction).toEqual(["High precision", "▤"]);
+    expect([standardButton?.title, standardButton?.textContent?.trim()])
+      .toEqual(["Standard precision", "≋"]);
     expect(hass.callWS).toHaveBeenCalledTimes(5);
     expect(hass.callWS.mock.calls[4][0]).toMatchObject({
       type: "history/history_during_period",
@@ -1304,7 +1438,8 @@ describe("SolarEnergyGraphsCard", () => {
     expect(button?.title).toContain("Recorder unavailable");
   });
 
-  // Disables the toggle during the initial load and the raw history request.
+  // Disables the toggle and shows the loading status during the initial load and
+  // the raw history request, which a double click sends once.
   it("disables the precision button while history is loading", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-27T10:10:00Z") });
     const recorded = Date.parse("2026-09-27T09:01:00Z") / 1000;
@@ -1315,7 +1450,12 @@ describe("SolarEnergyGraphsCard", () => {
     card.hass = createHassContext(callWS);
     await vi.waitFor(() => expect(pending).toHaveLength(4));
     await card.updateComplete;
+    const statusTexts = () => Array.from(
+      card.shadowRoot?.querySelectorAll(".chart-status") ?? [],
+      (status) => status.textContent?.trim(),
+    );
     const initialLoad = navigationButton(card, "Load high precision");
+    const initialStatuses = statusTexts();
     pending.slice(0, 3).forEach(({ resolve }) => resolve({}));
     pending[3].resolve({
       "sensor.solar": [
@@ -1327,9 +1467,12 @@ describe("SolarEnergyGraphsCard", () => {
     await card.updateComplete;
     const afterInitialLoad = navigationButton(card, "Load high precision")?.disabled;
 
-    navigationButton(card, "Load high precision")?.click();
+    const loadButton = navigationButton(card, "Load high precision");
+    loadButton?.click();
+    loadButton?.click();
     await card.updateComplete;
     const rawLoad = navigationButton(card, "Load high precision")?.disabled;
+    const rawLoadStatuses = statusTexts();
     pending[4].resolve({
       "sensor.solar": [
         { s: "700", lu: recorded },
@@ -1341,6 +1484,8 @@ describe("SolarEnergyGraphsCard", () => {
 
     expect(initialLoad).toBeNull();
     expect([afterInitialLoad, rawLoad]).toEqual([false, true]);
+    expect([initialStatuses, rawLoadStatuses])
+      .toEqual(Array(2).fill(Array(2).fill("Loading Home Assistant history…")));
     expect(pending).toHaveLength(5);
     expect(navigationButton(card, "Use standard precision")?.disabled).toBe(false);
   });
