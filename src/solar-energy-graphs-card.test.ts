@@ -1628,6 +1628,24 @@ describe("SolarEnergyGraphsCard", () => {
     expect(hass.callWS).toHaveBeenCalledTimes(4);
   });
 
+  // Destroys and recreates the renderer when the language changes.
+  it("recreates the renderer when the language changes", async () => {
+    card = new SolarEnergyGraphsCard();
+    const hass = createHassContext();
+    card.setConfig(CARD_CONFIG);
+    document.body.append(card);
+    card.hass = hass;
+    await vi.waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const firstRenderer = rendererInstances[0];
+
+    card.hass = { ...hass, language: "fr" };
+    await card.updateComplete;
+
+    expect(firstRenderer.destroy).toHaveBeenCalled();
+    expect(rendererInstances).toHaveLength(2);
+    expect(rendererInstances[1]).not.toBe(firstRenderer);
+  });
+
   // Keeps the loaded history when a configured sensor changes; live states are merged instead.
   it("does not reload history for live sensor state changes", async () => {
     card = new SolarEnergyGraphsCard();
