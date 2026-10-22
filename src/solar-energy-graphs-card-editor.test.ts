@@ -153,6 +153,50 @@ describe("SolarEnergyGraphsCardEditor", () => {
     expect(form.schema?.[0].selector.entity.include_entities).toContain("sensor.other_power");
   });
 
+  // Replaces the schema when a sensor is removed, even if the first sensors are unchanged.
+  it("updates the schema when a sensor is removed from the eligible list", async () => {
+    editor = new SolarEnergyGraphsCardEditor();
+    editor.hass = {
+      states: {
+        "sensor.first_power": compatiblePowerState(),
+        "sensor.second_power": compatiblePowerState(),
+      },
+    };
+    editor.setConfig(CARD_CONFIG);
+    document.body.append(editor);
+    await editor.updateComplete;
+    const form = editor.shadowRoot?.querySelector("ha-form") as HomeAssistantForm;
+    const schema = form.schema;
+
+    editor.hass = { states: { "sensor.first_power": compatiblePowerState() } };
+    await editor.updateComplete;
+
+    expect(form.schema).not.toBe(schema);
+    expect(form.schema?.[0].selector.entity.include_entities).not.toContain("sensor.second_power");
+  });
+
+  // Replaces the schema when a sensor is added, even if the initial sensors are unchanged.
+  it("updates the schema when a sensor is added to the eligible list", async () => {
+    editor = new SolarEnergyGraphsCardEditor();
+    editor.hass = { states: { "sensor.first_power": compatiblePowerState() } };
+    editor.setConfig(CARD_CONFIG);
+    document.body.append(editor);
+    await editor.updateComplete;
+    const form = editor.shadowRoot?.querySelector("ha-form") as HomeAssistantForm;
+    const schema = form.schema;
+
+    editor.hass = {
+      states: {
+        "sensor.first_power": compatiblePowerState(),
+        "sensor.second_power": compatiblePowerState(),
+      },
+    };
+    await editor.updateComplete;
+
+    expect(form.schema).not.toBe(schema);
+    expect(form.schema?.[0].selector.entity.include_entities).toContain("sensor.second_power");
+  });
+
   // Keeps an incompatible configured value selectable for each existing role.
   it("preserves an incompatible configured entity in its own selector", async () => {
     editor = new SolarEnergyGraphsCardEditor();

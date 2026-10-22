@@ -204,6 +204,8 @@ describe("EnergyChartsRenderer", () => {
           .slice(1)
           .every((series: { points?: { show?: boolean } }) => series.points?.show === false),
       ).toBe(true);
+      // The first series keeps the original options without disabling points.
+      expect(options.series[0].points?.show).not.toBe(false);
     }
   });
 
@@ -2062,6 +2064,11 @@ describe("Time formatters", () => {
       const timestamp = Date.parse("2026-10-06T22:30:00Z") / 1000;
       // 22:30 UTC = 10:30 PM in 12-hour format (year is numeric, not 2-digit)
       expect(legend(undefined, timestamp)).toBe("10/06/2026, 10:30 PM");
+    });
+
+    it("throws for non-numeric values", () => {
+      const legend = createTimeLegend(timeZone, "fr-FR", "h23");
+      expect(() => legend(undefined, "not a number")).toThrow(RangeError);
     });
   });
 });
