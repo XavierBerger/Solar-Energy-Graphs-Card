@@ -146,6 +146,8 @@ export class SolarEnergyGraphsCardEditor extends LitElement {
 
 if (!customElements.get("solar-energy-graphs-card-editor")) {
   customElements.define(
+    // Stryker disable next-line StringLiteral: an empty name throws on import,
+    // which Vitest reports as a failed file, not as a failed test.
     "solar-energy-graphs-card-editor",
     SolarEnergyGraphsCardEditor,
   );
