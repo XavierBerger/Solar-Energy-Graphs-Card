@@ -9,10 +9,10 @@ NPM_CACHE_VOLUME=solar-energy-graphs-card-npm-cache
 ACTION=${1:-build}
 
 case "$ACTION" in
-  build|install|test|coverage|typecheck|diagrams|mutation)
+  audit|build|install|test|coverage|typecheck|diagrams|mutation)
     ;;
   *)
-    printf 'Usage: %s [build|install|test|coverage|typecheck|diagrams|mutation]\n' "$0" >&2
+    printf 'Usage: %s [audit|build|install|test|coverage|diagrams|mutation|typecheck]\n' "$0" >&2
     exit 2
     ;;
 esac
@@ -58,6 +58,11 @@ podman run --rm \
     if [ "$installed_hash" != "$lock_hash" ]; then
       npm ci
       printf "%s\n" "$lock_hash" > node_modules/.dependencies-lock-hash
+    fi
+
+    if [ "$1" = audit ]; then
+      npm audit
+      exit 0
     fi
 
     npm run "$1"
