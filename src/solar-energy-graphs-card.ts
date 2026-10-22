@@ -30,6 +30,7 @@ import {
   type HistoryDuringPeriodResponse,
   type LivePowerSample,
   type LocalDayWindow,
+  type SensorConfigurationError,
   type StatisticsDuringPeriodMessage,
   type StatisticsDuringPeriodResponse,
 } from "./home-assistant-energy-history";
@@ -405,8 +406,6 @@ export class SolarEnergyGraphsCard extends LitElement {
         return t.statuses.sensorError(status.role, status.problem);
       case "loadError":
         return t.statuses.loadError(status.detail);
-      default:
-        return "";
     }
   }
 
@@ -544,14 +543,9 @@ export class SolarEnergyGraphsCard extends LitElement {
         entityIds[3] ? hass.states?.[entityIds[3]]?.attributes : null,
       ]);
     } catch (error) {
-      const sensorError: CardStatusDescriptor =
-        error instanceof Error && "role" in error && "problem" in error
-          ? {
-              kind: "sensorError",
-              role: error.role as SolarEnergyEntityRole,
-              problem: error.problem as "class" | "unit",
-            }
-          : { kind: "loadError", detail: errorMessage(error) };
+      // getEnergyUnitScales only throws SensorConfigurationError.
+      const { role, problem } = error as SensorConfigurationError;
+      const sensorError: CardStatusDescriptor = { kind: "sensorError", role, problem };
       // The update queued above renders this status.
       this.mainStatus = sensorError;
       this.gridStatus = sensorError;
@@ -785,7 +779,7 @@ export class SolarEnergyGraphsCard extends LitElement {
         title=${highPrecision
           ? t.precision.standardTitle
           : checkFailed
-          ? t.precision.highTitleUnavailable(model.highPrecisionCheckError ?? "")
+          ? t.precision.highTitleUnavailable(model.highPrecisionCheckError!)
           : t.precision.highTitle}
         ?disabled=${model.loading}
         @click=${this.togglePrecision}

@@ -296,6 +296,7 @@ export function computePinchZoomRange(
 
   const newDuration = currentDuration / distanceRatio;
 
+  // Stryker disable next-line EqualityOperator: a unit ratio has already returned, so a full-day duration comes from a narrower range, which clamping widens to the same day.
   if (newDuration >= dayDuration) {
     if (currentMin === dayStart && currentMax === dayEnd) {
       return undefined;
@@ -306,6 +307,7 @@ export function computePinchZoomRange(
   let newMin = pivot - clampedPct * newDuration;
   let newMax = newMin + newDuration;
 
+  // Stryker disable EqualityOperator: at a day bound, clamping keeps the same range.
   if (newMin < dayStart) {
     newMin = dayStart;
     newMax = dayStart + newDuration;
@@ -313,6 +315,7 @@ export function computePinchZoomRange(
     newMax = dayEnd;
     newMin = dayEnd - newDuration;
   }
+  // Stryker restore EqualityOperator
 
   return { min: newMin, max: newMax };
 }
