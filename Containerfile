@@ -1,4 +1,4 @@
-FROM docker.io/library/node:26.12.0-alpine3.23
+FROM docker.io/library/node:26.12.1-alpine3.23
 
 # Chromium renders the Mermaid documentation diagrams (mermaid-cli).
 RUN apk add --no-cache chromium font-noto
