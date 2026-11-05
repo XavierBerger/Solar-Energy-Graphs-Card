@@ -56,6 +56,6 @@ energy graphs.
   the current card (`docs/images/`), unit readability, touch interactions,
   responsive layout, themes, and behavior with the real entities.
 - Keep source code, code comments, commit messages, and developer
-  documentation in English. The user-facing README is in English for HACS;
+  documentation in English. The user-facing README is in English for Marketplace;
   temporary working files such as plans may be in French. Follow existing
   conventions and Home Assistant Lovelace practices.
