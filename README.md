@@ -1,6 +1,6 @@
 # Solar Energy Graphs Card
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-blue.svg)](https://www.hacs.xyz/)
+[![Marketplace Default](https://img.shields.io/badge/Marketplace-Default-blue.svg)](https://www.hacs.xyz/)
 [![GitHub Release](https://img.shields.io/github/v/release/XavierBerger/Solar-Energy-Graphs-Card)](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/releases)
 [![CI](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/actions/workflows/ci.yml/badge.svg)](https://github.com/XavierBerger/Solar-Energy-Graphs-Card/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -52,15 +52,15 @@ recent recorded states and live state updates.
 
 ## Installation
 
-### HACS
+### Marketplace
 
-[![Open HACS repository on My Home Assistant](docs/images/HACS-link.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=XavierBerger&repository=Solar-Energy-Graphs-Card&category=plugin)
+[![Open Marketplace repository on My Home Assistant](docs/images/Marketplace-link.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=XavierBerger&repository=Solar-Energy-Graphs-Card&category=plugin)
 
-Or search for **Solar Energy Graphs Card** in HACS:
+Or search for **Solar Energy Graphs Card** in Marketplace:
 
-1. Open **HACS** in Home Assistant.
+1. Open **Marketplace** in Home Assistant.
 2. Search for **Solar Energy Graphs Card** and install it.
-3. HACS adds the dashboard resource automatically. Refresh the browser if the
+3. Marketplace adds the dashboard resource automatically. Refresh the browser if the
    card does not appear in the card picker.
 
 ### Manual installation
@@ -226,7 +226,7 @@ As a professional developer, I wanted to see if an AI could help me write code i
 
 Since the results of this development were satisfying, I quickly uninstalled InfluxDB and Grafana in favor of this card, which provides the exact same information faster and taking fa rfewer space : ~140 KB compared to ~1 GB for the same service (Note: I hadn't optimized data retention, something that became unnecessary with this card).
 
-Because this card works quite well, I decided to share it with the community via HACS, and I plan to continue developing it to add more advanced features to better understand how energy is consumed in my home.
+Because this card works quite well, I decided to share it with the community via Marketplace, and I plan to continue developing it to add more advanced features to better understand how energy is consumed in my home.
 
 ### AI-assisted development transparency
 

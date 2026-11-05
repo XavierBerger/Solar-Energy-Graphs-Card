@@ -54,7 +54,7 @@ Podman volumes. `build` writes the distributable bundle to `dist/`;
 - Precede each test (`it`/`test`) with a short English comment explaining its
   purpose.
 - Keep source code, comments, commit messages, and developer documentation in
-  English. The user-facing README is in English for HACS; you may find some French
+  English. The user-facing README is in English for Marketplace; you may find some French
   in temporary files since this card is developper in France.
 - Keep the project buildable and preserve previously validated behavior. Run
   the relevant checks through `./dev.sh`.
@@ -77,9 +77,9 @@ readability, and behavior with the real configured entities.
 
 The release workflow checks that the tag matches `package.json`, builds and
 tests the card, publishes `dist/solar-energy-graphs-card.js` as the GitHub
-release asset, and validates the tagged repository with HACS. Tags containing
-`-` (for example, `v0.2.0-beta.1`) are published as prereleases; HACS can use
-one only after a complete release has been published. HACS displays the
+release asset, and validates the tagged repository with Marketplace. Tags containing
+`-` (for example, `v0.2.0-beta.1`) are published as prereleases; Marketplace can use
+one only after a complete release has been published. Marketplace displays the
 README from the release tag, so README updates are reflected there only by a
 subsequent release.
 
