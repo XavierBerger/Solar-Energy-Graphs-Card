@@ -326,9 +326,9 @@ describe("SolarEnergyGraphsCard", () => {
     const mainStatus = "Power statistics: mean line with min–max range.";
     const gridStatus = "Grid import and export are measured separately.";
     const mainError =
-      "Error: September 27, 2026 production or consumption history is unavailable.";
+      "Error: Sun, Sep 27, 2026 production or consumption history is unavailable.";
     const gridError =
-      "Error: September 27, 2026 grid import or export history is unavailable.";
+      "Error: Sun, Sep 27, 2026 grid import or export history is unavailable.";
     const expectedStatuses = {
       production: [mainError, gridStatus],
       consumption: [mainError, gridStatus],
@@ -408,7 +408,7 @@ describe("SolarEnergyGraphsCard", () => {
     const navigation = card.shadowRoot?.querySelector(".day-navigation");
     expect(navigation?.querySelectorAll("button")).toHaveLength(3);
     expect(navigation?.textContent?.replace(/\s+/g, " ").trim())
-      .toBe("← September 27, 2026 →");
+      .toBe("← Sun, Sep 27, 2026 →");
   });
 
   // Reports invalid or missing Home Assistant sensor metadata locally without
@@ -1463,7 +1463,7 @@ describe("SolarEnergyGraphsCard", () => {
       ".day-navigation time",
     );
     expect(selectedDay?.dateTime).toBe("2026-09-27");
-    expect(selectedDay?.textContent?.trim()).toBe("September 27, 2026");
+    expect(selectedDay?.textContent?.trim()).toBe("Sun, Sep 27, 2026");
     const statuses = Array.from(
       card.shadowRoot?.querySelectorAll<HTMLElement>(".chart-status") ?? [],
     );

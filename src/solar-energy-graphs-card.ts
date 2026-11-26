@@ -972,7 +972,11 @@ export class SolarEnergyGraphsCard extends LitElement {
     }
     const [year, month, day] = this.selectedDay.split("-").map(Number);
     return new Intl.DateTimeFormat(translations(this.language).dateLocale, {
-      dateStyle: "long",
+      // Abbreviated so the weekday fits the fixed-width date button.
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
       timeZone: "UTC",
     }).format(Date.UTC(year, month - 1, day, 12));
   }
