@@ -65,15 +65,19 @@ readability, and behavior with the real configured entities.
 
 ## Releasing
 
-1. Update `version` in `package.json` and in both version fields at the start
-   of `package-lock.json`.
-2. Commit the version change as `chore(release): X.Y.Z`.
-3. Merge the change into `main`, then create and push an annotated tag:
+From a clean working tree, run the release script with the version, without
+its leading `v`:
 
-   ```sh
-   git tag -a vX.Y.Z -m "vX.Y.Z"
-   git push origin vX.Y.Z
-   ```
+```sh
+./release.sh X.Y.Z
+```
+
+The script creates `release/vX.Y.Z` from `origin/main`, sets `version` in
+`package.json` and in both version fields at the start of `package-lock.json`,
+and commits the change as `chore(release): X.Y.Z`. It then opens a pull
+request, merges it into `main` with a merge commit, deletes the branch, and
+pushes the annotated tag `vX.Y.Z` on that merge commit. It requires `git`,
+`jq`, and an authenticated `gh`.
 
 The release workflow checks that the tag matches `package.json`, builds and
 tests the card, publishes `dist/solar-energy-graphs-card.js` as the GitHub
